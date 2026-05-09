@@ -1,0 +1,10 @@
+{
+    "name": "Protocol",
+    "alias": "protocol",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+    ],
+    "files": []
+}

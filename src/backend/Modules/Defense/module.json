@@ -1,0 +1,10 @@
+{
+    "name": "Defense",
+    "alias": "defense",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+    ],
+    "files": []
+}
