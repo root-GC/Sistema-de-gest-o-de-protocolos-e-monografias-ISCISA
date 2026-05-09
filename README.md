@@ -53,7 +53,7 @@ Uma plataforma centralizada que:
   - Comitê de Bioética  
 - Histórico visível entre etapas  
 
-### 🕵️ Revisão Cega
+### 🕵️ Revisão Anónima
 - Feedback anónimo  
 - Registo estruturado de correções  
 - Redução de conflitos pessoais  
