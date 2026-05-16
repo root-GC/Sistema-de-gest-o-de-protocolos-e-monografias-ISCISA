@@ -1,15 +1,16 @@
 <?php
 
-namespace Modules\Auth\Providers;
+namespace Modules\Auth\App\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
 
-class AuthServiceProvider extends ModuleServiceProvider
+class AuthServiceProvider extends ServiceProvider
 {
-    protected string $name = 'Auth';
-    protected string $nameLower = 'auth';
-
-    protected array $providers = [
-        // deixa vazio por enquanto
-    ];
+    public function boot(): void
+    {
+        Route::middleware('api')
+            ->prefix('api')
+            ->group(module_path('Auth', 'routes/api.php'));
+    }
 }
