@@ -29,12 +29,14 @@ class AuthController extends Controller
             'password' => Hash::make($request->password),
             'status'   => 'active'
         ]);
+        $user->assignRole($request->role);
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
             'message' => 'Conta criada com sucesso',
             'user'    => $user,
+            'roles' => $user->getRoleNames(),
             'token'   => $token
         ], 201);
     }

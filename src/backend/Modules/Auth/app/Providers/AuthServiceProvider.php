@@ -12,5 +12,9 @@ class AuthServiceProvider extends ServiceProvider
         Route::middleware('api')
             ->prefix('api')
             ->group(module_path('Auth', 'routes/api.php'));
+
+              $this->loadMigrationsFrom(
+            module_path('Auth', 'database/migrations')
+        );
     }
 }
