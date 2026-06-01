@@ -1,5 +1,5 @@
 {
-    "name": "nwidart/auth",
+    "name": "nwidart/user",
     "description": "",
     "authors": [
         {
@@ -17,14 +17,14 @@
     },
     "autoload": {
         "psr-4": {
-            "Modules\\Auth\\": "app/",
-            "Modules\\Auth\\Database\\Factories\\": "database/factories/",
-            "Modules\\Auth\\Database\\Seeders\\": "database/seeders/"
+            "Modules\\User\\": "app/",
+            "Modules\\User\\Database\\Factories\\": "database/factories/",
+            "Modules\\User\\Database\\Seeders\\": "database/seeders/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Modules\\Auth\\Tests\\": "tests/"
+            "Modules\\User\\Tests\\": "tests/"
         }
     }
 }

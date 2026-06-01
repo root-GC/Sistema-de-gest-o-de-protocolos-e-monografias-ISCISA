@@ -1,168 +1,88 @@
 <?php
 
-namespace Modules\Auth\App\Http\Controllers;
+namespace Modules\Auth\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Auth\Events\PasswordReset;
-use Illuminate\Support\Str;
-
-use Modules\Auth\App\Models\User;
-use Modules\Auth\App\Http\Requests\LoginRequest;
-use Modules\Auth\App\Http\Requests\RegisterRequest;
-use Modules\Auth\App\Http\Requests\ForgotPasswordRequest;
-use Modules\Auth\App\Http\Requests\ResetPasswordRequest;
-use Modules\Auth\App\Http\Requests\ChangePasswordRequest;
+use Illuminate\Http\Request;
 
 class AuthController extends Controller
 {
-    /**
-     * Register
-     */
-    public function register(RegisterRequest $request)
+
+
+
+    public function login(Request $request, AuthPayloadBuilder $builder)
     {
-        $user = User::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
-            'password' => Hash::make($request->password),
-            'status'   => 'active'
-        ]);
-        $user->assignRole($request->role);
+        $user = User::where('email', $request->email)->first();
 
-        $token = $user->createToken('auth-token')->plainTextToken;
-
-        return response()->json([
-            'message' => 'Conta criada com sucesso',
-            'user'    => $user,
-            'roles' => $user->getRoleNames(),
-            'token'   => $token
-        ], 201);
-    }
-
-    /**
-     * Login
-     */
-    public function login(LoginRequest $request)
-    {
-        $credentials = $request->validated();
-
-        if (!Auth::attempt($credentials)) {
-            return response()->json([
-                'message' => 'Credenciais inválidas'
-            ], 401);
+        if (!Hash::check($request->password, $user->password)) {
+            abort(401);
         }
 
-        $user = Auth::user();
+        $token = $user->createToken('auth')->plainTextToken;
 
-        if ($user->status !== 'active') {
-            return response()->json([
-                'message' => 'Conta inactiva'
-            ], 403);
+        return response()->json([
+            'token' => $token,
+            'user'  => $builder->build($user),
+        ]);
+    }
+
+
+     public function attemptLogin($email, $password)
+    {
+        $user = User::where('email', $email)->firstOrFail();
+
+        if (!Hash::check($password, $user->password)) {
+            throw new \Exception("Invalid credentials");
         }
 
-        $token = $user->createToken('auth-token')->plainTextToken;
-
-        return response()->json([
-            'message' => 'Login efectuado com sucesso',
-            'user'    => $user,
-            'token'   => $token
-        ]);
+        return $user;
     }
+    
 
     /**
-     * Logout
+     * Display a listing of the resource.
      */
-    public function logout()
+    public function index()
     {
-        auth()->user()->tokens()->delete();
-
-        return response()->json([
-            'message' => 'Logout efectuado com sucesso'
-        ]);
+        return view('auth::index');
     }
 
     /**
-     * Current user
+     * Show the form for creating a new resource.
      */
-    public function me()
+    public function create()
     {
-        return response()->json(auth()->user());
+        return view('auth::create');
     }
 
     /**
-     * Forgot password — envia email com link de reset
+     * Store a newly created resource in storage.
      */
+    public function store(Request $request) {}
+
     /**
- * Forgot password — envia email com link de reset
- */
-public function forgotPassword(ForgotPasswordRequest $request)
-{
-    $user = User::where('email', $request->email)->first();
-
-    $token = Password::createToken($user);
-
-    $resetUrl = "http://localhost:3000/reset-password?token={$token}&email={$user->email}";
-
-    \Log::info("Password reset link: {$resetUrl}");
-
-    return response()->json([
-        'message' => 'Email de recuperação enviado com sucesso.'
-    ]);
-}
-    /**
-     * Reset password — usa o token do email para redefinir
+     * Show the specified resource.
      */
-    public function resetPassword(ResetPasswordRequest $request)
+    public function show($id)
     {
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (User $user, string $password) {
-                $user->forceFill([
-                    'password'       => Hash::make($password),
-                    'remember_token' => Str::random(60)
-                ])->save();
-
-                event(new PasswordReset($user));
-            }
-        );
-
-        if ($status !== Password::PASSWORD_RESET) {
-            return response()->json([
-                'message' => 'Token inválido ou expirado.'
-            ], 400);
-        }
-
-        return response()->json([
-            'message' => 'Senha redefinida com sucesso.'
-        ]);
+        return view('auth::show');
     }
 
     /**
-     * Change password — utilizador autenticado muda a própria senha
+     * Show the form for editing the specified resource.
      */
-    public function changePassword(ChangePasswordRequest $request)
+    public function edit($id)
     {
-        $user = auth()->user();
-
-        if (!Hash::check($request->current_password, $user->password)) {
-            return response()->json([
-                'message' => 'A senha actual está incorrecta.'
-            ], 400);
-        }
-
-        $user->update([
-            'password' => Hash::make($request->password)
-        ]);
-
-        // Invalida todos os tokens existentes e cria um novo
-        $user->tokens()->delete();
-        $token = $user->createToken('auth-token')->plainTextToken;
-
-        return response()->json([
-            'message' => 'Senha alterada com sucesso.',
-            'token'   => $token
-        ]);
+        return view('auth::edit');
     }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, $id) {}
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy($id) {}
 }

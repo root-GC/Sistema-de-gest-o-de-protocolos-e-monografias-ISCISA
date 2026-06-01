@@ -1,21 +1,21 @@
 <?php
 
-namespace Modules\Auth\Providers;
+namespace Modules\Password\Providers;
 
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
 
-class AuthServiceProvider extends ModuleServiceProvider
+class PasswordServiceProvider extends ModuleServiceProvider
 {
     /**
      * The name of the module.
      */
-    protected string $name = 'Auth';
+    protected string $name = 'Password';
 
     /**
      * The lowercase version of the module name.
      */
-    protected string $nameLower = 'auth';
+    protected string $nameLower = 'password';
 
     /**
      * Command classes to register.

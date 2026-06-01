@@ -1,6 +1,6 @@
 {
-    "name": "Auth",
-    "alias": "auth",
+    "name": "Password",
+    "alias": "password",
     "description": "",
     "keywords": [],
     "priority": 0,
