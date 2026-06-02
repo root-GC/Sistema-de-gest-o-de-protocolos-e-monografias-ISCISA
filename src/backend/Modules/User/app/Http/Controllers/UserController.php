@@ -2,55 +2,69 @@
 
 namespace Modules\User\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
+use Modules\User\Services\UserService;
 
 class UserController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+    public function __construct(private UserService $service) {}
+
     public function index()
     {
-        return view('user::index');
+        return response()->json($this->service->list());
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function store(Request $request)
     {
-        return view('user::create');
+        $data = $request->validate([
+            'name'     => ['required', 'string', 'max:255'],
+            'email'    => ['required', 'email', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:8'],
+            'status'   => ['sometimes', 'in:active,inactive,suspended'],
+            'roles'    => ['sometimes', 'array'],
+            'roles.*'  => ['string', 'exists:roles,name'],
+        ]);
+
+        $user = $this->service->create($data);
+
+        return response()->json($user->load('roles'), 201);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request) {}
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
+    public function show(int $id)
     {
-        return view('user::show');
+        return response()->json(
+            \Modules\User\Repositories\UserRepository::class
+        );
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
+    public function update(Request $request, int $id)
     {
-        return view('user::edit');
+        $data = $request->validate([
+            'name'     => ['sometimes', 'string'],
+            'email'    => ['sometimes', 'email', "unique:users,email,{$id}"],
+            'password' => ['sometimes', 'string', 'min:8'],
+            'status'   => ['sometimes', 'in:active,inactive,suspended'],
+        ]);
+
+        return response()->json($this->service->update($id, $data));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
+    public function destroy(int $id)
+    {
+        \Modules\User\Models\User::findOrFail($id)->delete();
+        return response()->json(['message' => 'Utilizador removido.']);
+    }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
+    public function assignRoles(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'roles'   => ['required', 'array'],
+            'roles.*' => ['string', 'exists:roles,name'],
+        ]);
+
+        $user = $this->service->assignRoles($id, $data['roles']);
+
+        return response()->json($user);
+    }
 }

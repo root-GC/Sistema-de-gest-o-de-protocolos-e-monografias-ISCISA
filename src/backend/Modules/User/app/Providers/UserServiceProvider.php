@@ -2,45 +2,23 @@
 
 namespace Modules\User\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
-use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\ServiceProvider;
+use Modules\User\Services\UserService;
+use Modules\User\Services\ProfileService;
+use Modules\User\Repositories\UserRepository;
 
-class UserServiceProvider extends ModuleServiceProvider
+class UserServiceProvider extends ServiceProvider
 {
-    /**
-     * The name of the module.
-     */
-    protected string $name = 'User';
+    public function register(): void
+    {
+        $this->app->bind(UserService::class);
+        $this->app->bind(ProfileService::class);
+        $this->app->singleton(UserRepository::class);
+    }
 
-    /**
-     * The lowercase version of the module name.
-     */
-    protected string $nameLower = 'user';
-
-    /**
-     * Command classes to register.
-     *
-     * @var string[]
-     */
-    // protected array $commands = [];
-
-    /**
-     * Provider classes to register.
-     *
-     * @var string[]
-     */
-    protected array $providers = [
-        // EventServiceProvider::class,
-        // RouteServiceProvider::class,
-    ];
-
-    /**
-     * Define module schedules.
-     * 
-     * @param $schedule
-     */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
+    public function boot(): void
+    {
+        $this->loadRoutesFrom(__DIR__ . '/../Routes/api.php');
+        $this->loadMigrationsFrom(__DIR__ . '/../Database/Migrations');
+    }
 }

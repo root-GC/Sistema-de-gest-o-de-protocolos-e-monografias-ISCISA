@@ -1,11 +1,12 @@
 {
     "name": "User",
     "alias": "user",
-    "description": "",
-    "keywords": [],
-    "priority": 0,
+    "description": "Utilizadores, perfis, RBAC, órgãos, áreas científicas e cursos",
+    "keywords": ["user", "rbac", "profile"],
+    "priority": 20,
     "providers": [
-    
+        "Modules\\User\\Providers\\UserServiceProvider"
     ],
+    "aliases": {},
     "files": []
 }
