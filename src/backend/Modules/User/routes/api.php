@@ -1,8 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Modules\User\Http\Controllers\UserController;
-use Modules\User\Http\Controllers\ProfileController;
+use Modules\User\app\Http\Controllers\UserController;
+use Modules\User\app\Http\Controllers\ProfileController;
 
 Route::prefix('api')->middleware('auth:sanctum')->name('users.')->group(function () {
 

@@ -1,19 +1,19 @@
 <?php
 
-namespace Modules\Auth\Listeners;
+namespace Modules\Auth\app\Listeners;
 
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Log;
+use Modules\Auth\app\Events\UserLoggedIn;
 
 class LogAuthActivity
 {
-    /**
-     * Create the event listener.
-     */
-    public function __construct() {}
-
-    /**
-     * Handle the event.
-     */
-    public function handle($event): void {}
+    public function handle(UserLoggedIn $event): void
+    {
+        Log::channel('daily')->info('user.login', [
+            'user_id' => $event->user->id,
+            'email'   => $event->user->email,
+            'ip'      => request()->ip(),
+            'at'      => now()->toIso8601String(),
+        ]);
+    }
 }

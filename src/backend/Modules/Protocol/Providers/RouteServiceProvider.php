@@ -1,13 +1,13 @@
 <?php
 
-namespace Modules\Password\app\Providers;
+namespace Modules\Protocol\Providers;
 
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Route;
 
 class RouteServiceProvider extends ServiceProvider
 {
-    protected string $name = 'Password';
+    protected string $name = 'Protocol';
 
     /**
      * Called before routes are registered.

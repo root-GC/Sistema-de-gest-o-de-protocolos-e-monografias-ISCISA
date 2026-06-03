@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Password\Notifications;
+namespace Modules\Password\app\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;

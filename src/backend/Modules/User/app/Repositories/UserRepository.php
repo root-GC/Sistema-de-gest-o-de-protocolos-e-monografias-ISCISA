@@ -1,8 +1,8 @@
 <?php
 
-namespace Modules\User\Repositories;
+namespace Modules\User\app\Repositories;
 
-use Modules\User\Models\User;
+use Modules\User\app\Models\User;
 
 class UserRepository
 {

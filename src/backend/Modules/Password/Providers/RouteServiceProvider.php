@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Password\app\Providers;
+namespace Modules\Password\Providers;
 
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Route;

@@ -5,7 +5,7 @@
     "keywords": ["user", "rbac", "profile"],
     "priority": 20,
     "providers": [
-        "Modules\\User\\Providers\\UserServiceProvider"
+        "Modules\\User\\app\\Providers\\UserServiceProvider"
     ],
     "aliases": {},
     "files": []

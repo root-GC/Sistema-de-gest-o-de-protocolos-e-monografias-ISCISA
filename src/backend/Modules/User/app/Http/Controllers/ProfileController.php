@@ -1,11 +1,11 @@
 <?php
 
-namespace Modules\User\Http\Controllers;
+namespace Modules\User\app\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Modules\Auth\Builders\AuthPayloadBuilder;
-use Modules\User\Services\ProfileService;
+use Modules\Auth\app\Builders\AuthPayloadBuilder;
+use Modules\User\app\Services\ProfileService;
 
 class ProfileController extends Controller
 {

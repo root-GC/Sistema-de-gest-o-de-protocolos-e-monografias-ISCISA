@@ -1,11 +1,17 @@
+
 {
-    "name": "Auth",
-    "alias": "auth",
-    "description": "",
-    "keywords": [],
-    "priority": 0,
-    "providers": [
-        
-    ],
-    "files": []
+  "name": "Auth",
+  "alias": "auth",
+  "description": "Autenticação — login, logout, payload, tokens Sanctum",
+  "keywords": [
+    "auth",
+    "login",
+    "sanctum"
+  ],
+  "priority": 10,
+  "providers": [
+    "Modules\\Auth\\Providers\\AuthServiceProvider"
+  ],
+  "aliases": {},
+  "files": []
 }

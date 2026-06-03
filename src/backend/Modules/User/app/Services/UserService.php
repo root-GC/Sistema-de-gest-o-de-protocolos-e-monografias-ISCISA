@@ -1,11 +1,11 @@
 <?php
 
-namespace Modules\User\Services;
+namespace Modules\User\app\Services;
 
 use Illuminate\Support\Facades\Hash;
-use Modules\User\Models\Role;
-use Modules\User\Models\User;
-use Modules\User\Repositories\UserRepository;
+use Modules\User\app\Models\Role;
+use Modules\User\app\Models\User;
+use Modules\User\app\Repositories\UserRepository;
 
 class UserService
 {

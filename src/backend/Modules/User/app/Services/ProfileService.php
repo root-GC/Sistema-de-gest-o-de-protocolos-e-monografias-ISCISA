@@ -1,8 +1,8 @@
 <?php
 
-namespace Modules\User\Services;
+namespace Modules\User\app\Services;
 
-use Modules\User\Models\User;
+use Modules\User\app\Models\User;
 
 class ProfileService
 {

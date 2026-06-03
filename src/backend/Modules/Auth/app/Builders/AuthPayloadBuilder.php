@@ -1,27 +1,37 @@
 <?php
 
-namespace Modules\Auth\Services;
+namespace Modules\Auth\app\Builders;
 
-use App\Models\User;
+use Modules\User\Models\User;
 
 /**
- * Constrói o payload completo de autenticação.
+ * AuthPayloadBuilder — SGPMC-ISCISA
  *
- * Baseia-se EXCLUSIVAMENTE nas tabelas existentes:
+ * Monta o payload de autenticação com base EXCLUSIVAMENTE
+ * nas tabelas existentes na DB:
  *   users, roles, permissions, user_roles, role_permissions,
  *   teacher_profiles, student_profiles, coordinator_profiles,
  *   secretary_profiles, admin_profiles,
  *   scientific_areas, courses, organs
+ *
+ * Roles suportadas (com perfil distinto):
+ *   student     → student_profiles
+ *   teacher     → teacher_profiles  (docente genérico)
+ *   supervisor  → teacher_profiles  (mesma tabela, role distinta)
+ *   reviewer    → teacher_profiles  (avaliador de órgão)
+ *   coordinator → coordinator_profiles
+ *   secretary   → secretary_profiles
+ *   admin       → admin_profiles
  */
 class AuthPayloadBuilder
 {
     public function build(User $user): array
     {
+        // Uma query com eager loading — sem N+1
         $user->load([
             'roles.permissions',
             'teacherProfile.scientificArea',
             'studentProfile.course',
-            'studentProfile.supervisor',
             'coordinatorProfile.course',
             'coordinatorProfile.scientificArea',
             'secretaryProfile.organ',
@@ -30,7 +40,6 @@ class AuthPayloadBuilder
 
         $roles = $user->roles->pluck('name')->toArray();
 
-        // Permissões únicas de todas as roles
         $permissions = $user->roles
             ->flatMap(fn($role) => $role->permissions->pluck('code'))
             ->unique()
@@ -52,99 +61,72 @@ class AuthPayloadBuilder
     {
         $profiles = [];
 
-        // teacher_profiles → scientific_area
-        if (in_array('teacher', $roles) && $tp = $user->teacherProfile) {
-            $profiles['teacher'] = [
+        // ── teacher_profiles (teacher, supervisor, reviewer partilham) ──
+        $tp = $user->teacherProfile;
+
+        if ($tp) {
+            $teacherData = [
                 'id'              => $tp->id,
                 'department'      => $tp->department,
                 'academic_degree' => $tp->academic_degree,
-                'is_internal'     => $tp->is_Internal,
-                'scientific_area' => $tp->scientificArea ? [
-                    'id'   => $tp->scientificArea->id,
-                    'name' => $tp->scientificArea->name,
-                ] : null,
+                'is_internal'     => (bool) $tp->is_Internal,
+                'scientific_area' => $tp->scientificArea
+                    ? ['id' => $tp->scientificArea->id, 'name' => $tp->scientificArea->name]
+                    : null,
             ];
+
+            if (in_array('teacher', $roles))    $profiles['teacher']    = $teacherData;
+            // supervisor usa teacher_profile + indica que pode validar submissões
+            if (in_array('supervisor', $roles)) $profiles['supervisor'] = $teacherData;
+            // reviewer usa teacher_profile + filtragem por grau académico (RF-061)
+            if (in_array('reviewer', $roles))   $profiles['reviewer']   = $teacherData;
         }
 
-        // supervisor — usa teacher_profiles (mesma tabela, role distinta)
-        // Um docente pode ter ambas: teacher + supervisor.
-        // O frontend usa este perfil para mostrar o menu de supervisão
-        // e para saber que pode executar supervision.approve.
-        if (in_array('supervisor', $roles) && $tp = $user->teacherProfile) {
-            $profiles['supervisor'] = [
-                'id'              => $tp->id,
-                'department'      => $tp->department,
-                'academic_degree' => $tp->academic_degree,
-                'is_internal'     => $tp->is_Internal,
-                'scientific_area' => $tp->scientificArea ? [
-                    'id'   => $tp->scientificArea->id,
-                    'name' => $tp->scientificArea->name,
-                ] : null,
-                // Lista de tutorandos carregada pelo módulo Supervision, não aqui
-            ];
-        }
-
-        // student_profiles → course + supervisor (teacher_profile)
+        // ── student_profiles ────────────────────────────────────────────
         if (in_array('student', $roles) && $sp = $user->studentProfile) {
             $profiles['student'] = [
                 'id'             => $sp->id,
                 'student_number' => $sp->student_number,
-                'course'         => $sp->course ? [
-                    'id'   => $sp->course->id,
-                    'name' => $sp->course->name,
-                ] : null,
                 'supervisor_id'  => $sp->supervisorID,
+                'course'         => $sp->course
+                    ? ['id' => $sp->course->id, 'name' => $sp->course->name]
+                    : null,
             ];
         }
 
-        // coordinator_profiles → course + scientific_area
+        // ── coordinator_profiles ─────────────────────────────────────────
         if (in_array('coordinator', $roles) && $cp = $user->coordinatorProfile) {
             $profiles['coordinator'] = [
-                'id'             => $cp->id,
-                'office'         => $cp->office,
-                'course'         => $cp->course ? [
-                    'id'   => $cp->course->id,
-                    'name' => $cp->course->name,
-                ] : null,
-                'scientific_area' => $cp->scientificArea ? [
-                    'id'   => $cp->scientificArea->id,
-                    'name' => $cp->scientificArea->name,
-                ] : null,
+                'id'              => $cp->id,
+                'office'          => $cp->office,
+                'course'          => $cp->course
+                    ? ['id' => $cp->course->id, 'name' => $cp->course->name]
+                    : null,
+                'scientific_area' => $cp->scientificArea
+                    ? ['id' => $cp->scientificArea->id, 'name' => $cp->scientificArea->name]
+                    : null,
             ];
         }
 
-        // secretary_profiles → organ
+        // ── secretary_profiles ───────────────────────────────────────────
         if (in_array('secretary', $roles) && $sec = $user->secretaryProfile) {
             $profiles['secretary'] = [
                 'id'     => $sec->id,
                 'office' => $sec->office,
-                'organ'  => $sec->organ ? [
-                    'id'   => $sec->organ->id,
-                    'name' => $sec->organ->name,
-                    'type' => $sec->organ->type,
-                ] : null,
+                'organ'  => $sec->organ
+                    ? ['id' => $sec->organ->id, 'name' => $sec->organ->name, 'type' => $sec->organ->type]
+                    : null,
             ];
         }
 
-        // admin_profiles → organ (nullable — acesso global ou por órgão)
+        // ── admin_profiles ───────────────────────────────────────────────
         if (in_array('admin', $roles) && $adm = $user->adminProfile) {
             $profiles['admin'] = [
                 'id'           => $adm->id,
-                'access_scope' => $adm->access_scope,
-                'organ'        => $adm->organ ? [
-                    'id'   => $adm->organ->id,
-                    'name' => $adm->organ->name,
-                ] : null,
-            ];
-        }
-
-        // reviewer — usa teacher_profile, sem tabela própria
-        // A role 'reviewer' acede ao perfil de docente
-        if (in_array('reviewer', $roles) && !isset($profiles['teacher']) && $tp = $user->teacherProfile) {
-            $profiles['reviewer'] = [
-                'id'              => $tp->id,
-                'department'      => $tp->department,
-                'scientific_area' => $tp->scientificArea?->name,
+                'access_scope' => $adm->access_scope,  // global | organ
+                'organ'        => $adm->organ
+                    ? ['id' => $adm->organ->id, 'name' => $adm->organ->name]
+                    : null,
             ];
         }
 
