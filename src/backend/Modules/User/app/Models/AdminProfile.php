@@ -4,7 +4,7 @@ namespace Modules\User\app\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Modules\Organ\app\Models\Organ;
+use Modules\User\app\Models\Organ;
 use Modules\User\app\Models\User;
 
 class AdminProfile extends Model

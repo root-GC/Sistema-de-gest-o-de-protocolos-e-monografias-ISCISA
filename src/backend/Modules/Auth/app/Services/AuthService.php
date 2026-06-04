@@ -5,6 +5,13 @@ namespace Modules\Auth\app\Services;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Modules\User\app\Models\User;
+use Modules\User\app\Models\AdminProfile;
+use Modules\User\app\Models\StudentProfile;
+use Modules\User\app\Models\TeacherProfile;
+use Modules\User\app\Models\CoordinatorProfile;
+use Modules\User\app\Models\SecretaryProfile;
+use Illuminate\Support\Facades\Log;
+
 
 class AuthService
 {
@@ -15,6 +22,11 @@ class AuthService
      */
     public function attempt(string $email, string $password): User
     {
+        Log::info('[AUTH]', [
+    'step' => 'attempt_start',
+    'email' => $email,
+]);
+
         $user = User::where('email', $email)
             ->where('status', 'active')
             ->first();

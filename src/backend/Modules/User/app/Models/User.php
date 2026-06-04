@@ -7,6 +7,14 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Modules\User\app\Models\Organ;
 use Modules\User\app\Models\ScientificArea;
+use Modules\User\app\Models\Permission;
+use Modules\User\app\Models\Role;
+use Modules\User\app\Models\TeacherProfile;
+use Modules\User\app\Models\StudentProfile;
+use Modules\User\app\Models\CoordinatorProfile;
+use Modules\User\app\Models\SecretaryProfile;
+use Modules\User\app\Models\AdminProfile;
+
 
 
 

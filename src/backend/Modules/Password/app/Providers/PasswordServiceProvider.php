@@ -1,10 +1,10 @@
 <?php
 
-namespace Modules\Defense\app\Providers;
+namespace Modules\Password\app\Providers;
 
 use Illuminate\Support\ServiceProvider;
 
-class DefenseServiceProvider extends ServiceProvider
+class PasswordServiceProvider extends ServiceProvider
 {
     public function register(): void
     {

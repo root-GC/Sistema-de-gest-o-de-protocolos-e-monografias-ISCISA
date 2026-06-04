@@ -10,7 +10,7 @@
   ],
   "priority": 10,
   "providers": [
-    "Modules\\Auth\\Providers\\AuthServiceProvider"
+    "Modules\\Auth\\app\\Providers\\AuthServiceProvider"
   ],
   "aliases": {},
   "files": []

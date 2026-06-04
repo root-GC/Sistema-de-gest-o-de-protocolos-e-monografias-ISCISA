@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\User\Http\Controllers;
+namespace Modules\User\app\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -34,7 +34,7 @@ class UserController extends Controller
     public function show(int $id)
     {
         return response()->json(
-            \Modules\User\Repositories\UserRepository::class
+            \Modules\User\app\Repositories\UserRepository::class
         );
     }
 
@@ -52,7 +52,7 @@ class UserController extends Controller
 
     public function destroy(int $id)
     {
-        \Modules\User\Models\User::findOrFail($id)->delete();
+        \Modules\User\app\Models\User::findOrFail($id)->delete();
         return response()->json(['message' => 'Utilizador removido.']);
     }
 

@@ -3,9 +3,9 @@
 namespace Modules\User\app\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Modules\User\Services\UserService;
-use Modules\User\Services\ProfileService;
-use Modules\User\Repositories\UserRepository;
+use Modules\User\app\Services\UserService;
+use Modules\User\app\Services\ProfileService;
+use Modules\User\app\Repositories\UserRepository;
 
 class UserServiceProvider extends ServiceProvider
 {
@@ -18,7 +18,7 @@ class UserServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__ . '/../Routes/api.php');
+        $this->loadRoutesFrom(__DIR__ . '/../../Routes/api.php');
         $this->loadMigrationsFrom(__DIR__ . '/../Database/Migrations');
     }
 }

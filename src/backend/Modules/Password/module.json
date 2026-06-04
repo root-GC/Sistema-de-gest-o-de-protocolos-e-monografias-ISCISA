@@ -5,7 +5,7 @@
     "keywords": ["password", "reset"],
     "priority": 15,
     "providers": [
-        "Modules\\Password\\Providers\\PasswordServiceProvider"
+        "Modules\\Password\\app\\Providers\\PasswordServiceProvider"
     ],
     "aliases": {},
     "files": []

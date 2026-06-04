@@ -1,46 +1,18 @@
 <?php
 
-namespace Modules\Protocol\Providers;
+namespace Modules\Protocol\app\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
-use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\ServiceProvider;
 
-class ProtocolServiceProvider extends ModuleServiceProvider
+class ProtocolServiceProvider extends ServiceProvider
 {
-    /**
-     * The name of the module.
-     */
-    protected string $name = 'Protocol';
+    public function register(): void
+    {
+        // Bindings do container (opcional)
+    }
 
-    /**
-     * The lowercase version of the module name.
-     */
-    protected string $nameLower = 'protocol';
-
-    /**
-     * Command classes to register.
-     *
-     * @var string[]
-     */
-    // protected array $commands = [];
-
-    /**
-     * Provider classes to register.
-     *
-     * @var string[]
-     */
-    protected array $providers = [
-        EventServiceProvider::class,
-        RouteServiceProvider::class,
-    ];
-
-    /**
-     * Define module schedules.
-     * 
-     * @param $schedule
-     */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
+    public function boot(): void
+    {
+        // Inicialização do módulo (rotas, eventos, etc.)
+    }
 }

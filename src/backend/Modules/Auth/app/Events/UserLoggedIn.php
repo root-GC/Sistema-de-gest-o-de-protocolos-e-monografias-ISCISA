@@ -3,7 +3,7 @@
 namespace Modules\Auth\app\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
-use Modules\User\Models\User;
+use Modules\User\app\Models\User;
 
 class UserLoggedIn
 {

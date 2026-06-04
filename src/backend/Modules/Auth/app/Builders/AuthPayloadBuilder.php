@@ -2,8 +2,8 @@
 
 namespace Modules\Auth\app\Builders;
 
-use Modules\User\Models\User;
-
+use Modules\User\app\Models\User;
+use Illuminate\Support\Facades\Log;
 /**
  * AuthPayloadBuilder — SGPMC-ISCISA
  *
@@ -27,6 +27,12 @@ class AuthPayloadBuilder
 {
     public function build(User $user): array
     {
+
+    Log::info('[PAYLOAD]', [
+    'step' => 'build_start',
+    'user_id' => $user->id ?? null,
+]);
+
         // Uma query com eager loading — sem N+1
         $user->load([
             'roles.permissions',
@@ -129,7 +135,9 @@ class AuthPayloadBuilder
                     : null,
             ];
         }
-
+    Log::info('[PAYLOAD]', [
+    'step' => 'loading_relations',
+]);
         return $profiles;
     }
 }

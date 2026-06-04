@@ -4,7 +4,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\User\app\Models\Course;
 use Modules\User\app\Models\User;
-use Modules\User\Models\app\TeacherProfile;
+use Modules\User\app\Models\TeacherProfile;
 
 
 class StudentProfile extends Model
