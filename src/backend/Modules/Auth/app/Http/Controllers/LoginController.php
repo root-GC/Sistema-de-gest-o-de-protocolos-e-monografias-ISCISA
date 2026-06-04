@@ -50,8 +50,8 @@ class LoginController extends Controller
         // ]);
 
         Log::info('[LOGIN]', [
-    'step' => 'controller_hit',
-]);
+            'step' => 'controller_hit',
+        ]);
 
         $user = $this->authService->attempt(
             $request->email,

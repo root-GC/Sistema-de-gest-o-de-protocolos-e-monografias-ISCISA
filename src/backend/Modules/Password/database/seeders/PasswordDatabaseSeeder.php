@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Password\Database\Seeders;
+namespace Modules\Password\database\seeders;
 
 use Illuminate\Database\Seeder;
 

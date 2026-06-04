@@ -16,15 +16,13 @@
         }
     },
     "autoload": {
-        "psr-4": {
-            "Modules\\Auth\\": "app/",
-            "Modules\\Auth\\Database\\Factories\\": "database/factories/",
-            "Modules\\Auth\\Database\\Seeders\\": "database/seeders/"
-        }
-    },
+    "psr-4": {
+        "Modules\\Auth\\": "app/"
+    }
+},
     "autoload-dev": {
         "psr-4": {
-            "Modules\\Auth\\Tests\\": "tests/"
+            "Modules\\Auth\\tests\\": "tests/"
         }
     }
 }

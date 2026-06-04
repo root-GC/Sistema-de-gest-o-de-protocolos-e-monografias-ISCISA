@@ -221,7 +221,7 @@ class RoleSeeder extends Seeder
                 $permId = DB::table('permissions')->where('code', $code)->value('id');
 
                 if (! $permId) {
-                    $this->command->warn("Permission não encontrada: {$code} (role: {$name}) — corre PermissionSeeder primeiro.");
+                    //$this->command->warn("Permission não encontrada: {$code} (role: {$name}) — corre PermissionSeeder primeiro.");
                     continue;
                 }
 
@@ -232,6 +232,6 @@ class RoleSeeder extends Seeder
             }
         }
 
-        $this->command->info('Roles e permissions carregadas com sucesso.');
+       // $this->command->info('Roles e permissions carregadas com sucesso.');
     }
 }

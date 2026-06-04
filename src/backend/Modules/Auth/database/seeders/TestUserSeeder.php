@@ -50,7 +50,7 @@ class TestUserSeeder extends Seeder
             }
         }
 
-        $this->command->info('Utilizadores de teste criados.');
-        $this->command->line('  Password para todos: password123');
+       // $this->command->info('Utilizadores de teste criados.');
+       // $this->command->line('  Password para todos: password123');
     }
 }

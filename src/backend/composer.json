@@ -26,13 +26,21 @@
         "phpunit/phpunit": "^12.5.12"
     },
     "autoload": {
-        "psr-4": {
-            "App\\": "app/",
-            "Database\\Factories\\": "database/factories/",
-            "Modules\\": "Modules/",
-            "Database\\Seeders\\": "database/seeders/"
-        }
-    },
+    "psr-4": {
+        "App\\": "app/",
+        "Modules\\": "Modules/",
+        "Database\\Factories\\": "database/factories/",
+        "Database\\Seeders\\": "database/seeders/"
+    }
+},
+ "classmap": [
+        "Modules/Auth/database/seeders",
+        "Modules/User/database/seeders",
+        "Modules/Defense/database/seeders",
+        "Modules/Password/database/seeders",
+        "Modules/Monograph/database/seeders",
+        "Modules/Protocol/database/seeders"
+    ],
     "autoload-dev": {
         "psr-4": {
             "Tests\\": "tests/"

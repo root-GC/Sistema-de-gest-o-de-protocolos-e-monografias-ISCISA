@@ -29,9 +29,9 @@ class AuthPayloadBuilder
     {
 
     Log::info('[PAYLOAD]', [
-    'step' => 'build_start',
-    'user_id' => $user->id ?? null,
-]);
+        'step' => 'build_start',
+        'user_id' => $user->id ?? null,
+    ]);
 
         // Uma query com eager loading — sem N+1
         $user->load([
