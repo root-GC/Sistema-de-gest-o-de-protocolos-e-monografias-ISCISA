@@ -1,0 +1,7 @@
+export default function Page403() {
+  return (
+    <div>
+      <h1>Page403</h1>
+    </div>
+  );
+}

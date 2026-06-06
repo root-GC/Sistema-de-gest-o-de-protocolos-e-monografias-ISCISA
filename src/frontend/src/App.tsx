@@ -1,122 +1,133 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import { ProtectedRoute } from './guards/ProtectedRoute.tsx'
+import { AppLayout } from './components/layout/AppLayout.tsx'
+import { lazy, Suspense } from 'react'
 
-function App() {
-  const [count, setCount] = useState(0)
+// Páginas públicas
+import LoginPage from './pages/LoginPage.tsx'
 
+//Páginas protegidas — lazy load
+const DashboardPage          = lazy(() => import('./pages/shared/DashboardPage'))
+const Page403                = lazy(() => import('./pages/shared/Page403'))
+
+// Student
+const TopicPage              = lazy(() => import('./pages/student/TopicPage'))
+const ProtocolPage           = lazy(() => import('./pages/student/ProtocolPage'))
+const DocumentsPage          = lazy(() => import('./pages/student/DocumentsPage'))
+const MonographPage          = lazy(() => import('./pages/student/MonographPage'))
+
+// Teacher / Supervisor
+const SupervisionPage        = lazy(() => import('./pages/teacher/SupervisionPage'))
+const WorkloadPage           = lazy(() => import('./pages/teacher/WorkloadPage'))
+
+// Reviewer
+const ReviewsPage            = lazy(() => import('./pages/teacher/ReviewsPage'))
+const EvaluationPage         = lazy(() => import('./pages/teacher/EvaluationPage'))
+
+// Coordinator
+const AssignPage             = lazy(() => import('./pages/coordinator/AssignPage'))
+const ProtocolsOverviewPage  = lazy(() => import('./pages/coordinator/ProtocolsOverviewPage'))
+const DefensePage            = lazy(() => import('./pages/coordinator/DefensePage'))
+const ReportsPage            = lazy(() => import('./pages/coordinator/ReportsPage'))
+
+// Secretary
+const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtocolsPage'))
+
+// Admin
+const AdminUsersPage         = lazy(() => import('./pages/admin/AdminUsersPage'))
+const AdminOrgansPage        = lazy(() => import('./pages/admin/AdminOrgansPage'))
+
+const Loader = () => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+    <span style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>A carregar...</span>
+  </div>
+)
+
+export default function App() {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <BrowserRouter>
+      <AuthProvider>
+        <Suspense fallback={<Loader />}>
+          <Routes>
 
-      <div className="ticks"></div>
+            {/* ── Públicas ─────────────────────────────────────── */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/403"   element={<Page403 />} />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+            {/* ── Protegidas — qualquer utilizador autenticado ── */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppLayout />}>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+                {/* Dashboard (toda a gente) */}
+                <Route path="/dashboard" element={<DashboardPage />} />
+
+                {/* ── Student ─────────────────────────────────── */}
+                <Route element={<ProtectedRoute permission="topic.create" />}>
+                  <Route path="/topic" element={<TopicPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="protocol.create" />}>
+                  <Route path="/protocol/mine"      element={<ProtocolPage />} />
+                  <Route path="/protocol/submit"    element={<ProtocolPage />} />
+                  <Route path="/protocol/documents" element={<DocumentsPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="monograph.submit" />}>
+                  <Route path="/monograph" element={<MonographPage />} />
+                </Route>
+
+                {/* ── Supervisor ──────────────────────────────── */}
+                <Route element={<ProtectedRoute permission="supervision.view" />}>
+                  <Route path="/supervision"         element={<SupervisionPage />} />
+                  <Route path="/supervision/pending" element={<SupervisionPage />} />
+                </Route>
+
+                {/* ── Teacher / Reviewer ──────────────────────── */}
+                <Route element={<ProtectedRoute permission="workload.view" />}>
+                  <Route path="/workload" element={<WorkloadPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="protocol.review" />}>
+                  <Route path="/reviews"          element={<ReviewsPage />} />
+                  <Route path="/reviews/assigned" element={<ReviewsPage />} />
+                  <Route path="/reviews/done"     element={<ReviewsPage />} />
+                  <Route path="/evaluation/:id"   element={<EvaluationPage />} />
+                </Route>
+
+                {/* ── Coordinator ─────────────────────────────── */}
+                <Route element={<ProtectedRoute permission="protocol.assign" />}>
+                  <Route path="/protocols"        element={<ProtocolsOverviewPage />} />
+                  <Route path="/protocols/assign" element={<AssignPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="defense.schedule" />}>
+                  <Route path="/defense"          element={<DefensePage />} />
+                  <Route path="/defense/schedule" element={<DefensePage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="reports.view" />}>
+                  <Route path="/reports" element={<ReportsPage />} />
+                </Route>
+
+                {/* ── Secretary ───────────────────────────────── */}
+                <Route element={<ProtectedRoute permission="protocol.triage" />}>
+                  <Route path="/secretary/protocols" element={<SecretaryProtocolsPage />} />
+                </Route>
+
+                {/* ── Admin ───────────────────────────────────── */}
+                <Route element={<ProtectedRoute permission="admin.users" />}>
+                  <Route path="/admin/users" element={<AdminUsersPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="admin.organs" />}>
+                  <Route path="/admin/organs" element={<AdminOrgansPage />} />
+                </Route>
+
+              </Route>
+            </Route>
+
+            {/* Redirects */}
+            <Route path="/"  element={<Navigate to="/dashboard" replace />} />
+            <Route path="*"  element={<Navigate to="/dashboard" replace />} />
+
+          </Routes>
+        </Suspense>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }
-
-export default App
