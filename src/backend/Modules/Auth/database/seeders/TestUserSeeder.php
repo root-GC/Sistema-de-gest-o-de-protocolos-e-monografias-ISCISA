@@ -39,6 +39,9 @@ class TestUserSeeder extends Seeder
 
             foreach ($data['roles'] as $roleName) {
                 $roleId = DB::table('roles')->where('name', $roleName)->value('id');
+                if (! $roleId) {
+                    throw new \Exception("Role não encontrada: $roleName");
+                }
                 if ($roleId) {
                     DB::table('user_roles')->insertOrIgnore([
                         'user_id'    => $userId,

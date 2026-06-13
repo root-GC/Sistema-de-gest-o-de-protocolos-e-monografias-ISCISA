@@ -182,7 +182,7 @@ class RoleSeeder extends Seeder
                     'reviewer.assign',
                     'workload.view.all',
                     'defense.view',
-                    'defense.schedule',
+                    // 'defense.schedule',
                     'monograph.view.all',
                     'monograph.validate',
                     'reports.view',
