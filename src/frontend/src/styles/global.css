@@ -1,0 +1,343 @@
+/* =========================================================
+   ISCISA SCIENTIFIC MANAGEMENT SYSTEM
+   Global Design System
+========================================================= */
+
+:root {
+  /* =======================================================
+     🌿 SURFACES (LIGHT MODE BASE)
+  ======================================================= */
+  --surface: #f9f9fc;
+  --surface-dim: #dadadc;
+  --surface-bright: #f9f9fc;
+
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f3f3f6;
+  --surface-container: #eeeef0;
+  --surface-container-high: #e8e8ea;
+  --surface-container-highest: #e2e2e5;
+
+  --background: #f9f9fc;
+
+  /* =======================================================
+     🖋 TEXT
+  ======================================================= */
+  --on-surface: #1a1c1e;
+  --on-surface-variant: #3e4a3f;
+  --on-background: #1a1c1e;
+
+  --inverse-surface: #2f3133;
+  --inverse-on-surface: #f0f0f3;
+
+  /* =======================================================
+     🧭 OUTLINE / BORDERS
+  ======================================================= */
+  --outline: #6e7a6e;
+  --outline-variant: #bdcabc;
+
+  /* =======================================================
+     🎯 PRIMARY (Emerald Institutional)
+  ======================================================= */
+  --primary: #006933;
+  --primary-container: #008542;
+  --on-primary: #ffffff;
+  --on-primary-container: #eeffec;
+  --inverse-primary: #71dc8e;
+
+  /* =======================================================
+     🔴 SECONDARY (Bordeaux Academic)
+  ======================================================= */
+  --secondary: #b7150b;
+  --secondary-container: #db3323;
+  --on-secondary: #ffffff;
+  --on-secondary-container: #fffbff;
+
+  /* =======================================================
+     🟡 TERTIARY (Gold Academic)
+  ======================================================= */
+  --tertiary: #735c00;
+  --tertiary-container: #cca730;
+  --on-tertiary: #ffffff;
+  --on-tertiary-container: #4f3d00;
+
+  /* =======================================================
+     ⚠ ERROR
+  ======================================================= */
+  --error: #ba1a1a;
+  --error-container: #ffdad6;
+  --on-error: #ffffff;
+  --on-error-container: #93000a;
+
+  /* =======================================================
+     🧊 FIXED TONES (advanced UI states)
+  ======================================================= */
+  --primary-fixed: #8df9a8;
+  --primary-fixed-dim: #71dc8e;
+  --on-primary-fixed: #00210c;
+  --on-primary-fixed-variant: #005226;
+
+  --secondary-fixed: #ffdad4;
+  --secondary-fixed-dim: #ffb4a8;
+  --on-secondary-fixed: #410000;
+  --on-secondary-fixed-variant: #930000;
+
+  --tertiary-fixed: #ffe088;
+  --tertiary-fixed-dim: #e9c349;
+  --on-tertiary-fixed: #241a00;
+  --on-tertiary-fixed-variant: #574500;
+
+  /* =======================================================
+     🔁 SURFACE VARIANT
+  ======================================================= */
+  --surface-variant: #e2e2e5;
+  --surface-tint: #006d35;
+
+  /* =======================================================
+     🧱 TYPOGRAPHY
+  ======================================================= */
+  --font-family: 'Inter', system-ui, sans-serif;
+
+  --headline-xl: 40px;
+  --headline-lg: 32px;
+  --headline-lg-mobile: 28px;
+  --title-md: 20px;
+
+  --body-lg: 16px;
+  --body-md: 14px;
+  --label-md: 12px;
+
+  --font-bold: 700;
+  --font-semibold: 600;
+  --font-medium: 500;
+  --font-regular: 400;
+
+  /* =======================================================
+     📏 SPACING SYSTEM (8px base)
+  ======================================================= */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 48px;
+  --space-6: 64px;
+
+  --margin-mobile: 16px;
+  --margin-desktop: 32px;
+  --gutter: 24px;
+
+  /* =======================================================
+     🔳 RADIUS SYSTEM
+  ======================================================= */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
+
+  /* =======================================================
+     🌑 ELEVATION (SCIENTIFIC TONAL DEPTH)
+  ======================================================= */
+  --elevation-0: none;
+  --elevation-1: 0 1px 0 rgba(0,0,0,0.04);
+  --elevation-2: 0 4px 12px rgba(0,0,0,0.06);
+  --elevation-3: 0 16px 40px rgba(0,0,0,0.12);
+
+  --backdrop: rgba(0,0,0,0.4);
+
+  /* =======================================================
+     📐 LAYOUT
+  ======================================================= */
+  --sidebar-width: 280px;
+  --container-max-width: 1440px;
+}
+
+/* =========================================================
+   🌙 DARK MODE
+   (mesmos tokens, invertidos de forma científica)
+========================================================= */
+
+[data-theme="dark"] {
+  --surface: #0f1115;
+  --surface-dim: #0c0e12;
+  --surface-bright: #151821;
+
+  --surface-container-lowest: #12151b;
+  --surface-container-low: #171a21;
+  --surface-container: #1c2028;
+  --surface-container-high: #222732;
+  --surface-container-highest: #2a303d;
+
+  --background: #0b0d11;
+
+  --on-surface: #e6e8ea;
+  --on-surface-variant: #b7c0b9;
+  --on-background: #e6e8ea;
+
+  --outline: #3a443c;
+  --outline-variant: #2a332c;
+
+  --surface-variant: #1a1f1b;
+
+  --primary: #71dc8e;
+  --primary-container: #008542;
+  --on-primary: #001b0a;
+  --on-primary-container: #eeffec;
+
+  --secondary: #ff6b5f;
+  --secondary-container: #db3323;
+  --on-secondary: #2a0000;
+
+  --tertiary: #e9c349;
+  --tertiary-container: #4f3d00;
+  --on-tertiary: #1a1200;
+}
+
+/* =========================================================
+   🧱 BASE RESET
+========================================================= */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--background);
+  color: var(--on-background);
+  font-size: var(--body-md);
+}
+
+/* =========================================================
+   🧭 LAYOUT SYSTEM
+========================================================= */
+
+.app-layout {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--surface-container-low);
+  border-right: 1px solid var(--surface-container-high);
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  background: var(--surface-container-lowest);
+  border-bottom: 1px solid var(--surface-container-high);
+}
+
+.app-content {
+  flex: 1;
+  padding: var(--space-3);
+  overflow: auto;
+}
+
+/* =========================================================
+   🧩 COMPONENT BASES
+========================================================= */
+
+.btn {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn:hover {
+  box-shadow: var(--elevation-2);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  border: none;
+}
+
+.btn-danger {
+  background: var(--secondary);
+  color: var(--on-secondary);
+  border: none;
+}
+
+/* =========================================================
+   📊 CARDS (DASHBOARD MODULES)
+========================================================= */
+
+.card {
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--surface-container-high);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+}
+
+.card:hover {
+  box-shadow: var(--elevation-2);
+}
+
+/* =========================================================
+   📋 TABLES
+========================================================= */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  font-size: var(--label-md);
+  color: var(--on-surface-variant);
+  background: var(--surface-container-low);
+  position: sticky;
+  top: 0;
+}
+
+.table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--surface-container-high);
+}
+
+.table tr:nth-child(even) {
+  background: var(--surface-container-low);
+}
+
+/* =========================================================
+   🧭 BADGES / STATUS
+========================================================= */
+
+.badge {
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--label-md);
+}
+
+.badge-success {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.badge-error {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.badge-warning {
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+}
