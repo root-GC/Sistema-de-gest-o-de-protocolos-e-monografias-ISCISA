@@ -1,0 +1,8 @@
+{
+    "name": "Organization",
+    "alias": "organization",
+    "priority": 0,
+    "providers": [
+        "Modules\\Organization\\app\\Providers\\OrganizationServiceProvider"
+    ]
+}

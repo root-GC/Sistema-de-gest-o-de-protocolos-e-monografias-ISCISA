@@ -5,5 +5,6 @@
     "Defense": true,
     "User": true,
     "Shared": true,
-    "Password": true
+    "Password": true,
+    "Organization": true
 }

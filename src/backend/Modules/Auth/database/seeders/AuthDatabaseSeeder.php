@@ -9,7 +9,7 @@ use Modules\Auth\Database\Seeders\PermissionSeeder;
 use Modules\Auth\Database\Seeders\RoleSeeder;
 use Modules\Auth\Database\Seeders\TestUserSeeder;
 
-class DatabaseSeeder extends Seeder
+class AuthDatabaseSeeder extends Seeder
 {
     public function run(): void
     {
