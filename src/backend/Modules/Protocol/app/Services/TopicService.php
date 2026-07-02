@@ -10,6 +10,32 @@ class TopicService
 {
     public function submit(array $data, User $user): array
     {
+        // Impedir nova submissão se houver tema não rejeitado
+        $existing = Topic::query()
+            ->where('student_id', $user->id)
+            ->latest('submitted_at')
+            ->first();
+
+        if ($existing && $existing->status !== 'topic_rejected') {
+            // Mensagem e payload conforme o status actual
+            if ($existing->status === 'topic_pending') {
+                $message = 'Você já tem um tema pendente — aguarde decisão antes de submeter outro.';
+            } elseif ($existing->status === 'topic_approved') {
+                $message = 'Seu tema anterior já foi aprovado — não é possível submeter outro.';
+            } else {
+                $message = 'Já existe um tema associado à sua conta que impede nova submissão.';
+            }
+
+            // Devolve 409 Conflict com o tema existente para o frontend tomar decisão
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                response()->json([
+                    'message' => $message,
+                    'existing_topic' => $existing->load(['scientificArea:id,name', 'course:id,name,code']),
+                ], 409)
+            );
+        }
+
+        // Se chegou aqui, permite submissão (mantém comportamento actual)
         $similarTopics = $this->findSimilarApprovedTopics($data['title']);
 
         $topic = Topic::create([
