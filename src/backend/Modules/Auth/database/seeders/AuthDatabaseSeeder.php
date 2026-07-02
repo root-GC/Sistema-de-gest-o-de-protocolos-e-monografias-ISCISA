@@ -2,12 +2,12 @@
 // Modules/Auth/Database/Seeders/DatabaseSeeder.php
 // Executar com: php artisan module:seed Auth
 
-namespace Modules\Auth\Database\Seeders;
+namespace Modules\Auth\database\seeders;
 
 use Illuminate\Database\Seeder;
-use Modules\Auth\Database\Seeders\PermissionSeeder;
-use Modules\Auth\Database\Seeders\RoleSeeder;
-use Modules\Auth\Database\Seeders\TestUserSeeder;
+use Modules\Auth\database\seeders\PermissionSeeder;
+use Modules\Auth\database\seeders\RoleSeeder;
+use Modules\Auth\database\seeders\TestUserSeeder;
 
 class AuthDatabaseSeeder extends Seeder
 {

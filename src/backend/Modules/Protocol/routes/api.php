@@ -1,8 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Modules\Protocol\Http\Controllers\ProtocolController;
+use Modules\Protocol\app\Http\Controllers\TopicController;
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
-    Route::apiResource('protocols', ProtocolController::class)->names('protocol');
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('topics', [TopicController::class, 'store'])->name('topic.store');
+    Route::get('topics', [TopicController::class, 'index'])->name('topic.index');
+
+    Route::apiResource('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolController')->names('protocol');
 });

@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Auth\Database\Seeders;
+namespace Modules\Auth\database\seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -94,7 +94,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'defense.jury.assign',   'description' => 'Indicar membros do júri'],
             ['code' => 'defense.jury.participate', 'description' => 'Participar numa banca como membro do júri'],
             ['code' => 'defense.grade.record',  'description' => 'Registar nota final após defesa'],
-            ['code' => 'defense.minutes.upload','description' => 'Fazer upload da acta digitalizada'],
+            ['code' => 'defense.minutes.upload', 'description' => 'Fazer upload da acta digitalizada'],
 
             // ── MONOGRAPH (monografia final — RF-010, RF-062) ─────────────
             ['code' => 'monograph.submit',      'description' => 'Submeter monografia final com aval do supervisor'],

@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Auth\Database\Seeders;
+namespace Modules\Auth\database\seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -53,7 +53,7 @@ class TestUserSeeder extends Seeder
             }
         }
 
-       // $this->command->info('Utilizadores de teste criados.');
-       // $this->command->line('  Password para todos: password123');
+        // $this->command->info('Utilizadores de teste criados.');
+        // $this->command->line('  Password para todos: password123');
     }
 }
