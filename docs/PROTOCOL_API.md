@@ -103,6 +103,47 @@ Submete um novo tema para avaliacao inicial.
   }
 }
 ```
+### Regra de repeticao de submissao
+
+O estudante nao pode submeter um novo tema enquanto existir um tema anterior com estado diferente de `topic_rejected`.
+
+Comportamento:
+
+- `topic_pending` -> bloqueia nova submissao e informa que ja existe um tema pendente
+- `topic_approved` -> bloqueia nova submissao e informa que o tema ja foi aprovado
+- `topic_rejected` -> permite submeter nova versao
+- sem tema anterior -> permite submeter normalmente
+
+### Response - tema ja existente e nao rejeitado (409)
+
+```json
+{
+  "message": "Você já tem um tema pendente — aguarde decisão antes de submeter outro.",
+  "existing_topic": {
+    "id": 10,
+    "title": "Impacto da adesao terapeutica em pacientes hipertensos",
+    "status": "topic_pending",
+    "submitted_at": "2026-07-02T10:15:41.000000Z",
+    "scientific_area": {
+      "id": 1,
+      "name": "Saude Publica"
+    },
+    "course": {
+      "id": 2,
+      "name": "Medicina",
+      "code": "MED"
+    }
+  }
+}
+###Response - tema anterior aprovado (409)
+{
+  "message": "Seu tema anterior já foi aprovado — não é possível submeter outro.",
+  "existing_topic": {
+    "id": 10,
+    "title": "Impacto da adesao terapeutica em pacientes hipertensos",
+    "status": "topic_approved"
+  }
+}
 
 ### Response - erro de validacao (422)
 

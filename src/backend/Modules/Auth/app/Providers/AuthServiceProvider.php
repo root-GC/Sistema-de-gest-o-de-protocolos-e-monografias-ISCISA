@@ -13,7 +13,7 @@ use Modules\User\app\Models\User;
 
 class AuthServiceProvider extends ServiceProvider
 {
-    protected string $moduleName = 'Auth';
+    protected string $moduleName = "Auth";
 
     public function register(): void
     {
@@ -24,8 +24,8 @@ class AuthServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__ . '/../../routes/api.php');
-        $this->loadMigrationsFrom(__DIR__ . '/../../database/migrations');
+        $this->loadRoutesFrom(__DIR__ . "/../../routes/api.php");
+        $this->loadMigrationsFrom(__DIR__ . "/../../database/migrations");
 
         // Registar listeners
         \Illuminate\Support\Facades\Event::listen(
@@ -33,19 +33,12 @@ class AuthServiceProvider extends ServiceProvider
             LogAuthActivity::class
         );
 
-        // Gates — uma gate por permission
-        // O módulo Protocol (e os restantes) usam Gate::allows() diretamente.
-        // As permissions são carregadas do DB uma vez por request via cache.
+        // Gates
         Gate::before(function (User $user, string $ability) {
             // Admin global pode tudo
-            if ($user->hasRole('admin') && $user->adminProfile?->access_scope === 'global') {
+            if ($user->hasRole("admin") && $user->adminProfile?->access_scope === "global") {
                 return true;
             }
-        });
-
-        // Define gates dinamicamente a partir das permissions do user
-        Gate::define('*', function (User $user, string $ability) {
-            return $user->hasPermission($ability);
         });
     }
 }

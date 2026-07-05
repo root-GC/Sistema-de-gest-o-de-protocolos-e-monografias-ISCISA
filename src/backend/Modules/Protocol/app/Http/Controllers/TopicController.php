@@ -43,4 +43,34 @@ class TopicController extends Controller
             'topics' => $this->topicService->listForUser($user),
         ]);
     }
+
+    public function approveBySupervisor(Request $request, Topic $topic)
+    {
+        $user = $request->user()->load('teacherProfile');
+
+        $this->authorize('approveBySupervisor', $topic);
+
+        $result = $this->topicService->approveBySupervisor($topic, $user);
+
+        return response()->json([
+            'message' => 'Tema aprovado com sucesso pelo supervisor.',
+            'topic' => $result,
+        ]);
+    }
+
+    public function rejectBySupervisor(Request $request, Topic $topic)
+    {
+        $user = $request->user()->load('teacherProfile');
+
+        $this->authorize('rejectBySupervisor', $topic);
+
+        $justification = $request->input('justification');
+
+        $result = $this->topicService->rejectBySupervisor($topic, $user, $justification);
+
+        return response()->json([
+            'message' => 'Tema rejeitado pelo supervisor.',
+            'topic' => $result,
+        ]);
+    }
 }

@@ -93,7 +93,7 @@ class AuthPayloadBuilder
             $profiles['student'] = [
                 'id'             => $sp->id,
                 'student_number' => $sp->student_number,
-                'supervisor_id'  => $sp->supervisorID,
+                'supervisor_id'  => $sp->supervisor_id,
                 'course'         => $sp->course
                     ? ['id' => $sp->course->id, 'name' => $sp->course->name]
                     : null,

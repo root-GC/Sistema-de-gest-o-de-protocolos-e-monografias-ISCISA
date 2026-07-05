@@ -49,7 +49,8 @@ Erro:
 | --- | --- | --- | --- |
 | POST | `/topics` | `auth:sanctum` + `topic.create` | Submeter novo tema |
 | GET | `/topics` | `auth:sanctum` + `topic.view` ou `topic.view.all` | Listar temas do estudante ou de todos, conforme permissão |
-
+|PATCH |/topics/{topic}/supervisor-approve	supervisor atribuído + supervision.approve	Aprovar tema submetido
+|PATCH |/topics/{topic}/supervisor-reject	supervisor atribuído + supervision.approve	Rejeitar tema submetido
 ## Regras já aplicadas
 
 - O estudante não pode submeter um novo tema se já existir um tema `topic_pending`.
