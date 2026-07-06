@@ -13,6 +13,16 @@ class Topic extends Model
 {
     use SoftDeletes;
 
+    public const STATUS_PENDING_SUPERVISOR = 'topic_pending_supervisor';
+    public const STATUS_PENDING_NUCLEO = 'topic_pending_nucleo';
+    public const STATUS_APPROVED_NUCLEO = 'topic_approved_nucleo';
+    public const STATUS_REJECTED_SUPERVISOR = 'topic_rejected_supervisor';
+    public const STATUS_REJECTED_NUCLEO = 'topic_rejected_nucleo';
+
+    public const SUPERVISOR_STATUS_PENDING = 'pending';
+    public const SUPERVISOR_STATUS_APPROVED = 'approved';
+    public const SUPERVISOR_STATUS_REJECTED = 'rejected';
+
     protected $fillable = [
         'student_id',
         'supervisor_id',
@@ -28,6 +38,34 @@ class Topic extends Model
     protected $casts = [
         'submitted_at' => 'datetime',
     ];
+
+    protected $appends = [
+        'status_label',
+    ];
+
+    public static function rejectedStatuses(): array
+    {
+        return [
+            self::STATUS_REJECTED_SUPERVISOR,
+            self::STATUS_REJECTED_NUCLEO,
+            'topic_rejected',
+        ];
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        return match ($this->status) {
+            'topic_pending' => 'Aguardando aprovação do supervisor',
+            'topic_approved' => 'Aguardando aprovação do Nucleo Cientifico',
+            'topic_rejected' => 'Rejeitado pelo supervisor',
+            self::STATUS_PENDING_SUPERVISOR => 'Aguardando aprovação do supervisor',
+            self::STATUS_PENDING_NUCLEO => 'Aguardando aprovação do Nucleo Cientifico',
+            self::STATUS_APPROVED_NUCLEO => 'Aprovado pelo Nucleo Cientifico',
+            self::STATUS_REJECTED_SUPERVISOR => 'Rejeitado pelo supervisor',
+            self::STATUS_REJECTED_NUCLEO => 'Rejeitado pelo Nucleo Cientifico',
+            default => $this->status,
+        };
+    }
 
     public function student()
     {

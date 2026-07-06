@@ -32,12 +32,14 @@ class TopicService
             ->latest('submitted_at')
             ->first();
 
-        if ($existing && $existing->status !== 'topic_rejected') {
+        if ($existing && ! in_array($existing->status, Topic::rejectedStatuses(), true)) {
             // Mensagem e payload conforme o status actual
-            if ($existing->status === 'topic_pending') {
-                $message = 'Você já tem um tema pendente — aguarde decisão antes de submeter outro.';
-            } elseif ($existing->status === 'topic_approved') {
-                $message = 'Seu tema anterior já foi aprovado — não é possível submeter outro.';
+            if ($existing->status === Topic::STATUS_PENDING_SUPERVISOR || $existing->status === 'topic_pending') {
+                $message = 'Você já tem um tema aguardando aprovação do supervisor — aguarde a decisão antes de submeter outro.';
+            } elseif ($existing->status === Topic::STATUS_PENDING_NUCLEO || $existing->status === 'topic_approved') {
+                $message = 'Seu tema já foi aprovado pelo supervisor e está em análise no Nucleo Cientifico — não é possível submeter outro.';
+            } elseif ($existing->status === Topic::STATUS_APPROVED_NUCLEO) {
+                $message = 'Seu tema anterior já foi aprovado pelo Nucleo Cientifico — não é possível submeter outro.';
             } else {
                 $message = 'Já existe um tema associado à sua conta que impede nova submissão.';
             }
@@ -64,8 +66,8 @@ class TopicService
             'scientific_area_id' => $data['scientific_area_id'],
             'course_id' => $data['course_id'],
             'title' => $data['title'],
-            'status' => 'topic_pending',
-            'supervisor_status' => 'pending',
+            'status' => Topic::STATUS_PENDING_SUPERVISOR,
+            'supervisor_status' => Topic::SUPERVISOR_STATUS_PENDING,
             'submitted_at' => now(),
         ]);
 
@@ -103,7 +105,7 @@ class TopicService
     {
         $approvedTopics = Topic::query()
             ->select(['id', 'title'])
-            ->where('status', 'topic_approved')
+            ->whereIn('status', [Topic::STATUS_APPROVED_NUCLEO, 'topic_approved'])
             ->get();
 
         if ($approvedTopics->isEmpty()) {
@@ -143,8 +145,8 @@ class TopicService
                 );
             }
 
-            // Valida máquina de estados — só pode aprovar se estiver pendente
-            if ($topic->status !== 'pending_supervisor') {
+            // Valida máquina de estados — só pode aprovar se estiver aguardando o supervisor
+            if ($topic->status !== Topic::STATUS_PENDING_SUPERVISOR && $topic->status !== 'topic_pending') {
                 throw new HttpResponseException(
                     response()->json([
                         'message' => __(
@@ -156,7 +158,7 @@ class TopicService
             }
 
             // Evita dupla aprovação
-            if ($topic->supervisor_status === 'approved') {
+            if ($topic->supervisor_status === Topic::SUPERVISOR_STATUS_APPROVED) {
                 throw new HttpResponseException(
                     response()->json([
                         'message' => __('messages.topic_already_approved'),
@@ -165,8 +167,8 @@ class TopicService
             }
 
             $topic->update([
-                'status'                => 'topic_approved',
-                'supervisor_status'     => 'approved',
+                'status'                 => Topic::STATUS_PENDING_NUCLEO,
+                'supervisor_status'      => Topic::SUPERVISOR_STATUS_APPROVED,
                 'supervisor_decision_at' => now(),
             ]);
 
@@ -183,27 +185,38 @@ class TopicService
 
     public function rejectBySupervisor(Topic $topic, User $supervisor, string $justification = null): Topic
     {
-        if ($topic->supervisor_id !== $supervisor->teacherProfile?->id) {
+        return DB::transaction(function () use ($topic, $supervisor, $justification) {
+            $topic = Topic::lockForUpdate()->findOrFail($topic->id);
 
-            throw new HttpResponseException(
-                response()->json([
-                    'message' => 'Apenas o supervisor atribuido pode rejeitar este tema.',
-                ], 403)
-            );
-        }
+            if ($topic->supervisor_id !== $supervisor->teacherProfile?->id) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Apenas o supervisor atribuido pode rejeitar este tema.',
+                    ], 403)
+                );
+            }
 
-        $topic->update([
-            'status' => 'topic_rejected',
-            'supervisor_status' => 'rejected',
-            'justification' => $justification,
-            'supervisor_decision_at' => now(),
-        ]);
+            if ($topic->status !== Topic::STATUS_PENDING_SUPERVISOR && $topic->status !== 'topic_pending') {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => __('messages.topic_cannot_be_rejected', ['current' => $topic->status]),
+                    ], 422)
+                );
+            }
 
-        return $topic->load([
-            'student:id,name,email',
-            'supervisor.user:id,name,email',
-            'scientificArea:id,name',
-            'course:id,name,code',
-        ]);
+            $topic->update([
+                'status' => Topic::STATUS_REJECTED_SUPERVISOR,
+                'supervisor_status' => Topic::SUPERVISOR_STATUS_REJECTED,
+                'justification' => $justification,
+                'supervisor_decision_at' => now(),
+            ]);
+
+            return $topic->load([
+                'student:id,name,email',
+                'supervisor.user:id,name,email',
+                'scientificArea:id,name',
+                'course:id,name,code',
+            ]);
+        });
     }
 }

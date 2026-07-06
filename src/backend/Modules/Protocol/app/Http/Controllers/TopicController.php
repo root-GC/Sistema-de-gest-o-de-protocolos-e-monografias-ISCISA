@@ -24,7 +24,7 @@ class TopicController extends Controller
         $result = $this->topicService->submit($request->validated(), $user);
 
         return response()->json([
-            'message' => 'Tema submetido com sucesso e enviado ao Nucleo Cientifico.',
+            'message' => 'Tema submetido com sucesso. Agora está aguardando aprovação do supervisor.',
             'topic' => $result['topic'],
             'similar_topics_warning' => [
                 'has_similar' => ! empty($result['similar_topics']),
@@ -53,7 +53,7 @@ class TopicController extends Controller
         $result = $this->topicService->approveBySupervisor($topic, $user);
 
         return response()->json([
-            'message' => 'Tema aprovado com sucesso pelo supervisor.',
+            'message' => 'Tema aprovado com sucesso pelo supervisor e encaminhado ao Nucleo Cientifico.',
             'topic' => $result,
         ]);
     }

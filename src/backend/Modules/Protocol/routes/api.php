@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Protocol\app\Http\Controllers\TopicController;
 
-Route::prefix('api/v1')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () {
     Route::post('topics', [TopicController::class, 'store'])->name('topic.store');
     Route::get('topics', [TopicController::class, 'index'])->name('topic.index');
 
