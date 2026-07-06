@@ -6,6 +6,8 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\Protocol\app\Models\Topic;
+use Modules\Protocol\app\Models\TopicReviewAssignment;
+use Modules\Protocol\app\Models\TopicReviewEvaluation;
 use Modules\User\app\Models\StudentProfile;
 use Modules\User\app\Models\User;
 
@@ -217,6 +219,294 @@ class TopicService
                 'scientificArea:id,name',
                 'course:id,name,code',
             ]);
+        });
+    }
+
+    /**
+     * listForSecretary: Lista temas em status topic_pending_nucleo do núcleo da secretaria.
+     *
+     * Filtros:
+     *   - scientific_area.organ_id === secretary.organ_id
+     *   - topic.status === topic_pending_nucleo
+     *
+     * Carrega relações: student, supervisor, scientific_area, course, reviewAssignments
+     */
+    public function listForSecretary(User $secretary)
+    {
+        $secretaryProfile = $secretary->secretaryProfile;
+
+        if (! $secretaryProfile) {
+            return collect();
+        }
+
+        return Topic::query()
+            ->whereHas('scientificArea', fn($q) => $q->where('organ_id', $secretaryProfile->organ_id))
+            ->where('status', Topic::STATUS_PENDING_NUCLEO)
+            ->with([
+                'student:id,name,email',
+                'supervisor.user:id,name,email',
+                'scientificArea:id,name,organ_id',
+                'course:id,name,code',
+                'reviewAssignments.reviewer.user:id,name,email',
+                'reviewAssignments.evaluation',
+            ])
+            ->latest('submitted_at')
+            ->get();
+    }
+
+    /**
+     * getEligibleReviewers: Retorna docentes elegíveis para avaliar um tema.
+     *
+     * Elegibilidade:
+     *   - Docente está no mesmo núcleo (scientific_area.organ_id) que o tema
+     *   - Docente tem permissão 'reviewer.assign'
+     *   - Docente ainda não foi atribuído como revisor deste tema
+     *
+     * Retorna: Collection com id, name, email dos docentes elegíveis.
+     */
+    public function getEligibleReviewers(Topic $topic)
+    {
+        $topicOrganId = $topic->scientificArea?->organ_id;
+
+        if (! $topicOrganId) {
+            return collect();
+        }
+
+        // Já atribuídos
+        $assignedReviewerIds = $topic->reviewAssignments()
+            ->pluck('reviewer_id')
+            ->toArray();
+
+        // Docentes do mesmo núcleo que o tema, que não foram ainda atribuídos
+        return DB::table('teacher_profiles')
+            ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+            ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
+            ->where('scientific_areas.organ_id', $topicOrganId)
+            ->whereNotIn('teacher_profiles.id', $assignedReviewerIds)
+            ->select(
+                'teacher_profiles.id',
+                'users.id as user_id',
+                'users.name',
+                'users.email',
+                'scientific_areas.name as scientific_area_name'
+            )
+            ->orderBy('users.name')
+            ->get();
+    }
+
+    /**
+     * assignReviewers: Atribui um ou mais avaliadores a um tema.
+     *
+     * Processo:
+     *   1. Valida que o tema está em topic_pending_nucleo
+     *   2. Valida que cada avaliador está no mesmo núcleo
+     *   3. Cria TopicReviewAssignment para cada avaliador
+     *   4. Se há avaliadores atribuídos, transiciona tema para topic_assigned_for_review
+     *
+     * @param Topic $topic
+     * @param array $reviewerIds Array de teacher_profile IDs
+     * @param User $secretary User que fez a atribuição
+     * @return Topic Tema actualizado com assignments carregados
+     */
+    public function assignReviewers(Topic $topic, array $reviewerIds, User $secretary): Topic
+    {
+        return DB::transaction(function () use ($topic, $reviewerIds, $secretary) {
+            $topic = Topic::lockForUpdate()->findOrFail($topic->id);
+            $secretaryProfile = $secretary->secretaryProfile;
+
+            if (! $secretaryProfile) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Utilizador não é uma secretaria.',
+                    ], 403)
+                );
+            }
+
+            // Valida estado do tema
+            if ($topic->status !== Topic::STATUS_PENDING_NUCLEO) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'O tema não está em estado de atribuição de avaliadores.',
+                    ], 422)
+                );
+            }
+
+            // Valida núcleo do tema
+            $topicOrganId = $topic->scientificArea?->organ_id;
+            if ($topicOrganId !== $secretaryProfile->organ_id) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Secretaria não tem permissão para atribuir avaliadores a este tema.',
+                    ], 403)
+                );
+            }
+
+            // Valida cada revisor e cria atribuição
+            foreach ($reviewerIds as $reviewerId) {
+                // Obtém reviewer e valida núcleo
+                $reviewer = DB::table('teacher_profiles')
+                    ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+                    ->where('teacher_profiles.id', $reviewerId)
+                    ->where('scientific_areas.organ_id', $topicOrganId)
+                    ->first();
+
+                if (! $reviewer) {
+                    throw new HttpResponseException(
+                        response()->json([
+                            'message' => "Avaliador {$reviewerId} não está no mesmo núcleo ou não existe.",
+                        ], 422)
+                    );
+                }
+
+                // Verifica se já foi atribuído
+                $existing = $topic->reviewAssignments()
+                    ->where('reviewer_id', $reviewerId)
+                    ->exists();
+
+                if ($existing) {
+                    throw new HttpResponseException(
+                        response()->json([
+                            'message' => "Avaliador {$reviewerId} já foi atribuído a este tema.",
+                        ], 409)
+                    );
+                }
+
+                // Cria atribuição
+                $topic->reviewAssignments()->create([
+                    'reviewer_id' => $reviewerId,
+                    'assigned_by_id' => $secretary->id,
+                    'assigned_at' => now(),
+                ]);
+            }
+
+            // Transiciona estado se há avaliadores atribuídos
+            if ($topic->reviewAssignments()->exists()) {
+                $topic->update([
+                    'status' => Topic::STATUS_ASSIGNED,
+                ]);
+            }
+
+            return $topic->load([
+                'student:id,name,email',
+                'supervisor.user:id,name,email',
+                'scientificArea:id,name,organ_id',
+                'course:id,name,code',
+                'reviewAssignments.reviewer.user:id,name,email',
+                'reviewAssignments.evaluation',
+            ]);
+        });
+    }
+
+    public function listForReviewer(User $reviewer)
+    {
+        $teacherProfile = $reviewer->teacherProfile;
+
+        if (! $teacherProfile) {
+            return collect();
+        }
+
+        return Topic::query()
+            ->whereHas('reviewAssignments', fn($query) => $query->where('reviewer_id', $teacherProfile->id))
+            ->with([
+                'student:id,name,email',
+                'supervisor.user:id,name,email',
+                'scientificArea:id,name,organ_id',
+                'course:id,name,code',
+                'reviewAssignments.reviewer.user:id,name,email',
+                'reviewAssignments.evaluation',
+            ])
+            ->latest('submitted_at')
+            ->get();
+    }
+
+    public function submitEvaluation(Topic $topic, User $reviewer, array $data): array
+    {
+        return DB::transaction(function () use ($topic, $reviewer, $data) {
+            $topic = Topic::lockForUpdate()->findOrFail($topic->id);
+            $teacherProfile = $reviewer->teacherProfile;
+
+            if (! $teacherProfile) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Utilizador não é um avaliador válido.',
+                    ], 403)
+                );
+            }
+
+            if (! $reviewer->hasPermission('protocol.evaluate') && ! $reviewer->hasPermission('evaluation.create')) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Utilizador não tem permissão para avaliar temas.',
+                    ], 403)
+                );
+            }
+
+            if (! in_array($topic->status, [Topic::STATUS_ASSIGNED, Topic::STATUS_IN_REVIEW], true)) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'O tema ainda não está pronto para avaliação.',
+                    ], 422)
+                );
+            }
+
+            $assignment = $topic->reviewAssignments()
+                ->where('reviewer_id', $teacherProfile->id)
+                ->first();
+
+            if (! $assignment) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Este avaliador não foi atribuído a este tema.',
+                    ], 403)
+                );
+            }
+
+            $evaluation = TopicReviewEvaluation::query()->updateOrCreate(
+                ['assignment_id' => $assignment->id],
+                [
+                    'topic_id' => $topic->id,
+                    'reviewer_id' => $teacherProfile->id,
+                    'decision' => $data['decision'],
+                    'comments' => $data['comments'] ?? null,
+                    'evaluated_at' => now(),
+                ]
+            );
+
+            $hasPendingEvaluations = $topic->reviewAssignments()
+                ->whereDoesntHave('evaluation')
+                ->exists();
+
+            $finalDecision = null;
+
+            if (! $hasPendingEvaluations) {
+                $decisions = $topic->reviewAssignments()
+                    ->with('evaluation')
+                    ->get()
+                    ->pluck('evaluation.decision')
+                    ->filter()
+                    ->all();
+
+                $finalDecision = in_array(TopicReviewEvaluation::DECISION_REJECTED, $decisions, true)
+                    ? Topic::STATUS_REJECTED_NUCLEO
+                    : Topic::STATUS_APPROVED_NUCLEO;
+            }
+
+            $topic->update([
+                'status' => $finalDecision ?: Topic::STATUS_IN_REVIEW,
+            ]);
+
+            return [
+                'topic' => $topic->load([
+                    'student:id,name,email',
+                    'supervisor.user:id,name,email',
+                    'scientificArea:id,name,organ_id',
+                    'course:id,name,code',
+                    'reviewAssignments.reviewer.user:id,name,email',
+                    'reviewAssignments.evaluation',
+                    'reviewEvaluations.reviewer.user:id,name,email',
+                ]),
+                'evaluation' => $evaluation->load(['assignment.reviewer.user:id,name,email']),
+            ];
         });
     }
 }

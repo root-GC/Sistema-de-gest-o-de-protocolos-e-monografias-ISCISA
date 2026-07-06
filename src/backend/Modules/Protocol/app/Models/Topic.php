@@ -15,6 +15,8 @@ class Topic extends Model
 
     public const STATUS_PENDING_SUPERVISOR = 'topic_pending_supervisor';
     public const STATUS_PENDING_NUCLEO = 'topic_pending_nucleo';
+    public const STATUS_ASSIGNED = 'topic_assigned_for_review';
+    public const STATUS_IN_REVIEW = 'topic_in_review';
     public const STATUS_APPROVED_NUCLEO = 'topic_approved_nucleo';
     public const STATUS_REJECTED_SUPERVISOR = 'topic_rejected_supervisor';
     public const STATUS_REJECTED_NUCLEO = 'topic_rejected_nucleo';
@@ -59,7 +61,9 @@ class Topic extends Model
             'topic_approved' => 'Aguardando aprovação do Nucleo Cientifico',
             'topic_rejected' => 'Rejeitado pelo supervisor',
             self::STATUS_PENDING_SUPERVISOR => 'Aguardando aprovação do supervisor',
-            self::STATUS_PENDING_NUCLEO => 'Aguardando aprovação do Nucleo Cientifico',
+            self::STATUS_PENDING_NUCLEO => 'Aguardando atribuição de avaliadores',
+            self::STATUS_ASSIGNED => 'Avaliadores atribuídos, em revisão',
+            self::STATUS_IN_REVIEW => 'Em revisão pelo Nucleo Cientifico',
             self::STATUS_APPROVED_NUCLEO => 'Aprovado pelo Nucleo Cientifico',
             self::STATUS_REJECTED_SUPERVISOR => 'Rejeitado pelo supervisor',
             self::STATUS_REJECTED_NUCLEO => 'Rejeitado pelo Nucleo Cientifico',
@@ -85,5 +89,27 @@ class Topic extends Model
     public function course()
     {
         return $this->belongsTo(Course::class, 'course_id');
+    }
+
+    public function reviewAssignments()
+    {
+        return $this->hasMany(TopicReviewAssignment::class);
+    }
+
+    public function reviewEvaluations()
+    {
+        return $this->hasMany(TopicReviewEvaluation::class);
+    }
+
+    public function reviewers()
+    {
+        return $this->hasManyThrough(
+            TeacherProfile::class,
+            TopicReviewAssignment::class,
+            'topic_id',
+            'id',
+            'id',
+            'reviewer_id'
+        );
     }
 }
