@@ -51,10 +51,12 @@ Erro:
 | GET | `/topics` | `auth:sanctum` + `topic.view` ou `topic.view.all` | Listar temas do estudante ou de todos, conforme permissão |
 | PATCH | `/topics/{topic}/supervisor-approve` | supervisor atribuído + `supervision.approve` | Aprovar tema submetido e encaminhar ao núcleo |
 | PATCH | `/topics/{topic}/supervisor-reject` | supervisor atribuído + `supervision.approve` | Rejeitar tema submetido |
-| GET | `/secretary/topics` | `protocol.assign` | Listar temas do núcleo aguardando atribuição |
+| GET | `/secretary/topics` | `protocol.assign` | Listar todos os temas do núcleo da secretaria |
 | GET | `/topics/{topic}/eligible-reviewers` | `protocol.assign` | Listar avaliadores elegíveis do mesmo núcleo |
 | POST | `/topics/{topic}/assign-reviewers` | `protocol.assign` | Atribuir avaliadores ao tema |
 | GET | `/reviewer/topics` | `protocol.evaluate` | Listar temas atribuídos ao revisor autenticado |
+| GET | `/topics/{topic}/comments` | `protocol.evaluate` | Listar comentários do tema para revisores atribuídos |
+| POST | `/topics/{topic}/comments` | `protocol.evaluate` | Registar comentário do revisor, separado da decisão |
 | POST | `/topics/{topic}/evaluations` | `protocol.evaluate` | Registar avaliação do tema |
 
 ## Fluxo atual de estados
@@ -74,7 +76,8 @@ Erro:
 - O estudante pode submeter uma nova versão quando o último tema estiver `topic_rejected_supervisor` ou `topic_rejected_nucleo`.
 - Ao submeter um tema, o backend pode devolver `similar_topics_warning` com títulos parecidos já aprovados.
 - A listagem de temas é filtrada por permissão: `topic.view` ou `topic.view.all`.
-- A secretaria só vê temas do seu próprio núcleo.
+- A secretaria vê todos os temas do seu próprio núcleo que chegaram ao núcleo, incluindo aprovados, pendentes de revisão e pendentes de avaliador.
+- Temas `topic_rejected_supervisor` não aparecem para a secretaria, porque não entram no núcleo.
 - Os avaliadores elegíveis também são filtrados pelo núcleo do tema.
 
 ## Exemplos de uso
@@ -138,9 +141,40 @@ curl -X POST http://127.0.0.1:8000/api/v1/topics/6/evaluations \
   -H "Content-Type: application/json" \
   -d '{
     "decision": "approved",
-    "comments": "Tema consistente e viável."
+    "comment_id": 1
   }'
 ```
+
+### 7. Listar comentários de um tema
+
+```bash
+curl -X GET http://127.0.0.1:8000/api/v1/topics/6/comments \
+  -H "Authorization: Bearer <token>" \
+  -H "Accept: application/json"
+```
+
+Filtros opcionais:
+
+- `search=metodologia`
+- `order=asc|desc`
+- `status=active|inactive`
+
+### 8. Registar comentário separado
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/topics/6/comments \
+  -H "Authorization: Bearer <token>" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "O tema precisa de clarificar a metodologia."
+  }'
+```
+
+Notas:
+
+- O endpoint de comentário só cria `topic_review_comments`.
+- O endpoint de avaliação cria/actualiza `topic_review_evaluations` e pode receber `comment_id` opcional para ligar um comentário já criado.
 
 ## APIs futuras do módulo Protocol
 
@@ -167,3 +201,4 @@ curl -X POST http://127.0.0.1:8000/api/v1/topics/6/evaluations \
 1. O prefixo real das rotas do módulo é carregado pelo provider do Protocol.
 2. A submissão de temas usa política de acesso via `TopicPolicy`.
 3. O estado inicial de um tema é `topic_pending_supervisor`.
+4. O comentário do revisor é guardado em `topic_review_comments` e referenciado em `topic_review_evaluations.comment_id`.

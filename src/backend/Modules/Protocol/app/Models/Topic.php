@@ -101,6 +101,11 @@ class Topic extends Model
         return $this->hasMany(TopicReviewEvaluation::class);
     }
 
+    public function reviewComments()
+    {
+        return $this->hasMany(TopicReviewComment::class);
+    }
+
     public function reviewers()
     {
         return $this->hasManyThrough(

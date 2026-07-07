@@ -5,7 +5,9 @@ namespace Modules\Protocol\app\Services;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Modules\Protocol\app\Events\TopicReviewersAssigned;
 use Modules\Protocol\app\Models\Topic;
+use Modules\Protocol\app\Models\TopicReviewComment;
 use Modules\Protocol\app\Models\TopicReviewAssignment;
 use Modules\Protocol\app\Models\TopicReviewEvaluation;
 use Modules\User\app\Models\StudentProfile;
@@ -101,6 +103,25 @@ class TopicService
         }
 
         return $query->where('student_id', $user->id)->get();
+    }
+
+    public function listForSupervisor(User $supervisor)
+    {
+        $teacherProfile = $supervisor->teacherProfile;
+
+        if (! $teacherProfile) {
+            return collect();
+        }
+
+        return Topic::query()
+            ->where('supervisor_id', $teacherProfile->id)
+            ->with([
+                'student:id,name,email',
+                'scientificArea:id,name',
+                'course:id,name,code',
+            ])
+            ->latest('submitted_at')
+            ->get();
     }
 
     private function findSimilarApprovedTopics(string $title): array
@@ -223,13 +244,13 @@ class TopicService
     }
 
     /**
-     * listForSecretary: Lista temas em status topic_pending_nucleo do núcleo da secretaria.
+     * listForSecretary: Lista todos os temas do núcleo da secretaria.
      *
      * Filtros:
      *   - scientific_area.organ_id === secretary.organ_id
-     *   - topic.status === topic_pending_nucleo
+     *   - exclui temas rejeitados pelo supervisor, porque não entram no núcleo
      *
-     * Carrega relações: student, supervisor, scientific_area, course, reviewAssignments
+     * Carrega relações: scientific_area, course, reviewAssignments (sem estudante/supervisor — revisão cega).
      */
     public function listForSecretary(User $secretary)
     {
@@ -241,14 +262,12 @@ class TopicService
 
         return Topic::query()
             ->whereHas('scientificArea', fn($q) => $q->where('organ_id', $secretaryProfile->organ_id))
-            ->where('status', Topic::STATUS_PENDING_NUCLEO)
+            ->where('status', '!=', Topic::STATUS_REJECTED_SUPERVISOR)
             ->with([
-                'student:id,name,email',
-                'supervisor.user:id,name,email',
                 'scientificArea:id,name,organ_id',
                 'course:id,name,code',
                 'reviewAssignments.reviewer.user:id,name,email',
-                'reviewAssignments.evaluation',
+                'reviewAssignments.evaluation.comment:id,content,status,created_at',
             ])
             ->latest('submitted_at')
             ->get();
@@ -258,34 +277,26 @@ class TopicService
      * getEligibleReviewers: Retorna docentes elegíveis para avaliar um tema.
      *
      * Elegibilidade:
-     *   - Docente está no mesmo núcleo (scientific_area.organ_id) que o tema
-     *   - Docente tem permissão 'reviewer.assign'
-     *   - Docente ainda não foi atribuído como revisor deste tema
-     *
-     * Retorna: Collection com id, name, email dos docentes elegíveis.
+     *   - Docente na mesma área científica / núcleo do tema
+     *   - Não é o supervisor do tema
+     *   - Ainda não foi atribuído como revisor deste tema
      */
     public function getEligibleReviewers(Topic $topic)
     {
-        $topicOrganId = $topic->scientificArea?->organ_id;
+        $query = $this->eligibleReviewersQuery($topic);
 
-        if (! $topicOrganId) {
+        if (! $query) {
             return collect();
         }
 
-        // Já atribuídos
         $assignedReviewerIds = $topic->reviewAssignments()
             ->pluck('reviewer_id')
             ->toArray();
 
-        // Docentes do mesmo núcleo que o tema, que não foram ainda atribuídos
-        return DB::table('teacher_profiles')
-            ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
-            ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
-            ->where('scientific_areas.organ_id', $topicOrganId)
-            ->whereNotIn('teacher_profiles.id', $assignedReviewerIds)
+        return $query
+            ->when($assignedReviewerIds !== [], fn($q) => $q->whereNotIn('teacher_profiles.id', $assignedReviewerIds))
             ->select(
                 'teacher_profiles.id',
-                'users.id as user_id',
                 'users.name',
                 'users.email',
                 'scientific_areas.name as scientific_area_name'
@@ -343,17 +354,23 @@ class TopicService
 
             // Valida cada revisor e cria atribuição
             foreach ($reviewerIds as $reviewerId) {
-                // Obtém reviewer e valida núcleo
-                $reviewer = DB::table('teacher_profiles')
-                    ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
-                    ->where('teacher_profiles.id', $reviewerId)
-                    ->where('scientific_areas.organ_id', $topicOrganId)
+                if ((int) $reviewerId === (int) $topic->supervisor_id) {
+                    throw new HttpResponseException(
+                        response()->json([
+                            'message' => 'O supervisor do tema não pode ser atribuído como avaliador.',
+                        ], 422)
+                    );
+                }
+
+                $reviewer = $this->eligibleReviewersQuery($topic)
+                    ?->where('teacher_profiles.id', $reviewerId)
+                    ->select('teacher_profiles.id')
                     ->first();
 
                 if (! $reviewer) {
                     throw new HttpResponseException(
                         response()->json([
-                            'message' => "Avaliador {$reviewerId} não está no mesmo núcleo ou não existe.",
+                            'message' => "Avaliador {$reviewerId} não pertence ao núcleo do tema ou não é elegível.",
                         ], 422)
                     );
                 }
@@ -379,20 +396,24 @@ class TopicService
                 ]);
             }
 
-            // Transiciona estado se há avaliadores atribuídos
-            if ($topic->reviewAssignments()->exists()) {
+            $assignedReviewerIds = $topic->reviewAssignments()
+                ->pluck('reviewer_id')
+                ->values()
+                ->all();
+
+            if ($assignedReviewerIds !== []) {
                 $topic->update([
                     'status' => Topic::STATUS_ASSIGNED,
                 ]);
+
+                event(new TopicReviewersAssigned($topic->fresh(), $assignedReviewerIds));
             }
 
             return $topic->load([
-                'student:id,name,email',
-                'supervisor.user:id,name,email',
                 'scientificArea:id,name,organ_id',
                 'course:id,name,code',
                 'reviewAssignments.reviewer.user:id,name,email',
-                'reviewAssignments.evaluation',
+                'reviewAssignments.evaluation:id,assignment_id,decision,evaluated_at',
             ]);
         });
     }
@@ -408,12 +429,11 @@ class TopicService
         return Topic::query()
             ->whereHas('reviewAssignments', fn($query) => $query->where('reviewer_id', $teacherProfile->id))
             ->with([
-                'student:id,name,email',
-                'supervisor.user:id,name,email',
-                'scientificArea:id,name,organ_id',
+                'scientificArea:id,name',
                 'course:id,name,code',
-                'reviewAssignments.reviewer.user:id,name,email',
-                'reviewAssignments.evaluation',
+                'reviewAssignments' => fn($query) => $query
+                    ->where('reviewer_id', $teacherProfile->id)
+                    ->with('evaluation.comment'),
             ])
             ->latest('submitted_at')
             ->get();
@@ -461,19 +481,21 @@ class TopicService
                 );
             }
 
-            $evaluation = TopicReviewEvaluation::query()->updateOrCreate(
-                ['assignment_id' => $assignment->id],
-                [
-                    'topic_id' => $topic->id,
-                    'reviewer_id' => $teacherProfile->id,
-                    'decision' => $data['decision'],
-                    'comments' => $data['comments'] ?? null,
-                    'evaluated_at' => now(),
-                ]
-            );
+            $evaluation = TopicReviewEvaluation::query()->firstOrNew([
+                'assignment_id' => $assignment->id,
+            ]);
+
+            $evaluation->topic_id = $topic->id;
+            $evaluation->reviewer_id = $teacherProfile->id;
+            $evaluation->comment_id = $data['comment_id'] ?? $evaluation->comment_id;
+            $evaluation->decision = $data['decision'];
+            $evaluation->evaluated_at = now();
+
+            $evaluation->save();
 
             $hasPendingEvaluations = $topic->reviewAssignments()
                 ->whereDoesntHave('evaluation')
+                ->orWhereHas('evaluation', fn($query) => $query->whereNull('decision'))
                 ->exists();
 
             $finalDecision = null;
@@ -497,16 +519,153 @@ class TopicService
 
             return [
                 'topic' => $topic->load([
-                    'student:id,name,email',
-                    'supervisor.user:id,name,email',
-                    'scientificArea:id,name,organ_id',
+                    'scientificArea:id,name',
                     'course:id,name,code',
-                    'reviewAssignments.reviewer.user:id,name,email',
-                    'reviewAssignments.evaluation',
-                    'reviewEvaluations.reviewer.user:id,name,email',
+                    'reviewAssignments' => fn($query) => $query
+                        ->where('reviewer_id', $teacherProfile->id)
+                        ->with('evaluation.comment'),
                 ]),
-                'evaluation' => $evaluation->load(['assignment.reviewer.user:id,name,email']),
+                'evaluation' => $evaluation,
             ];
         });
+    }
+
+    public function submitReviewComment(Topic $topic, User $reviewer, array $data): array
+    {
+        return DB::transaction(function () use ($topic, $reviewer, $data) {
+            $topic = Topic::lockForUpdate()->findOrFail($topic->id);
+            $teacherProfile = $reviewer->teacherProfile;
+
+            if (! $teacherProfile) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Utilizador não é um avaliador válido.',
+                    ], 403)
+                );
+            }
+
+            if (! $reviewer->hasPermission('protocol.evaluate') && ! $reviewer->hasPermission('evaluation.create')) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Utilizador não tem permissão para comentar temas.',
+                    ], 403)
+                );
+            }
+
+            if (! in_array($topic->status, [Topic::STATUS_ASSIGNED, Topic::STATUS_IN_REVIEW], true)) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'O tema ainda não está pronto para comentário.',
+                    ], 422)
+                );
+            }
+
+            $assignment = $topic->reviewAssignments()
+                ->where('reviewer_id', $teacherProfile->id)
+                ->first();
+
+            if (! $assignment) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'message' => 'Este avaliador não foi atribuído a este tema.',
+                    ], 403)
+                );
+            }
+
+            $comment = TopicReviewComment::create([
+                'user_id' => $reviewer->id,
+                'topic_id' => $topic->id,
+                'content' => $data['content'],
+                'status' => TopicReviewComment::STATUS_ACTIVE,
+            ]);
+
+            $evaluation = $topic->reviewAssignments()
+                ->where('reviewer_id', $teacherProfile->id)
+                ->with('evaluation.comment')
+                ->first()
+                ?->evaluation;
+
+            if ($evaluation) {
+                $evaluation->comment_id = $comment->id;
+                $evaluation->save();
+                $evaluation->load('comment');
+            }
+
+            return [
+                'comment' => $comment->load('user:id,name,email'),
+                'evaluation' => $evaluation,
+                'topic' => $topic->load([
+                    'scientificArea:id,name',
+                    'course:id,name,code',
+                    'reviewAssignments' => fn($query) => $query
+                        ->where('reviewer_id', $teacherProfile->id)
+                        ->with('evaluation.comment'),
+                ]),
+            ];
+        });
+    }
+
+    /**
+     * listCommentsForTopic: Lista os comentários de um tema para o revisor atribuído.
+     *
+     * Filtros opcionais:
+     *   - search: pesquisa textual no conteúdo
+     *   - order: asc|desc (por created_at)
+     *   - status: active|inactive
+     */
+    public function listCommentsForTopic(Topic $topic, User $reviewer, array $filters = [])
+    {
+        $teacherProfile = $reviewer->teacherProfile;
+
+        if (! $teacherProfile) {
+            return collect();
+        }
+
+        $assigned = $topic->reviewAssignments()
+            ->where('reviewer_id', $teacherProfile->id)
+            ->exists();
+
+        if (! $assigned) {
+            throw new HttpResponseException(
+                response()->json([
+                    'message' => 'Este revisor não foi atribuído a este tema.',
+                ], 403)
+            );
+        }
+
+        $query = $topic->reviewComments()
+            ->with('user:id,name,email')
+            ->when(($filters['status'] ?? null), fn($builder, $status) => $builder->where('status', $status))
+            ->search($filters['search'] ?? null)
+            ->ordered($filters['order'] ?? 'desc');
+
+        return $query->get();
+    }
+
+    /**
+     * Query base de docentes elegíveis para revisão de um tema.
+     *
+     * Restrições:
+     *   - Mesma área científica e órgão (núcleo) do tema
+     *   - Exclui o supervisor do tema
+     */
+    private function eligibleReviewersQuery(Topic $topic): ?\Illuminate\Database\Query\Builder
+    {
+        $topic->loadMissing('scientificArea:id,organ_id');
+
+        $topicOrganId = $topic->scientificArea?->organ_id;
+
+        if (! $topicOrganId || ! $topic->scientific_area_id) {
+            return null;
+        }
+
+        return DB::table('teacher_profiles')
+            ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+            ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
+            ->where('scientific_areas.organ_id', $topicOrganId)
+            ->where('teacher_profiles.scientific_area_id', $topic->scientific_area_id)
+            ->whereNull('teacher_profiles.deleted_at')
+            ->whereNull('users.deleted_at')
+            ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
     }
 }

@@ -5,6 +5,7 @@ namespace Modules\Protocol\app\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Protocol\app\Models\TopicReviewAssignment;
+use Modules\Protocol\app\Models\TopicReviewComment;
 use Modules\User\app\Models\TeacherProfile;
 
 class TopicReviewEvaluation extends Model
@@ -18,8 +19,8 @@ class TopicReviewEvaluation extends Model
         'topic_id',
         'assignment_id',
         'reviewer_id',
+        'comment_id',
         'decision',
-        'comments',
         'evaluated_at',
     ];
 
@@ -40,5 +41,10 @@ class TopicReviewEvaluation extends Model
     public function reviewer()
     {
         return $this->belongsTo(TeacherProfile::class, 'reviewer_id');
+    }
+
+    public function comment()
+    {
+        return $this->belongsTo(TopicReviewComment::class, 'comment_id');
     }
 }

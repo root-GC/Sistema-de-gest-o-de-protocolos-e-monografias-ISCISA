@@ -6,6 +6,12 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Protocol\app\Http\Requests\SubmitTopicRequest;
+use Modules\Protocol\app\Http\Resources\EligibleReviewerResource;
+use Modules\Protocol\app\Http\Resources\TopicEvaluationResource;
+use Modules\Protocol\app\Http\Resources\TopicReviewCommentResource;
+use Modules\Protocol\app\Http\Resources\TopicReviewerResource;
+use Modules\Protocol\app\Http\Resources\TopicSecretaryResource;
+use Modules\Protocol\app\Http\Resources\TopicSupervisorResource;
 use Modules\Protocol\app\Models\Topic;
 use Modules\Protocol\app\Services\TopicService;
 
@@ -44,6 +50,41 @@ class TopicController extends Controller
         ]);
     }
 
+    public function getForSupervisor(Request $request)
+    {
+        $user = $request->user()->load('teacherProfile');
+
+        if (! $user->hasPermission('supervision.view')) {
+            return response()->json([
+                'message' => 'Utilizador não tem permissão para ver temas supervisionados.',
+            ], 403);
+        }
+
+        $teacherProfileId = $user->teacherProfile?->id;
+
+        if (! $teacherProfileId) {
+            return response()->json([
+                'topics' => [],
+                'total' => 0,
+            ]);
+        }
+
+        $topics = Topic::query()
+            ->where('supervisor_id', $teacherProfileId)
+            ->with([
+                'student:id,name,email',
+                'scientificArea:id,name',
+                'course:id,name,code',
+            ])
+            ->latest('submitted_at')
+            ->get();
+
+        return response()->json([
+            'topics' => TopicSupervisorResource::collection($topics),
+            'total' => $topics->count(),
+        ]);
+    }
+
     public function approveBySupervisor(Request $request, Topic $topic)
     {
         $user = $request->user()->load('teacherProfile');
@@ -75,21 +116,14 @@ class TopicController extends Controller
     }
 
     /**
-     * getForSecretary: Lista temas pendentes de atribuição de avaliadores.
+     * getForSecretary: Lista todos os temas do núcleo da secretaria.
      *
-     * Retorna todos os temas em status topic_pending_nucleo do núcleo da secretaria.
-     * Cada tema inclui:
-     *   - student: id, name, email
-     *   - supervisor: teacher_profile com user (id, name, email)
-     *   - scientific_area: id, name, organ_id
-     *   - course: id, name, code
-     *   - reviewAssignments: avaliadores já atribuídos com user info
+     * Revisão cega (RF-039): não expõe estudante nem supervisor ao Núcleo.
      */
     public function getForSecretary(Request $request)
     {
         $user = $request->user()->load('secretaryProfile');
 
-        // Verifica que é secretaria
         if (! $user->hasPermission('protocol.assign')) {
             return response()->json([
                 'message' => 'Utilizador não tem permissão para listar temas.',
@@ -99,7 +133,7 @@ class TopicController extends Controller
         $topics = $this->topicService->listForSecretary($user);
 
         return response()->json([
-            'topics' => $topics,
+            'topics' => TopicSecretaryResource::collection($topics),
             'total' => $topics->count(),
         ]);
     }
@@ -117,7 +151,7 @@ class TopicController extends Controller
         $reviewers = $this->topicService->getEligibleReviewers($topic);
 
         return response()->json([
-            'reviewers' => $reviewers,
+            'reviewers' => EligibleReviewerResource::collection($reviewers),
             'total' => $reviewers->count(),
         ]);
     }
@@ -153,7 +187,7 @@ class TopicController extends Controller
 
         return response()->json([
             'message' => 'Avaliadores atribuídos com sucesso.',
-            'topic' => $result,
+            'topic' => TopicSecretaryResource::make($result),
         ]);
     }
 
@@ -168,7 +202,9 @@ class TopicController extends Controller
         }
 
         return response()->json([
-            'topics' => $this->topicService->listForReviewer($user),
+            'topics' => TopicReviewerResource::collection(
+                $this->topicService->listForReviewer($user)
+            ),
         ]);
     }
 
@@ -180,15 +216,55 @@ class TopicController extends Controller
 
         $validated = $request->validate([
             'decision' => 'required|in:approved,rejected',
-            'comments' => 'nullable|string',
+            'comment_id' => 'nullable|integer|exists:topic_review_comments,id',
         ]);
 
         $result = $this->topicService->submitEvaluation($topic, $user, $validated);
 
         return response()->json([
             'message' => 'Avaliação registada com sucesso.',
-            'topic' => $result['topic'],
-            'evaluation' => $result['evaluation'],
+            'topic' => TopicReviewerResource::make($result['topic']),
+            'evaluation' => TopicEvaluationResource::make($result['evaluation']),
+        ]);
+    }
+
+    public function submitComment(Request $request, Topic $topic)
+    {
+        $user = $request->user()->load('teacherProfile');
+
+        $this->authorize('submitEvaluation', $topic);
+
+        $validated = $request->validate([
+            'content' => 'required|string|min:3|max:5000',
+        ]);
+
+        $result = $this->topicService->submitReviewComment($topic, $user, $validated);
+
+        return response()->json([
+            'message' => 'Comentário registado com sucesso.',
+            'comment' => TopicReviewCommentResource::make($result['comment']),
+            'evaluation' => $result['evaluation'] ? TopicEvaluationResource::make($result['evaluation']) : null,
+            'topic' => TopicReviewerResource::make($result['topic']),
+        ]);
+    }
+
+    public function getComments(Request $request, Topic $topic)
+    {
+        $user = $request->user()->load('teacherProfile');
+
+        $this->authorize('submitEvaluation', $topic);
+
+        $filters = $request->validate([
+            'search' => 'nullable|string|max:255',
+            'order' => 'nullable|in:asc,desc',
+            'status' => 'nullable|in:active,inactive',
+        ]);
+
+        $comments = $this->topicService->listCommentsForTopic($topic, $user, $filters);
+
+        return response()->json([
+            'comments' => TopicReviewCommentResource::collection($comments),
+            'total' => $comments->count(),
         ]);
     }
 }
