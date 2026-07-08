@@ -1,8 +1,138 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { topicService, type Topic } from '../../services/topicService'
+import { protocolService, type Protocol } from '../../services/protocolService'
 import '../../styles/global.css'
 
+// ============================================================
+// HELPERS
+// ============================================================
+function getTopicStatusStyle(status: string) {
+  const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
+    topic_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
+    topic_pending_nucleo:     { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',     dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
+    topic_approved_nucleo:    { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
+    topic_rejected:           { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
+  }
+  return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
+}
+
+function getProtocolStatusStyle(status: string) {
+  const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
+    protocol_submitted:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Submetido' },
+    protocol_pending_supervisor:  { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
+    protocol_approved_supervisor: { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado (Supervisor)' },
+    protocol_rejected_supervisor: { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado (Supervisor)' },
+    protocol_in_review:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Em Revisão' },
+    protocol_pending_nucleo:      { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
+    protocol_approved_nucleo:     { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
+    protocol_rejected_nucleo:     { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
+    protocol_resubmitted:         { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Re-submetido' },
+  }
+  return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
+}
+
+// ============================================================
+// COMPONENTE PRINCIPAL
+// ============================================================
 export default function SecretaryProtocolsPage() {
+  const [tab, setTab] = useState<'topics' | 'protocols'>('topics')
+
+  return (
+    <div style={{
+      width: '100%',
+      fontFamily: 'var(--font-family)',
+      color: 'var(--on-background)'
+    }}>
+      {/* Cabeçalho */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 'var(--space-2)',
+        marginBottom: 'var(--space-4)'
+      }}>
+        <div>
+          <h1 style={{
+            fontSize: 'var(--headline-lg)',
+            fontWeight: 'var(--font-semibold)',
+            color: 'var(--on-surface)',
+            marginBottom: 'var(--space-1)'
+          }}>
+            Gestão de submissões
+          </h1>
+          <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
+            Atribuição de revisores • Revisão cega
+          </p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{
+        display: 'flex',
+        gap: '2px',
+        marginBottom: 'var(--space-4)',
+        background: 'var(--surface-container-low)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '4px',
+        width: 'fit-content'
+      }}>
+        <button
+          onClick={() => setTab('topics')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-1)',
+            padding: '10px var(--space-3)',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            fontSize: 'var(--body-md)',
+            fontWeight: tab === 'topics' ? 'var(--font-bold)' : 'var(--font-medium)',
+            fontFamily: 'var(--font-family)',
+            cursor: 'pointer',
+            background: tab === 'topics' ? 'var(--surface-container-lowest)' : 'transparent',
+            color: tab === 'topics' ? 'var(--primary)' : 'var(--on-surface-variant)',
+            boxShadow: tab === 'topics' ? 'var(--elevation-1)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>lightbulb</span>
+          Temas
+        </button>
+        <button
+          onClick={() => setTab('protocols')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-1)',
+            padding: '10px var(--space-3)',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            fontSize: 'var(--body-md)',
+            fontWeight: tab === 'protocols' ? 'var(--font-bold)' : 'var(--font-medium)',
+            fontFamily: 'var(--font-family)',
+            cursor: 'pointer',
+            background: tab === 'protocols' ? 'var(--surface-container-lowest)' : 'transparent',
+            color: tab === 'protocols' ? 'var(--primary)' : 'var(--on-surface-variant)',
+            boxShadow: tab === 'protocols' ? 'var(--elevation-1)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>description</span>
+          Protocolos
+        </button>
+      </div>
+
+      {/* Conteúdo da tab */}
+      {tab === 'topics' ? <TopicsTab /> : <ProtocolsTab />}
+    </div>
+  )
+}
+
+// ============================================================
+// TAB: TEMAS
+// ============================================================
+function TopicsTab() {
   const [topics, setTopics] = useState<Topic[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -17,547 +147,325 @@ export default function SecretaryProtocolsPage() {
     try {
       const { topics } = await topicService.listForSecretary()
       setTopics(topics)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (e) { setError((e as Error).message) }
+    finally { setLoading(false) }
   }
 
   async function loadReviewers(topicId: number) {
     try {
       const { reviewers } = await topicService.eligibleReviewers(topicId)
       setReviewersByTopic(prev => ({ ...prev, [topicId]: reviewers }))
-    } catch (e) {
-      setError((e as Error).message)
-    }
+    } catch (e) { setError((e as Error).message) }
   }
 
   function toggleReviewer(topicId: number, reviewerId: number) {
     setSelected(prev => {
-      const current = prev[topicId] ?? []
-      const next = current.includes(reviewerId)
-        ? current.filter(id => id !== reviewerId)
-        : [...current, reviewerId]
-      return { ...prev, [topicId]: next }
+      const cur = prev[topicId] ?? []
+      return { ...prev, [topicId]: cur.includes(reviewerId) ? cur.filter(id => id !== reviewerId) : [...cur, reviewerId] }
     })
   }
 
   async function assign(topicId: number) {
-    const reviewerIds = selected[topicId] ?? []
-    if (reviewerIds.length === 0) return
+    const ids = selected[topicId] ?? []
+    if (!ids.length) return
     setAssigningId(topicId)
     try {
-      await topicService.assignReviewers(topicId, reviewerIds)
-      setSelected(prev => {
-        const next = { ...prev }
-        delete next[topicId]
-        return next
-      })
-      setReviewersByTopic(prev => {
-        const next = { ...prev }
-        delete next[topicId]
-        return next
-      })
+      await topicService.assignReviewers(topicId, ids)
+      setSelected(p => { const n = { ...p }; delete n[topicId]; return n })
+      setReviewersByTopic(p => { const n = { ...p }; delete n[topicId]; return n })
       await load()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setAssigningId(null)
-    }
+    } catch (e) { setError((e as Error).message) }
+    finally { setAssigningId(null) }
   }
 
-  function getStatusBadge(status: string) {
-    const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
-      topic_pending_supervisor: {
-        bg: 'var(--tertiary-container)',
-        color: 'var(--on-tertiary-container)',
-        dot: 'var(--tertiary)',
-        label: 'Pendente (Supervisor)'
-      },
-      topic_pending_nucleo: {
-        bg: 'var(--tertiary-fixed)',
-        color: 'var(--on-tertiary-fixed)',
-        dot: 'var(--tertiary)',
-        label: 'Pendente (Núcleo)'
-      },
-      topic_approved_nucleo: {
-        bg: 'var(--primary-container)',
-        color: 'var(--on-primary-container)',
-        dot: 'var(--primary)',
-        label: 'Aprovado'
-      },
-      topic_rejected: {
-        bg: 'var(--error-container)',
-        color: 'var(--on-error-container)',
-        dot: 'var(--error)',
-        label: 'Rejeitado'
-      },
-    }
-    return map[status] || {
-      bg: 'var(--surface-container)',
-      color: 'var(--on-surface-variant)',
-      dot: 'var(--outline)',
-      label: status
-    }
-  }
+  if (loading) return <Spinner text="A carregar temas..." />
 
-  const pendingTopics = topics.filter(t => t.status === 'topic_pending_nucleo')
-  const otherTopics = topics.filter(t => t.status !== 'topic_pending_nucleo')
-
-  if (loading) {
-    return (
-      <div style={{
-        width: '100%',
-        fontFamily: 'var(--font-family)',
-        color: 'var(--on-background)'
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 'var(--space-6)',
-          color: 'var(--on-surface-variant)',
-          fontSize: 'var(--body-lg)'
-        }}>
-          <span style={{
-            width: '24px',
-            height: '24px',
-            border: '3px solid var(--outline-variant)',
-            borderTopColor: 'var(--primary)',
-            borderRadius: 'var(--radius-full)',
-            animation: 'spin 0.8s linear infinite',
-            marginRight: 'var(--space-2)'
-          }} />
-          A carregar...
-        </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    )
-  }
+  const pending = topics.filter(t => t.status === 'topic_pending_nucleo')
+  const others = topics.filter(t => t.status !== 'topic_pending_nucleo')
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 'var(--space-4)',
-      fontFamily: 'var(--font-family)',
-      color: 'var(--on-background)',
-      width: '100%'
-    }}>
-      {/* Cabeçalho */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 'var(--space-2)'
-      }}>
-        <div>
-          <h1 style={{
-            fontSize: 'var(--headline-lg)',
-            fontWeight: 'var(--font-semibold)',
-            color: 'var(--on-surface)',
-            marginBottom: 'var(--space-1)',
-            fontFamily: 'var(--font-family)'
-          }}>
-            Gestão de submissões
-          </h1>
-          <p style={{
-            fontSize: 'var(--body-md)',
-            color: 'var(--on-surface-variant)',
-            fontFamily: 'var(--font-family)'
-          }}>
-            Atribuição de revisores aos protocolos submetidos • Revisão cega
-          </p>
-        </div>
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '4px 12px',
-          borderRadius: 'var(--radius-full)',
-          fontSize: 'var(--label-md)',
-          fontWeight: 'var(--font-medium)',
-          background: 'var(--surface-container)',
-          color: 'var(--on-surface-variant)'
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>assignment</span>
-          {topics.length} submissão{topics.length !== 1 ? 'ões' : ''}
-          {pendingTopics.length > 0 && ` • ${pendingTopics.length} pendente${pendingTopics.length !== 1 ? 's' : ''}`}
-        </span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      {error && <ErrorAlert message={error} />}
+
+      {/* Badge de contagem */}
+      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        <CountBadge icon="lightbulb" count={topics.length} label="tema" />
+        {pending.length > 0 && <CountBadge icon="pending_actions" count={pending.length} label="pendente" color="var(--tertiary)" />}
       </div>
 
-      {/* Erro */}
-      {error && (
-        <div role="alert" style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-1)',
-          padding: 'var(--space-2) var(--space-3)',
-          background: 'var(--error-container)',
-          color: 'var(--on-error-container)',
-          borderRadius: 'var(--radius-lg)',
-          fontSize: 'var(--body-md)',
-          fontWeight: 'var(--font-medium)',
-          fontFamily: 'var(--font-family)'
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
-          {error}
-        </div>
+      {topics.length === 0 && <EmptyState icon="lightbulb" text="Sem temas pendentes no núcleo" sub="Os temas submetidos aparecerão aqui." />}
+
+      {/* Pendentes */}
+      {pending.length > 0 && (
+        <>
+          <SectionTitle icon="pending_actions" title="Pendentes de atribuição" color="var(--tertiary)" />
+          {pending.map(t => (
+            <TopicCard
+              key={t.id}
+              topic={t}
+              reviewers={reviewersByTopic[t.id]}
+              selected={selected[t.id] ?? []}
+              assigning={assigningId === t.id}
+              onLoadReviewers={() => loadReviewers(t.id)}
+              onToggle={(rid) => toggleReviewer(t.id, rid)}
+              onAssign={() => assign(t.id)}
+            />
+          ))}
+        </>
       )}
 
-      {/* Secção: Pendentes (Atribuição) */}
-      {pendingTopics.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          <h2 style={{
-            fontSize: 'var(--title-md)',
-            fontWeight: 'var(--font-semibold)',
-            color: 'var(--tertiary)',
-            fontFamily: 'var(--font-family)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-1)'
-          }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>pending_actions</span>
-            Pendentes de atribuição
-          </h2>
+      {/* Outros */}
+      {others.length > 0 && (
+        <>
+          <SectionTitle icon="checklist" title="Outras submissões" />
+          {others.map(t => {
+            const s = getTopicStatusStyle(t.status)
+            return (
+              <div key={t.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-2) var(--space-3)' }}>
+                <span style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                <StatusBadge s={s} label={t.status_label} />
+              </div>
+            )
+          })}
+        </>
+      )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
 
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-3)'
-          }}>
-            {pendingTopics.map(topic => {
-              const badge = getStatusBadge(topic.status)
-              const topicReviewers = reviewersByTopic[topic.id]
-              const selectedReviewers = selected[topic.id] ?? []
-              const isAssigning = assigningId === topic.id
+// ============================================================
+// TAB: PROTOCOLOS
+// ============================================================
+function ProtocolsTab() {
+  const [protocols, setProtocols] = useState<Protocol[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reviewersByProtocol, setReviewersByProtocol] = useState<Record<number, { id: number; name: string }[]>>({})
+  const [pickOne, setPickOne] = useState<Record<number, number | ''>>({})
+  const [pickTwo, setPickTwo] = useState<Record<number, number | ''>>({})
+  const [assigningId, setAssigningId] = useState<number | null>(null)
 
-              return (
-                <div key={topic.id} className="card" style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--space-3)',
-                  padding: 'var(--space-3) var(--space-4)'
-                }}>
-                  {/* Cabeçalho do tópico */}
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    flexWrap: 'wrap',
-                    gap: 'var(--space-2)'
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h3 style={{
-                        fontSize: 'var(--body-lg)',
-                        fontWeight: 'var(--font-semibold)',
-                        color: 'var(--on-surface)',
-                        fontFamily: 'var(--font-family)',
-                        marginBottom: '6px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {topic.title}
-                      </h3>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '2px 10px',
-                        borderRadius: 'var(--radius-full)',
-                        fontSize: 'var(--label-md)',
-                        fontWeight: 'var(--font-medium)',
-                        background: badge.bg,
-                        color: badge.color
-                      }}>
-                        <span style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: 'var(--radius-full)',
-                          background: badge.dot
-                        }} />
-                        {topic.status_label || badge.label}
-                      </span>
-                    </div>
-                  </div>
+  useEffect(() => { load() }, [])
 
-                  {/* Área de revisores */}
-                  {!topicReviewers ? (
-                    <button
-                      onClick={() => loadReviewers(topic.id)}
-                      className="btn"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--space-1)',
-                        padding: '10px var(--space-3)',
-                        fontSize: 'var(--body-md)',
-                        fontWeight: 'var(--font-medium)',
-                        fontFamily: 'var(--font-family)',
-                        borderRadius: 'var(--radius-lg)',
-                        cursor: 'pointer',
-                        width: 'fit-content',
-                        border: '1px solid var(--outline-variant)',
-                        background: 'var(--surface-container-lowest)',
-                        color: 'var(--primary)',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.background = 'var(--surface-container)'
-                        e.currentTarget.style.borderColor = 'var(--primary)'
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.background = 'var(--surface-container-lowest)'
-                        e.currentTarget.style.borderColor = 'var(--outline-variant)'
-                      }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span>
-                      Ver avaliadores elegíveis
-                    </button>
-                  ) : (
-                    <div style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 'var(--space-2)',
-                      padding: 'var(--space-3)',
-                      background: 'var(--surface-container-low)',
-                      borderRadius: 'var(--radius-lg)',
-                      border: '1px solid var(--outline-variant)'
-                    }}>
-                      <p style={{
-                        fontSize: 'var(--label-md)',
-                        fontWeight: 'var(--font-semibold)',
-                        color: 'var(--on-surface-variant)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        marginBottom: 'var(--space-1)'
-                      }}>
-                        Avaliadores elegíveis ({topicReviewers.length})
-                      </p>
+  async function load() {
+    setLoading(true)
+    try {
+      const { protocols } = await protocolService.listForSecretary()
+      setProtocols(protocols)
+    } catch (e) { setError((e as Error).message) }
+    finally { setLoading(false) }
+  }
 
-                      {topicReviewers.length === 0 ? (
-                        <p style={{
-                          fontSize: 'var(--body-md)',
-                          color: 'var(--on-surface-variant)',
-                          fontStyle: 'italic'
-                        }}>
-                          Nenhum avaliador elegível encontrado.
-                        </p>
-                      ) : (
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                          gap: 'var(--space-1)'
-                        }}>
-                          {topicReviewers.map(reviewer => (
-                            <label
-                              key={reviewer.id}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 'var(--space-1)',
-                                padding: '10px var(--space-2)',
-                                borderRadius: 'var(--radius-md)',
-                                cursor: 'pointer',
-                                transition: 'background 0.2s',
-                                background: selectedReviewers.includes(reviewer.id)
-                                  ? 'var(--primary-container)'
-                                  : 'transparent',
-                                color: selectedReviewers.includes(reviewer.id)
-                                  ? 'var(--on-primary-container)'
-                                  : 'var(--on-surface)',
-                                fontSize: 'var(--body-md)',
-                                fontFamily: 'var(--font-family)',
-                                fontWeight: selectedReviewers.includes(reviewer.id)
-                                  ? 'var(--font-medium)'
-                                  : 'var(--font-regular)'
-                              }}
-                              onMouseEnter={e => {
-                                if (!selectedReviewers.includes(reviewer.id)) {
-                                  e.currentTarget.style.background = 'var(--surface-container-highest)'
-                                }
-                              }}
-                              onMouseLeave={e => {
-                                if (!selectedReviewers.includes(reviewer.id)) {
-                                  e.currentTarget.style.background = 'transparent'
-                                }
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedReviewers.includes(reviewer.id)}
-                                onChange={() => toggleReviewer(topic.id, reviewer.id)}
-                                style={{
-                                  width: '18px',
-                                  height: '18px',
-                                  accentColor: 'var(--primary)',
-                                  cursor: 'pointer',
-                                  flexShrink: 0
-                                }}
-                              />
-                              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--on-surface-variant)' }}>
-                                person
-                              </span>
-                              {reviewer.name}
-                            </label>
-                          ))}
-                        </div>
-                      )}
+  async function loadReviewers(protocolId: number) {
+    try {
+      const { reviewers } = await protocolService.eligibleReviewers(protocolId)
+      setReviewersByProtocol(prev => ({ ...prev, [protocolId]: reviewers }))
+    } catch (e) { setError((e as Error).message) }
+  }
 
-                      {/* Botão atribuir */}
-                      <button
-                        onClick={() => assign(topic.id)}
-                        disabled={selectedReviewers.length === 0 || isAssigning}
-                        className="btn btn-primary"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 'var(--space-1)',
-                          padding: '12px var(--space-3)',
-                          fontSize: 'var(--body-md)',
-                          fontWeight: 'var(--font-semibold)',
-                          fontFamily: 'var(--font-family)',
-                          borderRadius: 'var(--radius-lg)',
-                          border: 'none',
-                          cursor: selectedReviewers.length === 0 || isAssigning ? 'not-allowed' : 'pointer',
-                          opacity: selectedReviewers.length === 0 || isAssigning ? 0.6 : 1,
-                          transition: 'all 0.2s ease',
-                          marginTop: 'var(--space-2)',
-                          width: 'fit-content'
-                        }}
-                      >
-                        {isAssigning ? (
-                          <>
-                            <span style={{
-                              width: '16px',
-                              height: '16px',
-                              border: '2px solid var(--on-primary)',
-                              borderTopColor: 'transparent',
-                              borderRadius: 'var(--radius-full)',
-                              animation: 'spin 0.8s linear infinite'
-                            }} />
-                            A atribuir...
-                          </>
-                        ) : (
-                          <>
-                            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>person_add</span>
-                            Atribuir {selectedReviewers.length} revisor{selectedReviewers.length !== 1 ? 'es' : ''}
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
+  async function assign(protocolId: number) {
+    const one = pickOne[protocolId]
+    const two = pickTwo[protocolId]
+    if (!one || !two || one === two) { setError('Escolhe dois revisores diferentes.'); return }
+    setAssigningId(protocolId)
+    try {
+      await protocolService.assignReviewers(protocolId, Number(one), Number(two))
+      setPickOne(p => { const n = { ...p }; delete n[protocolId]; return n })
+      setPickTwo(p => { const n = { ...p }; delete n[protocolId]; return n })
+      setReviewersByProtocol(p => { const n = { ...p }; delete n[protocolId]; return n })
+      await load()
+    } catch (e) { setError((e as Error).message) }
+    finally { setAssigningId(null) }
+  }
+
+  if (loading) return <Spinner text="A carregar protocolos..." />
+
+  const pending = protocols.filter(p => p.status === 'protocol_pending_nucleo')
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      {error && <ErrorAlert message={error} />}
+
+      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        <CountBadge icon="description" count={protocols.length} label="protocolo" />
+        {pending.length > 0 && <CountBadge icon="pending_actions" count={pending.length} label="pendente" color="var(--tertiary)" />}
+      </div>
+
+      {protocols.length === 0 && <EmptyState icon="folder_open" text="Sem protocolos pendentes no núcleo" sub="Os protocolos submetidos aparecerão aqui." />}
+
+      {protocols.map(p => {
+        const s = getProtocolStatusStyle(p.status)
+        const isPending = p.status === 'protocol_pending_nucleo'
+        const revs = reviewersByProtocol[p.id]
+        const s1 = pickOne[p.id]
+        const s2 = pickTwo[p.id]
+
+        return (
+          <div key={p.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '4px', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-bold)' }}>{p.code}</h3>
+                  <StatusBadge s={s} label={p.status_label} />
                 </div>
-              )
-            })}
+                <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>Tema: {p.topic?.title || '—'}</p>
+              </div>
+            </div>
+
+            {isPending && (
+              <div style={{ padding: 'var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)' }}>
+                {!revs ? (
+                  <button onClick={() => loadReviewers(p.id)} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '10px var(--space-3)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)', borderRadius: 'var(--radius-lg)', cursor: 'pointer', border: '1px solid var(--outline-variant)', background: 'var(--surface-container-lowest)', color: 'var(--primary)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span> Ver revisores elegíveis
+                  </button>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 'var(--space-2)' }}>Selecionar revisores ({revs.length})</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+                      <SelectRevisor label="Revisor 1" value={s1 ?? ''} onChange={v => setPickOne(prev => ({ ...prev, [p.id]: Number(v) }))} reviewers={revs} disabledId={s2} />
+                      <SelectRevisor label="Revisor 2" value={s2 ?? ''} onChange={v => setPickTwo(prev => ({ ...prev, [p.id]: Number(v) }))} reviewers={revs} disabledId={s1} />
+                    </div>
+                    <AssignButton assigning={assigningId === p.id} disabled={!s1 || !s2} onClick={() => assign(p.id)} label="Atribuir revisores" />
+                  </>
+                )}
+              </div>
+            )}
           </div>
-        </div>
+        )
+      })}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
+
+// ============================================================
+// COMPONENTES PARTILHADOS
+// ============================================================
+function Spinner({ text }: { text: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '30vh', color: 'var(--on-surface-variant)', fontSize: 'var(--body-lg)', gap: 'var(--space-2)' }}>
+      <span style={{ width: '24px', height: '24px', border: '3px solid var(--outline-variant)', borderTopColor: 'var(--primary)', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} />
+      {text}
+    </div>
+  )
+}
+
+function ErrorAlert({ message }: { message: string }) {
+  return (
+    <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: 'var(--space-2) var(--space-3)', background: 'var(--error-container)', color: 'var(--on-error-container)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)' }}>
+      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
+      {message}
+    </div>
+  )
+}
+
+function EmptyState({ icon, text, sub }: { icon: string; text: string; sub: string }) {
+  return (
+    <div style={{ textAlign: 'center', padding: 'var(--space-5) var(--space-3)', color: 'var(--on-surface-variant)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-xl)', border: '1px dashed var(--outline-variant)' }}>
+      <span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>{icon}</span>
+      <p style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-medium)' }}>{text}</p>
+      <p style={{ fontSize: 'var(--body-md)', marginTop: 'var(--space-1)' }}>{sub}</p>
+    </div>
+  )
+}
+
+function CountBadge({ icon, count, label, color }: { icon: string; count: number; label: string; color?: string }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: 'var(--radius-full)', fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', background: 'var(--surface-container)', color: color || 'var(--on-surface-variant)' }}>
+      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>{icon}</span>
+      {count} {label}{count !== 1 ? (label.endsWith('s') ? '' : 's') : ''}
+    </span>
+  )
+}
+
+function SectionTitle({ icon, title, color }: { icon: string; title: string; color?: string }) {
+  return (
+    <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', color: color || 'var(--on-surface)', display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+      <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>{icon}</span>
+      {title}
+    </h2>
+  )
+}
+
+function StatusBadge({ s, label }: { s: { bg: string; color: string; dot: string }; label?: string }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: 'var(--radius-full)', fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>
+      <span style={{ width: '6px', height: '6px', borderRadius: 'var(--radius-full)', background: s.dot }} />
+      {label}
+    </span>
+  )
+}
+
+function AssignButton({ assigning, disabled, onClick, label }: { assigning: boolean; disabled: boolean; onClick: () => void; label: string }) {
+  return (
+    <button onClick={onClick} disabled={disabled || assigning} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', borderRadius: 'var(--radius-lg)', border: 'none', cursor: disabled || assigning ? 'not-allowed' : 'pointer', opacity: disabled || assigning ? 0.6 : 1, width: 'fit-content' }}>
+      {assigning ? (
+        <><span style={{ width: '16px', height: '16px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} /> A atribuir...</>
+      ) : (
+        <><span className="material-symbols-outlined" style={{ fontSize: '20px' }}>person_add</span> {label}</>
       )}
+    </button>
+  )
+}
 
-      {/* Secção: Outros estados */}
-      {otherTopics.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          <h2 style={{
-            fontSize: 'var(--title-md)',
-            fontWeight: 'var(--font-semibold)',
-            color: 'var(--on-surface-variant)',
-            fontFamily: 'var(--font-family)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-1)'
-          }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>checklist</span>
-            Outras submissões
-          </h2>
+function SelectRevisor({ label, value, onChange, reviewers, disabledId }: { label: string; value: string | number; onChange: (v: string) => void; reviewers: { id: number; name: string }[]; disabledId?: number | '' }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+      <label style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ width: '100%', padding: '10px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}>
+        <option value="">— Escolher —</option>
+        {reviewers.map(r => <option key={r.id} value={r.id} disabled={r.id === disabledId}>{r.name}</option>)}
+      </select>
+    </div>
+  )
+}
 
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-2)'
-          }}>
-            {otherTopics.map(topic => {
-              const badge = getStatusBadge(topic.status)
-              return (
-                <div key={topic.id} className="card" style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 'var(--space-2)',
-                  padding: 'var(--space-2) var(--space-3)'
-                }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{
-                      fontSize: 'var(--body-md)',
-                      fontWeight: 'var(--font-semibold)',
-                      color: 'var(--on-surface)',
-                      fontFamily: 'var(--font-family)',
-                      marginBottom: '4px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {topic.title}
-                    </h3>
-                  </div>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '2px 10px',
-                    borderRadius: 'var(--radius-full)',
-                    fontSize: 'var(--label-md)',
-                    fontWeight: 'var(--font-medium)',
-                    background: badge.bg,
-                    color: badge.color,
-                    flexShrink: 0
-                  }}>
-                    <span style={{
-                      width: '6px',
-                      height: '6px',
-                      borderRadius: 'var(--radius-full)',
-                      background: badge.dot
-                    }} />
-                    {topic.status_label || badge.label}
-                  </span>
-                </div>
-              )
-            })}
+function TopicCard({ topic, reviewers, selected, assigning, onLoadReviewers, onToggle, onAssign }: {
+  topic: Topic
+  reviewers?: { id: number; name: string }[]
+  selected: number[]
+  assigning: boolean
+  onLoadReviewers: () => void
+  onToggle: (rid: number) => void
+  onAssign: () => void
+}) {
+  const s = getTopicStatusStyle(topic.status)
+  return (
+    <div className="card" style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      <div>
+        <h3 style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-bold)', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic.title}</h3>
+        <StatusBadge s={s} label={topic.status_label} />
+      </div>
+      {!reviewers ? (
+        <button onClick={onLoadReviewers} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '10px var(--space-3)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)', borderRadius: 'var(--radius-lg)', cursor: 'pointer', border: '1px solid var(--outline-variant)', background: 'var(--surface-container-lowest)', color: 'var(--primary)', width: 'fit-content' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span> Ver avaliadores elegíveis
+        </button>
+      ) : (
+        <div style={{ padding: 'var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+            <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Avaliadores ({reviewers.length})</p>
+            {selected.length > 0 && <span style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--primary)', background: 'var(--primary-container)', padding: '2px 10px', borderRadius: 'var(--radius-full)' }}>{selected.length} selecionado{selected.length !== 1 ? 's' : ''}</span>}
           </div>
+          {reviewers.length === 0 ? (
+            <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', fontStyle: 'italic', textAlign: 'center' }}>Nenhum avaliador elegível.</p>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-1)', marginBottom: 'var(--space-2)' }}>
+              {reviewers.map(r => {
+                const checked = selected.includes(r.id)
+                return (
+                  <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '10px var(--space-2)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.2s', background: checked ? 'var(--primary-container)' : 'transparent', color: checked ? 'var(--on-primary-container)' : 'var(--on-surface)', fontSize: 'var(--body-md)', fontWeight: checked ? 'var(--font-medium)' : 'var(--font-regular)', border: checked ? '1px solid var(--primary)' : '1px solid transparent' }}>
+                    <input type="checkbox" checked={checked} onChange={() => onToggle(r.id)} style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }} />
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px', color: checked ? 'var(--primary)' : 'var(--on-surface-variant)' }}>person</span>
+                    {r.name}
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          <AssignButton assigning={assigning} disabled={!selected.length} onClick={onAssign} label={`Atribuir ${selected.length} avaliador${selected.length !== 1 ? 'es' : ''}`} />
         </div>
       )}
-
-      {/* Estado vazio */}
-      {topics.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: 'var(--space-6) var(--space-3)',
-          color: 'var(--on-surface-variant)',
-          background: 'var(--surface-container-low)',
-          borderRadius: 'var(--radius-xl)',
-          border: '1px dashed var(--outline-variant)'
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>
-            assignment
-          </span>
-          <p style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-medium)' }}>
-            Nenhuma submissão encontrada
-          </p>
-          <p style={{ fontSize: 'var(--body-md)', marginTop: 'var(--space-1)' }}>
-            Os protocolos submetidos aparecerão aqui para gestão.
-          </p>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   )
 }

@@ -244,11 +244,11 @@ class TopicService
     }
 
     /**
-     * listForSecretary: Lista todos os temas do núcleo da secretaria.
+     * listForSecretary: Lista temas do núcleo da secretaria.
      *
      * Filtros:
      *   - scientific_area.organ_id === secretary.organ_id
-     *   - exclui temas rejeitados pelo supervisor, porque não entram no núcleo
+     *   - status em fila de secretaria/revisão inicial
      *
      * Carrega relações: scientific_area, course, reviewAssignments (sem estudante/supervisor — revisão cega).
      */
@@ -262,7 +262,11 @@ class TopicService
 
         return Topic::query()
             ->whereHas('scientificArea', fn($q) => $q->where('organ_id', $secretaryProfile->organ_id))
-            ->where('status', '!=', Topic::STATUS_REJECTED_SUPERVISOR)
+            ->whereIn('status', [
+                Topic::STATUS_PENDING_NUCLEO,
+                Topic::STATUS_ASSIGNED,
+                Topic::STATUS_IN_REVIEW,
+            ])
             ->with([
                 'scientificArea:id,name,organ_id',
                 'course:id,name,code',
@@ -603,43 +607,6 @@ class TopicService
                 ]),
             ];
         });
-    }
-
-    /**
-     * listCommentsForTopic: Lista os comentários de um tema para o revisor atribuído.
-     *
-     * Filtros opcionais:
-     *   - search: pesquisa textual no conteúdo
-     *   - order: asc|desc (por created_at)
-     *   - status: active|inactive
-     */
-    public function listCommentsForTopic(Topic $topic, User $reviewer, array $filters = [])
-    {
-        $teacherProfile = $reviewer->teacherProfile;
-
-        if (! $teacherProfile) {
-            return collect();
-        }
-
-        $assigned = $topic->reviewAssignments()
-            ->where('reviewer_id', $teacherProfile->id)
-            ->exists();
-
-        if (! $assigned) {
-            throw new HttpResponseException(
-                response()->json([
-                    'message' => 'Este revisor não foi atribuído a este tema.',
-                ], 403)
-            );
-        }
-
-        $query = $topic->reviewComments()
-            ->with('user:id,name,email')
-            ->when(($filters['status'] ?? null), fn($builder, $status) => $builder->where('status', $status))
-            ->search($filters['search'] ?? null)
-            ->ordered($filters['order'] ?? 'desc');
-
-        return $query->get();
     }
 
     /**

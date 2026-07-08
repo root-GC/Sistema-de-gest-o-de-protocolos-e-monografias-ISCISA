@@ -23,6 +23,7 @@ class OrganizationDatabaseSeeder extends Seeder
             OrganSeeder::class,
             ScientificAreaAndCourseSeeder::class,
             OrganizationProfileSeeder::class,
+            CommitteeMembersSeeder::class,
         ]);
     }
 }

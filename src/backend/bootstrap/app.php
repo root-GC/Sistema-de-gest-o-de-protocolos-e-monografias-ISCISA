@@ -21,6 +21,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Shared\Core\Http\Middleware\PermissionMiddleware::class,
         ]);
 
+        // Evita Route [login] not defined em requests sem token.
+        $middleware->redirectGuestsTo(fn () => route('auth.login'));
+
         // Sanctum stateful domains para SPA (React)
         $middleware->statefulApi();
     })

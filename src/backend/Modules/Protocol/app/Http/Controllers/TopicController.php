@@ -116,7 +116,7 @@ class TopicController extends Controller
     }
 
     /**
-     * getForSecretary: Lista todos os temas do núcleo da secretaria.
+     * getForSecretary: Lista temas pendentes de atribuição de avaliadores.
      *
      * Revisão cega (RF-039): não expõe estudante nem supervisor ao Núcleo.
      */
@@ -245,26 +245,6 @@ class TopicController extends Controller
             'comment' => TopicReviewCommentResource::make($result['comment']),
             'evaluation' => $result['evaluation'] ? TopicEvaluationResource::make($result['evaluation']) : null,
             'topic' => TopicReviewerResource::make($result['topic']),
-        ]);
-    }
-
-    public function getComments(Request $request, Topic $topic)
-    {
-        $user = $request->user()->load('teacherProfile');
-
-        $this->authorize('submitEvaluation', $topic);
-
-        $filters = $request->validate([
-            'search' => 'nullable|string|max:255',
-            'order' => 'nullable|in:asc,desc',
-            'status' => 'nullable|in:active,inactive',
-        ]);
-
-        $comments = $this->topicService->listCommentsForTopic($topic, $user, $filters);
-
-        return response()->json([
-            'comments' => TopicReviewCommentResource::collection($comments),
-            'total' => $comments->count(),
         ]);
     }
 }

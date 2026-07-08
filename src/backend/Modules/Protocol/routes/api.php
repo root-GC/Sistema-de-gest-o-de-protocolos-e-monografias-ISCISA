@@ -20,5 +20,17 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::post('topics/{topic}/comments', [TopicController::class, 'submitComment'])->name('topic.comments.store');
     Route::post('topics/{topic}/evaluations', [TopicController::class, 'submitEvaluation'])->name('topic.evaluations.store');
 
-    Route::apiResource('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolController')->names('protocol');
+    Route::post('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@store')->name('protocol.store');
+    Route::get('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@index')->name('protocol.index');
+    Route::get('protocols/{protocol}', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@show')->name('protocol.show');
+    Route::patch('protocols/{protocol}/supervisor-approve', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@approveBySupervisor')->name('protocol.supervisor-approve');
+    Route::patch('protocols/{protocol}/supervisor-reject', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@rejectBySupervisor')->name('protocol.supervisor-reject');
+
+    // Secretary operations: list protocols for nucleus, get eligible reviewers, assign reviewers
+    Route::get('secretary/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForSecretary')->name('secretary.protocols.list');
+    Route::get('protocols/{protocol}/eligible-reviewers', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getEligibleReviewers')->name('protocol.eligible-reviewers');
+    Route::post('protocols/{protocol}/assign-reviewers', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@assignReviewers')->name('protocol.assign-reviewers');
+
+    // Reviewer operations: list assigned protocols for evaluation
+    Route::get('reviewer/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForReviewer')->name('reviewer.protocols.list');
 });
