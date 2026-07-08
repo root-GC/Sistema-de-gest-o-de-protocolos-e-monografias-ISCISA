@@ -552,8 +552,6 @@ Notas:
 - Apenas o supervisor atribuído ao tema pode aprovar ou rejeitar o protocolo.
 - Após rejeição, o estudante pode submeter uma nova versão do protocolo.
 - Em cada nova submissão, `submission_number` incrementa e os documentos anteriores do mesmo protocolo ficam `inactive`.
-- Ao aprovar pelo supervisor e encaminhar ao Nucleo, `version` fica no formato `NC_V{submission_number}`.
-- Ao aprovar no Nucleo e encaminhar ao Comité Científico, `version` passa para `CC_V01`.
 /- Ao aprovar pelo supervisor e encaminhar ao Nucleo, `version` fica no formato `NC_V{submission_number}`.
 - Os documentos são guardados na tabela `documents` e ligados ao protocolo via `protocol_id`.
 - Cada versão de documento tem um número de versão e um tipo de documento (`protocol`, `comprovativo`, etc).
