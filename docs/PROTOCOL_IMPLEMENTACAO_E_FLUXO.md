@@ -10,6 +10,7 @@ Esta fase cobre:
 - persistencia do tema em tabela propria
 - regras de validacao da submissao
 - verificacao de temas similares (aviso, nao bloqueante)
+- atribuicao do tema ao supervisor do estudante
 - seguranca por autenticacao + RBAC (roles/permissions) com Policy
 
 ---
@@ -37,10 +38,13 @@ Esta fase cobre:
 Campos principais da tabela:
 
 - `student_id` (FK users)
+- `supervisor_id` (FK teacher_profiles)
 - `scientific_area_id` (FK scientific_areas)
 - `course_id` (FK courses)
 - `title`
 - `status` (default: `topic_pending`)
+- `supervisor_status` (default: `pending`)
+- `supervisor_decision_at` (nullable)
 - `justification` (nullable)
 - `submitted_at`
 - `timestamps`
@@ -63,9 +67,13 @@ flowchart TD
     C -->|valido| E[Policy TopicPolicy.create]
     E -->|sem permissao| F[403 forbidden]
     E -->|ok| G[TopicService.submit]
-    G --> H[Busca temas topic_approved similares]
-    H --> I[Cria topic status=topic_pending]
-    I --> J[201 com topic + similar_topics_warning]
+    G --> H[Carrega supervisor do aluno]
+    H -->|sem supervisor| I[409 conflito: estudante sem supervisor]
+    H -->|com supervisor| J[Verifica ultimo tema do estudante]
+    J -->|topic_pending ou topic_approved| K[409 conflito: bloqueia nova submissao]
+    J -->|topic_rejected ou sem tema| L[Busca temas topic_approved similares]
+    L --> M[Cria topic ligado ao supervisor]
+    M --> N[201 com topic + similar_topics_warning]
 
     K[Usuario autenticado] --> L[GET /api/topics]
     L --> M[Policy TopicPolicy.viewAny]
@@ -95,7 +103,12 @@ flowchart TD
 - retorna lista de similares com percentual
 - **nao bloqueia** submissao
 
-5. Visibilidade de listagem:
+5. Supervisor do aluno:
+- a submissao do tema exige que o estudante tenha supervisor atribuido
+- o tema e gravado com o supervisor do aluno
+- o estado de aprovacao do supervisor passa a integrar o ciclo de vida do tema
+
+6. Visibilidade de listagem:
 - usuario com `topic.view.all` ve todos os temas
 - usuario com `topic.view` ve apenas os proprios temas
 
@@ -126,6 +139,7 @@ flowchart TD
 - [x] Endpoint com permissao retorna dados autorizados
 - [x] Nao ha escrita de tema fora do usuario autenticado
 - [x] Integridade referencial por FKs no banco
+- [x] Submissao bloqueada quando o estudante nao tem supervisor atribuido
 
 ---
 

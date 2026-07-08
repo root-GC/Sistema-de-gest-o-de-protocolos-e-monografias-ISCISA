@@ -41,6 +41,7 @@ class ProtocolApiController extends Controller
         $user = $request->user();
 
         $protocols = $user->hasPermission('protocol.view.all')
+<<<<<<< HEAD
             ? \Modules\Protocol\app\Models\Protocol::query()
                 ->with(['topic:id,title,status', 'documents'])
                 ->latest('submitted_at')
@@ -49,22 +50,37 @@ class ProtocolApiController extends Controller
 
         return response()->json([
             'protocols' => ProtocolResource::collection($protocols),
+=======
+            ? \Modules\Protocol\app\Models\Protocol::query()->with('topic:id,title,status')->latest('submitted_at')->get()
+            : $this->protocolService()->listForStudent($user);
+
+        return response()->json([
+            'protocols' => $protocols->map(fn($protocol) => $protocol->load('topic:id,title,status')->toArray())->values(),
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
         ]);
     }
 
     public function show(Request $request, string $protocol)
     {
         $user = $request->user();
+<<<<<<< HEAD
         $protocol = \Modules\Protocol\app\Models\Protocol::query()
             ->with(['topic:id,title,status', 'documents'])
             ->findOrFail($protocol);
+=======
+        $protocol = \Modules\Protocol\app\Models\Protocol::query()->findOrFail($protocol);
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
 
         if ((int) $protocol->student !== (int) $user->id && ! $user->hasPermission('protocol.view.all')) {
             abort(403);
         }
 
         return response()->json([
+<<<<<<< HEAD
             'protocol' => ProtocolResource::make($protocol),
+=======
+            'protocol' => $protocol->load('topic:id,title,status')->toArray(),
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
         ]);
     }
 

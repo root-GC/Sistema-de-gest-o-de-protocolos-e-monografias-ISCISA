@@ -32,6 +32,16 @@ class ProtocolResource extends JsonResource
                 'status' => $this->topic->status,
             ]),
             'documents' => $this->whenLoaded('documents', fn() => DocumentResource::collection($this->documents)),
+            'documents' => $this->whenLoaded('documents', fn() => $this->documents->map(fn($doc) => [
+                'id' => $doc->id,
+                'document_type' => $doc->document_type,
+                'file_name' => $doc->file_name,
+                'file_path' => $doc->file_path,
+                'pages' => $doc->pages,
+                'version' => $doc->version,
+                'status' => $doc->status,
+                'submitted_at' => $doc->created_at,
+            ])),
         ];
     }
 }

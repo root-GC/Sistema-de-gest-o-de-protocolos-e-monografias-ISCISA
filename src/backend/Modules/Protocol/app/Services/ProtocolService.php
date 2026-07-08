@@ -113,7 +113,11 @@ class ProtocolService
     {
         return Protocol::query()
             ->where('student', $user->id)
+<<<<<<< HEAD
             ->with(['topic:id,title,status', 'documents'])
+=======
+            ->with('topic:id,title,status')
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
             ->latest('submitted_at')
             ->get();
     }
@@ -219,7 +223,13 @@ class ProtocolService
         }
 
         return Protocol::query()
+<<<<<<< HEAD
             ->whereHas('reviewAssignments', fn($q) => $q
+=======
+            ->where('status', Protocol::STATUS_IN_REVIEW_NUCLEO)
+            ->whereHas('reviewAssignments', fn($q) => $q
+                ->where('status', 'pending')
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
                 ->where(fn($q) => $q
                     ->where('reviewer_one', $teacherProfile->id)
                     ->orWhere('reviewer_two', $teacherProfile->id)
@@ -230,6 +240,10 @@ class ProtocolService
                 'topic.scientificArea:id,name',
                 'topic.course:id,name,code,scientific_area_id',
                 'reviewAssignments' => fn($q) => $q
+<<<<<<< HEAD
+=======
+                    ->where('status', 'pending')
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
                     ->where(fn($q) => $q
                         ->where('reviewer_one', $teacherProfile->id)
                         ->orWhere('reviewer_two', $teacherProfile->id)
@@ -343,7 +357,11 @@ class ProtocolService
                 );
             }
 
+<<<<<<< HEAD
             $assignment = ProtocolReviewAssignment::create([
+=======
+            ProtocolReviewAssignment::create([
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
                 'protocol_id' => $protocol->id,
                 'organ_id' => $secretaryProfile->organ_id,
                 'reviewer_one' => $reviewerIds[0] ?? null,
@@ -357,6 +375,7 @@ class ProtocolService
                 'status' => Protocol::STATUS_IN_REVIEW_NUCLEO,
             ]);
 
+<<<<<<< HEAD
             app(EvaluationService::class)->createForProtocol(
                 $protocol,
                 $reviewerIds,
@@ -364,6 +383,8 @@ class ProtocolService
                 'nucleo'
             );
 
+=======
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
             return $protocol->load([
                 'topic:id,title,status,scientific_area_id,supervisor_id',
                 'topic.scientificArea:id,name,organ_id',

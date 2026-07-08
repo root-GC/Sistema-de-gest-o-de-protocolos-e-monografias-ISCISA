@@ -8,6 +8,13 @@ Endpoints documentados nesta fase:
 
 - `POST /api/topics`
 - `GET /api/topics`
+- `PATCH /api/topics/{topic}/supervisor-approve`
+- `PATCH /api/topics/{topic}/supervisor-reject`
+- `GET /api/secretary/topics`
+- `GET /api/topics/{topic}/eligible-reviewers`
+- `POST /api/topics/{topic}/assign-reviewers`
+- `GET /api/reviewer/topics`
+- `POST /api/topics/{topic}/evaluations`
 
 Autenticacao:
 
@@ -28,6 +35,9 @@ Permissoes usadas:
 - `topic.create`
 - `topic.view`
 - `topic.view.all`
+- `protocol.assign`
+- `protocol.evaluate`
+- `supervision.approve`
 
 Regras:
 
@@ -35,6 +45,12 @@ Regras:
 - `GET /api/topics` requer `topic.view` ou `topic.view.all`
 - com `topic.view`: retorno apenas dos proprios temas
 - com `topic.view.all`: retorno de todos os temas
+- a submissao do tema exige supervisor atribuido ao estudante
+- o tema entra em `topic_pending_supervisor`
+- a aprovacao do supervisor move o tema para `topic_pending_nucleo`
+- a secretaria do nucleo move o tema para `topic_assigned_for_review`
+- a primeira avaliacao move o tema para `topic_in_review`
+- ao terminar a avaliacao, o tema pode ir para `topic_approved_nucleo` ou `topic_rejected_nucleo`
 
 Status de seguranca:
 
@@ -42,6 +58,7 @@ Status de seguranca:
 - [x] Policy: aplicado (`TopicPolicy`)
 - [x] RBAC por permission: aplicado
 - [x] Restricao de escopo de dados: aplicada no service
+- [x] Fluxo supervisor -> nucleo -> avaliacao: aplicado
 
 ---
 
@@ -76,7 +93,7 @@ Submete um novo tema para avaliacao inicial.
     "scientific_area_id": 1,
     "course_id": 2,
     "title": "Impacto da adesao terapeutica em pacientes hipertensos",
-    "status": "topic_pending",
+    "status": "topic_pending_supervisor",
     "justification": null,
     "submitted_at": "2026-07-02T10:15:41.000000Z",
     "created_at": "2026-07-02T10:15:41.000000Z",
@@ -110,8 +127,10 @@ O estudante nao pode submeter um novo tema enquanto existir um tema anterior com
 Comportamento:
 
 - `topic_pending` -> bloqueia nova submissao e informa que ja existe um tema pendente
-- `topic_approved` -> bloqueia nova submissao e informa que o tema ja foi aprovado
-- `topic_rejected` -> permite submeter nova versao
+- `topic_pending_supervisor` -> bloqueia nova submissao e informa que ja existe um tema pendente
+- `topic_pending_nucleo` -> bloqueia nova submissao e informa que o tema ja foi encaminhado ao nucleo
+- `topic_approved_nucleo` -> bloqueia nova submissao e informa que o tema ja foi aprovado
+- `topic_rejected_supervisor` / `topic_rejected_nucleo` -> permite submeter nova versao
 - sem tema anterior -> permite submeter normalmente
 
 ### Response - tema ja existente e nao rejeitado (409)
@@ -122,7 +141,7 @@ Comportamento:
   "existing_topic": {
     "id": 10,
     "title": "Impacto da adesao terapeutica em pacientes hipertensos",
-    "status": "topic_pending",
+    "status": "topic_pending_supervisor",
     "submitted_at": "2026-07-02T10:15:41.000000Z",
     "scientific_area": {
       "id": 1,
@@ -267,6 +286,41 @@ curl -X GET http://127.0.0.1:8000/api/topics \
 ## Notas de implementacao
 
 - Similaridade de titulos usa `similar_text` sobre temas `topic_approved`.
+- Similaridade de titulos usa `similar_text` sobre temas `topic_approved_nucleo`.
 - A busca de similares e aviso informativo, nao bloqueante.
-- O estado inicial sempre e `topic_pending`.
+- O estado inicial sempre e `topic_pending_supervisor`.
 - Policy registrada no provider do modulo Protocol.
+- A tabela `topics` guarda o supervisor do aluno e o estado da aprovacao do supervisor.
+
+---
+
+## 3) Endpoints de secretaria e avaliação
+
+### GET /api/secretary/topics
+
+Lista temas do núcleo da secretaria que estão em `topic_pending_nucleo`.
+
+### GET /api/topics/{topic}/eligible-reviewers
+
+Lista avaliadores elegíveis do mesmo núcleo do tema.
+
+### POST /api/topics/{topic}/assign-reviewers
+
+```json
+{
+  "reviewer_ids": [1, 2]
+}
+```
+
+### GET /api/reviewer/topics
+
+Lista os temas atribuídos ao revisor autenticado.
+
+### POST /api/topics/{topic}/evaluations
+
+```json
+{
+  "decision": "approved",
+  "comments": "Tema consistente e viável."
+}
+```

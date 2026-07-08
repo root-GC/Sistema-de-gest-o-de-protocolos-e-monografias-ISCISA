@@ -30,6 +30,14 @@ class ProtocolReviewerResource extends JsonResource
                     'name' => $this->topic->scientificArea->name,
                 ] : null,
                 'course' => $this->topic?->course ? [
+                'id' => $this->topic->id,
+                'title' => $this->topic->title,
+                'status' => $this->topic->status,
+                'scientific_area' => $this->topic->relationLoaded('scientificArea') ? [
+                    'id' => $this->topic->scientificArea->id,
+                    'name' => $this->topic->scientificArea->name,
+                ] : null,
+                'course' => $this->topic->relationLoaded('course') ? [
                     'id' => $this->topic->course->id,
                     'name' => $this->topic->course->name,
                     'code' => $this->topic->course->code,

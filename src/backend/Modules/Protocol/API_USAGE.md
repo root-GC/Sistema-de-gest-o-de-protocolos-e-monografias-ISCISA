@@ -66,7 +66,11 @@ Erro:
 | GET | `/secretary/protocols` | `protocol.assign` | Listar protocolos pendentes no núcleo da secretaria |
 | GET | `/protocols/{protocol}/eligible-reviewers` | `protocol.assign` | Listar revisores elegíveis do mesmo núcleo |
 | POST | `/protocols/{protocol}/assign-reviewers` | `protocol.assign` | Atribuir revisores e transicionar para `protocol_in_review_nucleo` |
+<<<<<<< HEAD
 | GET | `/reviewer/protocols` | `protocol.evaluate` | Listar protocolos atribuídos ao revisor autenticado, incluindo os já avaliados (blind review) |
+=======
+| GET | `/reviewer/protocols` | `protocol.evaluate` | Listar protocolos atribuídos ao revisor autenticado (blind review) |
+>>>>>>> b3874dc (submisao e atribuicao de protocolo)
 
 ## Fluxo atual de estados
 
@@ -335,6 +339,7 @@ Resposta:
 Notas:
 - O estudante e o supervisor **não** são expostos (blind review).
 - São listados todos os protocolos atribuídos ao revisor autenticado, incluindo os já avaliados.
+
 - O campo `my_assignment` mostra apenas os dados da atribuição do revisor autenticado.
 
 ## Exemplos de protocolo (Fase do Núcleo)
@@ -549,6 +554,7 @@ Notas:
 - Em cada nova submissão, `submission_number` incrementa e os documentos anteriores do mesmo protocolo ficam `inactive`.
 - Ao aprovar pelo supervisor e encaminhar ao Nucleo, `version` fica no formato `NC_V{submission_number}`.
 - Ao aprovar no Nucleo e encaminhar ao Comité Científico, `version` passa para `CC_V01`.
+/- Ao aprovar pelo supervisor e encaminhar ao Nucleo, `version` fica no formato `NC_V{submission_number}`.
 - Os documentos são guardados na tabela `documents` e ligados ao protocolo via `protocol_id`.
 - Cada versão de documento tem um número de versão e um tipo de documento (`protocol`, `comprovativo`, etc).
 - O `file_url` é gerado automaticamente a partir de `file_path` para facilitar o acesso ao ficheiro via HTTP.
