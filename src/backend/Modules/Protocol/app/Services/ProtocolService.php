@@ -113,11 +113,7 @@ class ProtocolService
     {
         return Protocol::query()
             ->where('student', $user->id)
-<<<<<<< HEAD
-            ->with(['topic:id,title,status', 'documents'])
-=======
             ->with('topic:id,title,status')
->>>>>>> b3874dc (submisao e atribuicao de protocolo)
             ->latest('submitted_at')
             ->get();
     }
@@ -223,13 +219,9 @@ class ProtocolService
         }
 
         return Protocol::query()
-<<<<<<< HEAD
-            ->whereHas('reviewAssignments', fn($q) => $q
-=======
             ->where('status', Protocol::STATUS_IN_REVIEW_NUCLEO)
             ->whereHas('reviewAssignments', fn($q) => $q
                 ->where('status', 'pending')
->>>>>>> b3874dc (submisao e atribuicao de protocolo)
                 ->where(fn($q) => $q
                     ->where('reviewer_one', $teacherProfile->id)
                     ->orWhere('reviewer_two', $teacherProfile->id)
@@ -240,10 +232,7 @@ class ProtocolService
                 'topic.scientificArea:id,name',
                 'topic.course:id,name,code,scientific_area_id',
                 'reviewAssignments' => fn($q) => $q
-<<<<<<< HEAD
-=======
                     ->where('status', 'pending')
->>>>>>> b3874dc (submisao e atribuicao de protocolo)
                     ->where(fn($q) => $q
                         ->where('reviewer_one', $teacherProfile->id)
                         ->orWhere('reviewer_two', $teacherProfile->id)
