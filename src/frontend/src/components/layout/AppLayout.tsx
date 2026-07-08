@@ -1,15 +1,30 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import '../../styles/global.css'
 
 export function AppLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarExpanded, setSidebarExpanded] = useState(true)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth <= 768) }
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   function toggleSidebar() {
-    setSidebarOpen(prev => !prev)
+    if (isMobile) {
+      setMobileOpen(prev => !prev)
+    } else {
+      setSidebarExpanded(prev => !prev)
+    }
   }
+
+  const sidebarWidth = isMobile ? '0' : sidebarExpanded ? 'var(--sidebar-width)' : '72px'
 
   return (
     <div style={{
@@ -19,52 +34,49 @@ export function AppLayout() {
       background: 'var(--surface)',
       color: 'var(--on-surface)'
     }}>
-      {/* Overlay para mobile quando sidebar está aberta */}
-      {sidebarOpen && (
+      {/* Overlay mobile */}
+      {isMobile && mobileOpen && (
         <div
-          onClick={toggleSidebar}
+          onClick={() => setMobileOpen(false)}
           style={{
-            display: 'none', // Só visível em mobile via media query
-            position: 'fixed',
-            inset: 0,
-            background: 'var(--backdrop)',
-            zIndex: 45
+            position: 'fixed', inset: 0,
+            background: 'var(--backdrop)', zIndex: 45
           }}
-          className="sidebar-overlay"
         />
       )}
 
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      
+      <Sidebar
+        expanded={sidebarExpanded}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
+         onExpand={() => setSidebarExpanded(true)}   // ← ADICIONE esta linha
+        isMobile={isMobile}
+      />
+
       <div style={{
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
         minWidth: 0,
-        marginLeft: sidebarOpen ? 'var(--sidebar-width)' : '0',
+        marginLeft: sidebarWidth,
         transition: 'margin-left 0.3s ease'
       }}>
-        <Topbar onMenuClick={toggleSidebar} sidebarOpen={sidebarOpen} />
-        // AppLayout.jsx - versão sem max-width
-<main style={{
-  flex: 1,
-  marginTop: '64px',
-  overflow: 'auto',
-  background: 'var(--background)',
-  padding: 'var(--space-4) var(--gutter)'
-}}>
-  <Outlet />
-</main>
+        <Topbar
+          onMenuClick={toggleSidebar}
+          sidebarExpanded={sidebarExpanded}
+          isMobile={isMobile}
+          mobileOpen={mobileOpen}
+        />
+        <main style={{
+          flex: 1,
+          marginTop: '64px',
+          overflow: 'auto',
+          background: 'var(--background)',
+          padding: 'var(--space-3) var(--gutter)'
+        }}>
+          <Outlet />
+        </main>
       </div>
-
-      {/* Estilos responsivos */}
-      <style>{`
-        @media (max-width: 768px) {
-          .sidebar-overlay {
-            display: block !important;
-          }
-        }
-      `}</style>
     </div>
   )
 }

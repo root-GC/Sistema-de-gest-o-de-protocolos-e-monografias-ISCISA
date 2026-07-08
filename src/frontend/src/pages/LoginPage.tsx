@@ -36,9 +36,23 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      await login(email, password)
+      const userData = await login(email, password)
+      
+      // Log para debug
+      console.log('Login successful, user data:', {
+        name: userData.name,
+        roles: userData.roles,
+        permissions: userData.permissions,
+        navigatingTo: from
+      })
+      
+      // Aguarda um momento para garantir que o estado foi sincronizado
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Navega para a página de destino
       navigate(from, { replace: true })
     } catch (err) {
+      console.error('Login error:', err)
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)

@@ -89,7 +89,8 @@ export default function App() {
                   <Route path="/reviews"          element={<ReviewsPage />} />
                   <Route path="/reviews/assigned" element={<ReviewsPage />} />
                   <Route path="/reviews/done"     element={<ReviewsPage />} />
-                  <Route path="/evaluation/:id"   element={<EvaluationPage />} />
+                  {/* <Route path="/evaluation/:id"   element={<EvaluationPage />} /> */}
+                  <Route path="/reviews/:topicId" element={<EvaluationPage />} />
                 </Route>
 
                 {/* ── Coordinator ─────────────────────────────── */}

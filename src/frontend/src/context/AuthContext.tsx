@@ -60,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profiles, setProfiles] = useState<Record<Role, Profile | null>>({} as Record<Role, Profile | null>);
   const [activeRole, setActiveRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   // Hidratar sessão ao carregar
   useEffect(() => {
@@ -87,18 +88,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = useCallback(async (email: string, password: string): Promise<UserPayload> => {
-    const { token, user: userData } = await authService.login(email, password);
-    localStorage.setItem('sgpmc_token', token);
-    localStorage.setItem('sgpmc_user', JSON.stringify(userData));
-    hydrate(userData);
-    return userData;
+    setIsAuthenticating(true);
+    try {
+      const { token, user: userData } = await authService.login(email, password);
+      
+      // Persiste os dados primeiro
+      localStorage.setItem('sgpmc_token', token);
+      localStorage.setItem('sgpmc_user', JSON.stringify(userData));
+      
+      // Atualiza o estado
+      hydrate(userData);
+      
+      // Aguarda o React processar as atualizações de estado
+      await new Promise<void>(resolve => {
+        // Usa requestAnimationFrame para garantir que o DOM foi atualizado
+        requestAnimationFrame(() => {
+          // Timeout adicional para garantir que o estado está sincronizado
+          setTimeout(() => {
+            resolve();
+          }, 100);
+        });
+      });
+      
+      return userData;
+    } finally {
+      setIsAuthenticating(false);
+    }
   }, []);
 
   const logout = useCallback(async () => {
     try {
       await authService.logout();
-    } catch {}
-    clear();
+    } catch {
+      // Ignora erros de logout
+    } finally {
+      clear();
+    }
   }, []);
 
   const switchRole = useCallback((role: Role) => {
@@ -112,7 +137,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { user: userData } = await authService.me();
       localStorage.setItem('sgpmc_user', JSON.stringify(userData));
       hydrate(userData);
-    } catch {}
+    } catch (error) {
+      console.error('Failed to refresh user data:', error);
+      // Se falhar ao refresh, faz logout
+      clear();
+    }
   }, []);
 
   function clear() {
@@ -137,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profiles,
         activeRole,
         activeProfile,
-        loading,
+        loading: loading || isAuthenticating,
         login,
         logout,
         switchRole,
