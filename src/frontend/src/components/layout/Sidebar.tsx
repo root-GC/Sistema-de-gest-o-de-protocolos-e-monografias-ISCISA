@@ -14,12 +14,8 @@ interface MenuItem {
 
 // ============================================================
 // MAPEAMENTO DE ÍCONES (Material Symbols)
-// Suporta tanto chaves com prefixo "ti-" (legado) como sem
 // ============================================================
 const ICON_MAP: Record<string, string> = {
-  // ============================================================
-  // MAPEAMENTO COM PREFIXO "ti-" (CÓDIGO LEGADO)
-  // ============================================================
   'ti-dashboard': 'dashboard',
   'ti-school': 'school',
   'ti-fitness-center': 'fitness_center',
@@ -89,55 +85,33 @@ const ICON_MAP: Record<string, string> = {
   'ti-person-check': 'person_check',
   'ti-folder-open': 'folder_open',
 
-  // ============================================================
-  // MAPEAMENTO SEM PREFIXO (IDS MODERNOS)
-  // ============================================================
-  // Navegação principal
   dashboard: 'dashboard',
   inicio: 'dashboard',
   home: 'dashboard',
-  
-  // Protocolos
   protocols: 'description',
   'all-protocols': 'folder_open',
   'my-protocol': 'description',
   'protocol-mine': 'description',
-  
-  // Revisões
   reviews: 'rate_review',
   'rate-review': 'rate_review',
-  
-  // Supervisão / Tutorandos
   supervision: 'school',
   tutorandos: 'school',
   'my-students': 'school',
-  
-  // Relatórios
   reports: 'analytics',
   analytics: 'analytics',
-  
-  // Defesas
   defense: 'event_available',
   defesas: 'event_available',
-  
-  // Atribuição
   assign: 'person_check',
   'assign-reviewers': 'person_check',
-  
-  // Secretaria
   secretary: 'assignment',
   'clipboard-list': 'assignment',
   'secretary-protocols': 'assignment',
   'gestao-submissoes': 'assignment',
   submissions: 'assignment',
-  
-  // Admin
   users: 'group',
   utilizadores: 'group',
   organs: 'account_balance',
   'orgaos-areas': 'account_balance',
-  
-  // Académico
   topic: 'bookmark',
   tema: 'bookmark',
   'meu-tema': 'bookmark',
@@ -146,20 +120,14 @@ const ICON_MAP: Record<string, string> = {
   book: 'menu_book',
   workload: 'fitness_center',
   'minha-carga': 'fitness_center',
-  
-  // Sistema
   settings: 'settings',
   configuracoes: 'settings',
   help: 'help',
   suporte: 'help',
-  
-  // Utilizador
   profile: 'person',
   notifications: 'notifications',
   messages: 'chat',
   calendar: 'calendar_month',
-  
-  // Ações
   add: 'add',
   edit: 'edit',
   delete: 'delete',
@@ -180,8 +148,6 @@ const ICON_MAP: Record<string, string> = {
   location: 'location_on',
   link: 'link',
   logout: 'logout',
-  
-  // Status
   warning: 'warning',
   error: 'error',
   check: 'check_circle',
@@ -190,8 +156,6 @@ const ICON_MAP: Record<string, string> = {
   history: 'history',
   trending_up: 'trending_up',
   trending_down: 'trending_down',
-  
-  // UI
   expand_more: 'expand_more',
   expand_less: 'expand_less',
   chevron_right: 'chevron_right',
@@ -213,14 +177,68 @@ const ICON_MAP: Record<string, string> = {
   group: 'group',
   assignment: 'assignment',
   description: 'description',
-  
-  // Fallback
   circle: 'circle',
 }
+
 // ============================================================
-// COMPONENTE SIDEBAR
+// COMPONENTE SidebarLink (substitui NavLink com função no style)
 // ============================================================
-export function Sidebar() {
+function SidebarLink({
+  to,
+  onClick,
+  isActive,
+  children,
+  isChild = false,
+  icon,
+}: {
+  to: string
+  onClick?: () => void
+  isActive: boolean
+  children: React.ReactNode
+  isChild?: boolean
+  icon?: string
+}) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: icon ? 'var(--space-2)' : '0',
+        padding: isChild ? '10px var(--space-2)' : '12px var(--space-2)',
+        borderRadius: 'var(--radius-lg)',
+        fontSize: 'var(--body-md)',
+        fontFamily: 'var(--font-family)',
+        textDecoration: 'none',
+        color: isActive ? 'var(--primary)' : 'var(--on-surface-variant)',
+        fontWeight: isActive
+          ? isChild
+            ? 'var(--font-semibold)'
+            : 'var(--font-bold)'
+          : 'var(--font-regular)',
+        background: isActive ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
+        borderRight: !isChild && isActive ? '4px solid var(--primary)' : '4px solid transparent',
+        transition: 'all 0.2s',
+        marginTop: isChild ? '2px' : '0',
+      }}
+    >
+      {icon && (
+        <span className="material-symbols-outlined" style={{ fontSize: '20px' }} aria-hidden="true">
+          {icon}
+        </span>
+      )}
+      {children}
+    </NavLink>
+  )
+}
+
+interface SidebarProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const menu: MenuItem[] = useMenu()
   const { user, activeProfile, logout } = useAuth()
   const location = useLocation()
@@ -248,8 +266,31 @@ export function Sidebar() {
       padding: 'var(--space-1) 0',
       background: 'var(--surface-container-low)',
       borderRight: '1px solid var(--outline-variant)',
-      zIndex: 50
+      zIndex: 50,
+      transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+      transition: 'transform 0.3s ease'
     }}>
+      {/* Botão fechar (mobile) */}
+      <button
+        onClick={onClose}
+        aria-label="Fechar menu"
+        className="sidebar-close-btn"
+        style={{
+          display: 'none',
+          position: 'absolute',
+          top: 'var(--space-2)',
+          right: 'var(--space-2)',
+          background: 'none',
+          border: 'none',
+          color: 'var(--on-surface-variant)',
+          cursor: 'pointer',
+          padding: '4px',
+          zIndex: 1
+        }}
+      >
+        <span className="material-symbols-outlined">close</span>
+      </button>
+
       {/* Logo + Marca */}
       <div style={{
         display: 'flex',
@@ -302,10 +343,9 @@ export function Sidebar() {
         gap: '2px'
       }} aria-label="Navegação principal">
         {menu.map(item => {
-          // Busca o ícone: tenta pelo id, depois pelo icon, depois fallback
           const iconName = ICON_MAP[item.id] || ICON_MAP[item.icon] || item.icon || 'circle'
 
-          // Verifica se é um item com filhos
+          // Item com filhos (dropdown)
           if (item.children && item.children.length > 0) {
             const isActiveParent = item.children.some(child => location.pathname === child.route)
 
@@ -333,7 +373,8 @@ export function Sidebar() {
                     textAlign: 'left'
                   }}
                   onMouseEnter={e => {
-                    if (!e.currentTarget.style.background?.includes('105')) {
+                    const bg = e.currentTarget.style.background
+                    if (!bg.includes('105') && !bg.includes('rgba')) {
                       e.currentTarget.style.background = 'var(--surface-container-highest)'
                     }
                   }}
@@ -346,11 +387,7 @@ export function Sidebar() {
                   }}
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <span
-                      className="material-symbols-outlined"
-                      style={{ fontSize: '20px' }}
-                      aria-hidden="true"
-                    >
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }} aria-hidden="true">
                       {iconName}
                     </span>
                     <span>{item.label}</span>
@@ -368,7 +405,6 @@ export function Sidebar() {
                   </span>
                 </button>
 
-                {/* Subitens com animação */}
                 <div style={{
                   maxHeight: expanded[item.id] ? '500px' : '0',
                   overflow: 'hidden',
@@ -376,173 +412,59 @@ export function Sidebar() {
                   paddingLeft: 'var(--space-5)'
                 }}>
                   {item.children.map(child => (
-                    <NavLink
+                    <SidebarLink
                       key={child.route}
                       to={child.route}
-                      style={({ isActive }) => ({
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '10px var(--space-2)',
-                        borderRadius: 'var(--radius-lg)',
-                        fontSize: 'var(--body-md)',
-                        fontFamily: 'var(--font-family)',
-                        textDecoration: 'none',
-                        color: isActive ? 'var(--primary)' : 'var(--on-surface-variant)',
-                        fontWeight: isActive ? 'var(--font-semibold)' : 'var(--font-regular)',
-                        background: isActive ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-                        transition: 'all 0.2s',
-                        marginTop: '2px'
-                      })}
-                      onMouseEnter={e => {
-                        if (!e.currentTarget.style.background?.includes('105')) {
-                          e.currentTarget.style.background = 'var(--surface-container-highest)'
-                        }
-                      }}
-                      onMouseLeave={e => {
-                        if (!e.currentTarget.style.background?.includes('105')) {
-                          e.currentTarget.style.background = 'transparent'
-                        }
-                      }}
+                      onClick={onClose}
+                      isActive={location.pathname === child.route}
+                      isChild
                     >
                       {child.label}
-                    </NavLink>
+                    </SidebarLink>
                   ))}
                 </div>
               </div>
             )
           }
 
-          // Item simples (sem filhos)
+          // Item simples
           return (
-            <NavLink
+            <SidebarLink
               key={item.id}
               to={item.route || '/'}
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-                padding: '12px var(--space-2)',
-                borderRadius: 'var(--radius-lg)',
-                fontSize: 'var(--body-md)',
-                fontFamily: 'var(--font-family)',
-                textDecoration: 'none',
-                color: isActive ? 'var(--primary)' : 'var(--on-surface-variant)',
-                fontWeight: isActive ? 'var(--font-bold)' : 'var(--font-regular)',
-                background: isActive ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-                borderRight: isActive ? '4px solid var(--primary)' : '4px solid transparent',
-                transition: 'all 0.2s'
-              })}
-              onMouseEnter={e => {
-                if (!e.currentTarget.style.background?.includes('105')) {
-                  e.currentTarget.style.background = 'var(--surface-container-highest)'
-                }
-              }}
-              onMouseLeave={e => {
-                if (!e.currentTarget.style.background?.includes('105')) {
-                  e.currentTarget.style.background = 'transparent'
-                }
-              }}
+              onClick={onClose}
+              isActive={location.pathname === (item.route || '/')}
+              icon={iconName}
             >
-              <span
-                className="material-symbols-outlined"
-                style={{ fontSize: '20px' }}
-                aria-hidden="true"
-              >
-                {iconName}
-              </span>
-              <span>{item.label}</span>
-            </NavLink>
+              {item.label}
+            </SidebarLink>
           )
         })}
       </nav>
 
-      {/* Footer: Configurações + Suporte + Perfil */}
-      <div style={{
-        padding: '0 var(--space-1)',
-        marginTop: 'auto'
-      }}>
-        <div style={{
-          borderTop: '1px solid var(--outline-variant)',
-          paddingTop: 'var(--space-2)'
-        }}>
-          {/* Configurações */}
-          <NavLink
+      {/* Footer */}
+      <div style={{ padding: '0 var(--space-1)', marginTop: 'auto' }}>
+        <div style={{ borderTop: '1px solid var(--outline-variant)', paddingTop: 'var(--space-2)' }}>
+          <SidebarLink
             to="/settings"
-            style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2)',
-              padding: '12px var(--space-2)',
-              borderRadius: 'var(--radius-lg)',
-              fontSize: 'var(--body-md)',
-              fontFamily: 'var(--font-family)',
-              textDecoration: 'none',
-              color: isActive ? 'var(--primary)' : 'var(--on-surface-variant)',
-              fontWeight: isActive ? 'var(--font-bold)' : 'var(--font-regular)',
-              background: isActive ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-              transition: 'all 0.2s'
-            })}
-            onMouseEnter={e => {
-              if (!e.currentTarget.style.background?.includes('105')) {
-                e.currentTarget.style.background = 'var(--surface-container-highest)'
-              }
-            }}
-            onMouseLeave={e => {
-              if (!e.currentTarget.style.background?.includes('105')) {
-                e.currentTarget.style.background = 'transparent'
-              }
-            }}
+            onClick={onClose}
+            isActive={location.pathname === '/settings'}
+            icon="settings"
           >
-            <span
-              className="material-symbols-outlined"
-              style={{ fontSize: '20px' }}
-              aria-hidden="true"
-            >
-              settings
-            </span>
-            <span>Configurações</span>
-          </NavLink>
+            Configurações
+          </SidebarLink>
 
-          {/* Suporte */}
-          <NavLink
+          <SidebarLink
             to="/help"
-            style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2)',
-              padding: '12px var(--space-2)',
-              borderRadius: 'var(--radius-lg)',
-              fontSize: 'var(--body-md)',
-              fontFamily: 'var(--font-family)',
-              textDecoration: 'none',
-              color: isActive ? 'var(--primary)' : 'var(--on-surface-variant)',
-              fontWeight: isActive ? 'var(--font-bold)' : 'var(--font-regular)',
-              background: isActive ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-              transition: 'all 0.2s'
-            })}
-            onMouseEnter={e => {
-              if (!e.currentTarget.style.background?.includes('105')) {
-                e.currentTarget.style.background = 'var(--surface-container-highest)'
-              }
-            }}
-            onMouseLeave={e => {
-              if (!e.currentTarget.style.background?.includes('105')) {
-                e.currentTarget.style.background = 'transparent'
-              }
-            }}
+            onClick={onClose}
+            isActive={location.pathname === '/help'}
+            icon="help"
           >
-            <span
-              className="material-symbols-outlined"
-              style={{ fontSize: '20px' }}
-              aria-hidden="true"
-            >
-              help
-            </span>
-            <span>Suporte</span>
-          </NavLink>
+            Suporte
+          </SidebarLink>
         </div>
 
-        {/* Perfil do Utilizador */}
+        {/* Perfil */}
         <div style={{
           marginTop: 'var(--space-2)',
           marginBottom: 'var(--space-2)',
@@ -553,7 +475,6 @@ export function Sidebar() {
           alignItems: 'center',
           gap: 'var(--space-1)'
         }}>
-          {/* Avatar */}
           <div style={{
             width: '40px',
             height: '40px',
@@ -567,21 +488,19 @@ export function Sidebar() {
             fontSize: 'var(--body-lg)',
             fontFamily: 'var(--font-family)',
             flexShrink: 0
-          }} aria-hidden="true">
+          }}>
             {user?.name?.charAt(0).toUpperCase() || 'U'}
           </div>
-
-          {/* Info do Utilizador */}
           <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
             <p style={{
               fontSize: 'var(--body-md)',
               fontWeight: 'var(--font-bold)',
               color: 'var(--on-surface)',
-              fontFamily: 'var(--font-family)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              margin: 0
+              margin: 0,
+              fontFamily: 'var(--font-family)'
             }}>
               {user?.name || 'Utilizador'}
             </p>
@@ -589,18 +508,16 @@ export function Sidebar() {
               <p style={{
                 fontSize: 'var(--label-md)',
                 color: 'var(--on-surface-variant)',
-                fontFamily: 'var(--font-family)',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                margin: 0
+                margin: 0,
+                fontFamily: 'var(--font-family)'
               }}>
                 {profileSub}
               </p>
             )}
           </div>
-
-          {/* Botão Logout */}
           <button
             onClick={logout}
             aria-label="Terminar sessão"
@@ -611,24 +528,21 @@ export function Sidebar() {
               cursor: 'pointer',
               padding: '4px',
               borderRadius: 'var(--radius-md)',
-              transition: 'opacity 0.2s',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              display: 'flex'
             }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
-            <span
-              className="material-symbols-outlined"
-              style={{ fontSize: '20px' }}
-              aria-hidden="true"
-            >
-              logout
-            </span>
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>logout</span>
           </button>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .sidebar-close-btn {
+            display: flex !important;
+          }
+        }
+      `}</style>
     </aside>
   )
 }

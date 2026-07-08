@@ -14,6 +14,8 @@ export function ProtectedRoute({ permission, roles: allowedRoles }: ProtectedRou
   const { can, hasAnyRole } = usePermission();
   const location = useLocation();
 
+  
+
   if (loading) return null;
 
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
