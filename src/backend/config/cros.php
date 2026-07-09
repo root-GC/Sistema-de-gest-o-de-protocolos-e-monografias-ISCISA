@@ -12,7 +12,7 @@ return [
     ],
 
     'allowed_origins' => [
-        'iscisamonografias.vercel.app',
+        'https://iscisamonografias.vercel.app',
     ],
 
     'allowed_headers' => [
