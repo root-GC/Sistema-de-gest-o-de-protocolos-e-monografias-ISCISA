@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './guards/ProtectedRoute.tsx'
 import { AppLayout } from './components/layout/AppLayout.tsx'
 import { lazy, Suspense } from 'react'
+import TestOnlyOfficePage from './pages/TestOnlyOfficePage'
 
 // Páginas públicas
 import LoginPage from './pages/LoginPage.tsx'
@@ -50,6 +51,12 @@ export default function App() {
       <AuthProvider>
         <Suspense fallback={<Loader />}>
           <Routes>
+
+            {/* Teste ONLYOFFICE */}
+            <Route
+              path="/teste-office"
+              element={<TestOnlyOfficePage />}
+            />
 
             {/* ── Públicas ─────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />

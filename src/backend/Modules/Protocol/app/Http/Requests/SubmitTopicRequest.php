@@ -16,6 +16,7 @@ class SubmitTopicRequest extends FormRequest
     {
         return [
             'title' => ['required', 'string', 'min:10', 'max:255'],
+            'justification' => ['nullable', 'string', 'max:5000'],
             'scientific_area_id' => ['required', 'integer', Rule::exists('scientific_areas', 'id')],
             'course_id' => [
                 'required',
@@ -32,6 +33,7 @@ class SubmitTopicRequest extends FormRequest
         return [
             'title.required' => 'O titulo do tema e obrigatorio.',
             'title.min' => 'O titulo do tema deve ter pelo menos 10 caracteres.',
+            'justification.max' => 'A justificacao nao pode exceder 5000 caracteres.',
             'scientific_area_id.required' => 'A area cientifica e obrigatoria.',
             'scientific_area_id.exists' => 'A area cientifica informada e invalida.',
             'course_id.required' => 'O curso e obrigatorio.',

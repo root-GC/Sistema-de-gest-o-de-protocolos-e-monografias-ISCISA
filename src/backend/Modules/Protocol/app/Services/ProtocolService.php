@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Modules\Protocol\app\Models\Document;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Models\ProtocolReviewAssignment;
+use Modules\Protocol\app\Services\EvaluationService;
 use Modules\Protocol\app\Models\Topic;
 use Modules\User\app\Models\User;
 
@@ -342,7 +343,7 @@ class ProtocolService
                 );
             }
 
-            ProtocolReviewAssignment::create([
+            $assignment = ProtocolReviewAssignment::create([
                 'protocol_id' => $protocol->id,
                 'organ_id' => $secretaryProfile->organ_id,
                 'reviewer_one' => $reviewerIds[0] ?? null,
@@ -355,6 +356,13 @@ class ProtocolService
             $protocol->update([
                 'status' => Protocol::STATUS_IN_REVIEW_NUCLEO,
             ]);
+
+            app(EvaluationService::class)->createForProtocol(
+                $protocol,
+                $reviewerIds,
+                $secretary,
+                'nucleo'
+            );
 
             return $protocol->load([
                 'topic:id,title,status,scientific_area_id,supervisor_id',

@@ -18,7 +18,7 @@ export function ProtectedRoute({ permission, roles: allowedRoles }: ProtectedRou
 
   if (loading) return null;
 
-  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!user) return <Navigate to="/teste-office" state={{ from: location }} replace />;
 
   if (permission && !can(permission)) return <Navigate to="/403" replace />;
   if (allowedRoles && !hasAnyRole(allowedRoles)) return <Navigate to="/403" replace />;

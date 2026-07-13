@@ -102,6 +102,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/topics \
   -H "Content-Type: application/json" \
   -d '{
     "title":"Impacto da adesao terapeutica em pacientes hipertensos",
+    "justification":"O estudo é relevante para melhorar a adesão e o acompanhamento dos pacientes no contexto local.",
     "scientific_area_id":1,
     "course_id":2
   }'
@@ -546,7 +547,8 @@ Notas:
 - Apenas o supervisor atribuído ao tema pode aprovar ou rejeitar o protocolo.
 - Após rejeição, o estudante pode submeter uma nova versão do protocolo.
 - Em cada nova submissão, `submission_number` incrementa e os documentos anteriores do mesmo protocolo ficam `inactive`.
-/- Ao aprovar pelo supervisor e encaminhar ao Nucleo, `version` fica no formato `NC_V{submission_number}`.
+- Ao aprovar pelo supervisor e encaminhar ao Nucleo, `version` fica no formato `NC_V{submission_number}`.
+- Ao aprovar no Nucleo e encaminhar ao Comité Científico, `version` passa para `CC_V01`.
 - Os documentos são guardados na tabela `documents` e ligados ao protocolo via `protocol_id`.
 - Cada versão de documento tem um número de versão e um tipo de documento (`protocol`, `comprovativo`, etc).
 - O `file_url` é gerado automaticamente a partir de `file_path` para facilitar o acesso ao ficheiro via HTTP.
