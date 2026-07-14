@@ -13,8 +13,10 @@ use Modules\Protocol\app\Http\Resources\TopicReviewerResource;
 use Modules\Protocol\app\Http\Resources\TopicSecretaryResource;
 use Modules\Protocol\app\Http\Resources\TopicSupervisorResource;
 use Modules\Protocol\app\Models\Topic;
+use Modules\Protocol\app\Models\TopicReviewComment;
 use Modules\Protocol\app\Services\TopicService;
 use Illuminate\Support\Facades\Log;
+
 
 class TopicController extends Controller
 {
@@ -22,75 +24,137 @@ class TopicController extends Controller
 
     public function __construct(private TopicService $topicService) {}
 
+//O user busca seus proprios temas aprovados pelo nucleo, para poder submeter o protocolo
+ public function getMyApprovedTopics(Request $request)
+{
+    $user = $request->user();
 
-        /**
-     * getComments: Lista comentários de um tema.
-     * 
-     * Filtros opcionais via query string:
-     *   - status: active, inactive
-     *   - search: termo de busca no conteúdo
-     *   - order: asc, desc (padrão: desc)
-     * 
-     * Acesso: Supervisor do tema, Avaliadores atribuídos, Secretaria do núcleo, Admin
-     */
-    public function getComments(Request $request, Topic $topic)
-    {
-        $user = $request->user();
+    Log::info('Buscar temas aprovados do estudante', [
+        'user_id' => $user?->id,
+        'user_name' => $user?->name,
+    ]);
 
 
-        // Verifica permissões de acesso aos comentários
-        $this->authorize('viewComments', $topic);
-        //trocar para topic.review
+    $allTopics = Topic::where('student_id', $user->id)->get();
 
-        // Validação dos filtros
-        $validated = $request->validate([
-            'status' => 'nullable|in:active,inactive',
-            'search' => 'nullable|string|max:255',
-            'order' => 'nullable|in:asc,desc',
+    Log::info('Temas encontrados pelo student_id', [
+        'count' => $allTopics->count(),
+        'topics' => $allTopics->map(function ($topic) {
+            return [
+                'id' => $topic->id,
+                'student_id' => $topic->student_id,
+                'status' => $topic->status,
+                'title' => $topic->title ?? null,
+            ];
+        }),
+    ]);
+
+
+    $approvedTopics = Topic::where('student_id', $user->id)
+        ->where('status', Topic::STATUS_APPROVED_NUCLEO)
+        ->get();
+
+
+    Log::info('Temas aprovados encontrados', [
+        'expected_status' => Topic::STATUS_APPROVED_NUCLEO,
+        'count' => $approvedTopics->count(),
+        'topics' => $approvedTopics->pluck('id'),
+    ]);
+
+
+    return response()->json([
+        'success' => true,
+        'data' => TopicReviewerResource::collection($approvedTopics)
+    ]);
+}
+
+/**
+ * getComments: Lista comentários de um tema.
+ *
+ * Filtros opcionais via query string:
+ *   - status: active, inactive
+ *   - search: termo de busca no conteúdo
+ *   - order: asc, desc (padrão: desc)
+ *
+ * Acesso:
+ *   - Supervisor do tema
+ *   - Avaliadores atribuídos
+ *   - Secretaria do núcleo
+ *   - Admin
+ */
+public function getComments(Request $request, Topic $topic)
+{
+    $user = $request->user();
+
+    // Futuramente:
+    //$this->authorize('viewComments', $topic);
+
+
+    // Validação dos filtros
+    $validated = $request->validate([
+        'status' => 'nullable|in:active,inactive',
+        'search' => 'nullable|string|max:255',
+        'order' => 'nullable|in:asc,desc',
+    ]);
+
+
+    // Query base
+    $query = TopicReviewComment::query()
+        ->where('topic_id', $topic->id)
+        ->with([
+            'user:id,name,email',
+            'evaluations.reviewer.user:id,name,email',
         ]);
 
-        // Query base: comentários do tópico
-        $query = TopicReviewComment::query()
-            ->where('topic_id', $topic->id)
-            ->with([
-                'user:id,name,email',
-                'evaluations' => function ($query) {
-                    $query->with('reviewer.user:id,name,email');
-                },
-            ]);
 
-        // Aplica filtro de status
-        if (!empty($validated['status'])) {
-            if ($validated['status'] === 'active') {
-                $query->active();
-            } elseif ($validated['status'] === 'inactive') {
-                $query->where('status', TopicReviewComment::STATUS_INACTIVE);
-            }
+    // Filtro por status
+    if (!empty($validated['status'])) {
+
+        if ($validated['status'] === 'active') {
+            $query->active();
         }
 
-        // Aplica busca por termo
-        if (!empty($validated['search'])) {
-            $query->search($validated['search']);
+        if ($validated['status'] === 'inactive') {
+            $query->where(
+                'status',
+                TopicReviewComment::STATUS_INACTIVE
+            );
         }
-
-        // Aplica ordenação
-        $order = $validated['order'] ?? 'desc';
-        $query->ordered($order);
-
-        // Paginação (15 por página)
-        $comments = $query->paginate(15);
-
-        return response()->json([
-            'success' => true,
-            'data' => TopicReviewCommentResource::collection($comments),
-            'meta' => [
-                'current_page' => $comments->currentPage(),
-                'last_page' => $comments->lastPage(),
-                'total' => $comments->total(),
-            ],
-        ]);
     }
 
+
+    // Pesquisa por texto
+    if (!empty($validated['search'])) {
+        $query->search($validated['search']);
+    }
+
+
+    // Ordenação
+    $query->ordered(
+        $validated['order'] ?? 'desc'
+    );
+
+
+    // Paginação
+    $comments = $query->paginate(15);
+
+
+    // Resposta preparada para React
+    return response()->json([
+        'success' => true,
+
+        'comments' => TopicReviewCommentResource::collection(
+            $comments->items()
+        ),
+
+        'pagination' => [
+            'current_page' => $comments->currentPage(),
+            'last_page' => $comments->lastPage(),
+            'per_page' => $comments->perPage(),
+            'total' => $comments->total(),
+        ],
+    ]);
+}
 
 
     public function store(SubmitTopicRequest $request)

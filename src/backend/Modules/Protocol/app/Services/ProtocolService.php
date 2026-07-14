@@ -50,6 +50,7 @@ class ProtocolService
 
                 $protocol->update([
                     'approved_by_supervisor' => false,
+                    'supervisor_id' => $topic->supervisor_id,
                     'protocol_type' => $protocolType,
                     'submission_number' => $nextSubmission,
                     'status' => Protocol::STATUS_PENDING_SUPERVISOR,
@@ -67,6 +68,7 @@ class ProtocolService
 
                 $protocol = Protocol::create([
                     'student' => $user->id,
+                    'supervisor_id' => $topic->supervisor_id,
                     'current_organ_id' => $currentOrganId,
                     'code' => $temporaryCode,
                     'topic_id' => $topic->id,
@@ -108,23 +110,43 @@ class ProtocolService
             return $protocol->load(['topic:id,title,status', 'documents']);
         });
     }
-
+public function getForSupervisor(User $supervisor)
+{
+    return Protocol::query()
+        ->where('supervisor_id', $supervisor->teacherProfile?->id)
+        ->with([
+            'topic:id,title,status',
+            'student:id,name,email',
+            'supervisor.user:id,name,email',
+            'documents',
+        ])
+        ->latest('submitted_at')
+        ->get();
+}
     public function listForStudent(User $user)
     {
-        return Protocol::query()
-            ->where('student', $user->id)
-            ->with(['topic:id,title,status', 'documents'])
-            ->latest('submitted_at')
-            ->get();
+       return Protocol::query()
+    ->where('student', $user->id)
+    ->with([
+        'topic:id,title,status',
+        'supervisor.user:id,name,email',
+        'documents'
+    ])
+    ->latest('submitted_at')
+    ->get();
     }
 
     public function listForSupervisor(User $supervisor)
     {
         return Protocol::query()
-            ->whereHas('topic', fn($query) => $query->where('supervisor_id', $supervisor->teacherProfile?->id))
-            ->with('topic:id,title,status')
-            ->latest('submitted_at')
-            ->get();
+    ->where('supervisor_id', $supervisor->teacherProfile?->id)
+    ->with([
+        'topic:id,title,status',
+        'student.user:id,name,email',
+        'documents'
+    ])
+    ->latest('submitted_at')
+    ->get();
     }
 
     public function approveBySupervisor(Protocol $protocol, User $supervisor): Protocol

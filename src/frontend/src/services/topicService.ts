@@ -14,6 +14,25 @@ export interface Topic {
   student?: { id: string; name: string; email: string };
 }
 
+export interface ApprovedTopic {
+  id: number;
+  title: string;
+  status: string;
+  status_label: string;
+  submitted_at: string;
+  has_protocol?: boolean;
+  my_assignment?: any;
+  course?: {
+    id: number;
+    name: string;
+    code?: string;
+  };
+  scientific_area?: {
+    id: number;
+    name: string;
+  };
+}
+
 export interface SimilarTopicsWarning {
   has_similar: boolean;
   items: { id: number; title: string }[];
@@ -83,6 +102,19 @@ export const topicService = {
 
   list: () => req('GET', '/api/v1/topics') as Promise<{ topics: Topic[] }>,
 
+  /**
+   * Busca os temas aprovados do estudante logado
+   * GET /api/v1/topics/my-approved
+   * Retorna: { success: true, data: ApprovedTopic[] }
+   */
+  getMyApprovedTopics: () =>
+    req('GET', '/api/v1/topics/my-approved') as Promise<{ 
+      success: boolean;
+      data: ApprovedTopic[];
+    }>,
+ listForSupervisor: () =>
+    req('GET', '/api/v1/supervisor/topics') as Promise<{ topics: Topic[]; total: number }>,
+ 
   getForSupervisor: () =>
     req('GET', '/api/v1/supervisor/topics') as Promise<{ topics: Topic[]; total: number }>,
 
@@ -165,4 +197,6 @@ export const courseService = {
       success: boolean;
       data: Course;
     }>,
+
+   
 };

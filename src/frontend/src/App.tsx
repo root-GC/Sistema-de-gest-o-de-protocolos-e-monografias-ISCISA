@@ -4,9 +4,11 @@ import { ProtectedRoute } from './guards/ProtectedRoute.tsx'
 import { AppLayout } from './components/layout/AppLayout.tsx'
 import { lazy, Suspense } from 'react'
 import TestOnlyOfficePage from './pages/TestOnlyOfficePage'
+import SupervisorProtocolsPage from './pages/supervisor/SupervisorProtocolsPage'
 
 // Páginas públicas
 import LoginPage from './pages/LoginPage.tsx'
+import SupervisorProtocolDetailPage from './pages/supervisor/SupervisorProtocolDetailPage.tsx'
 
 //Páginas protegidas — lazy load
 const DashboardPage          = lazy(() => import('./pages/dashboard/DashboardPage'))
@@ -52,6 +54,11 @@ export default function App() {
         <Suspense fallback={<Loader />}>
           <Routes>
 
+
+          // Dentro das rotas:
+          <Route path="/supervisor" element={<SupervisorProtocolsPage />} />
+          <Route path="/supervisor/protocols/:protocolId" element={<SupervisorProtocolDetailPage />} />
+
             {/* Teste ONLYOFFICE */}
             <Route
               path="/teste-office"
@@ -89,6 +96,11 @@ export default function App() {
                 </Route>
 
                 {/* ── Teacher / Reviewer ──────────────────────── */}
+
+           
+
+{/* <Route path="/reviews/protocols/:protocolId" element={<EvaluationPage />} /> */}
+
                 <Route element={<ProtectedRoute permission="workload.view" />}>
                   <Route path="/workload" element={<WorkloadPage />} />
                 </Route>

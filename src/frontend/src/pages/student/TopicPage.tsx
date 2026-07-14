@@ -57,7 +57,6 @@ export default function TopicPage() {
   async function loadScientificAreas() {
     setLoadingAreas(true)
     try {
-      // O serviço agora retorna diretamente o array
       const areas = await scientificAreaService.list()
       setScientificAreas(areas)
     } catch (e) {
@@ -71,7 +70,6 @@ export default function TopicPage() {
   async function loadCourses(areaId: number) {
     setLoadingCourses(true)
     try {
-      // O serviço agora retorna diretamente o array
       const coursesList = await courseService.list({ scientific_area_id: areaId })
       setCourses(coursesList)
     } catch (e) {
@@ -255,83 +253,131 @@ export default function TopicPage() {
         }}>
           {topics.map((t: Topic) => {
             const badge = getStatusBadge(t.status)
+            const isApproved = t.status === 'topic_approved_nucleo'
+            
             return (
               <div
                 key={t.id}
                 className="card"
                 style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
+                  flexDirection: 'column',
                   gap: 'var(--space-2)',
                   padding: 'var(--space-2) var(--space-3)',
-                  transition: 'box-shadow 0.2s'
+                  transition: 'box-shadow 0.2s',
+                  border: isApproved ? '1px solid var(--primary)' : '1px solid var(--outline-variant)',
+                  background: isApproved ? 'color-mix(in srgb, var(--surface) 95%, var(--primary-container))' : 'var(--surface)'
                 }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{
-                    fontSize: 'var(--body-lg)',
-                    fontWeight: 'var(--font-semibold)',
-                    color: 'var(--on-surface)',
-                    fontFamily: 'var(--font-family)',
-                    marginBottom: '4px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {t.title}
-                  </h3>
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '8px', 
-                    flexWrap: 'wrap',
-                    marginTop: '4px'
-                  }}>
-                    {t.scientific_area && (
-                      <span style={{
-                        fontSize: 'var(--label-sm)',
-                        color: 'var(--on-surface-variant)',
-                        background: 'var(--surface-container)',
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-full)'
+                <div style={{ 
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                  gap: 'var(--space-2)'
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginBottom: '4px' }}>
+                      <h3 style={{
+                        fontSize: 'var(--body-lg)',
+                        fontWeight: 'var(--font-semibold)',
+                        color: 'var(--on-surface)',
+                        fontFamily: 'var(--font-family)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flex: 1
                       }}>
-                        {t.scientific_area.name}
-                      </span>
-                    )}
-                    {t.course && (
-                      <span style={{
-                        fontSize: 'var(--label-sm)',
-                        color: 'var(--on-surface-variant)',
-                        background: 'var(--surface-container)',
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-full)'
-                      }}>
-                        {t.course.name}
-                      </span>
-                    )}
-                  </div>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '2px 10px',
-                    borderRadius: 'var(--radius-full)',
-                    fontSize: 'var(--label-md)',
-                    fontWeight: 'var(--font-medium)',
-                    marginTop: '8px',
-                    background: `var(${badge.dot.includes('primary') ? 'primary-container' : badge.dot.includes('error') ? 'error-container' : badge.dot.includes('tertiary') ? 'tertiary-container' : 'surface-container'})`,
-                    color: `var(${badge.dot.includes('primary') ? 'on-primary-container' : badge.dot.includes('error') ? 'on-error-container' : badge.dot.includes('tertiary') ? 'on-tertiary-container' : 'on-surface-variant'})`
-                  }}>
+                        {t.title}
+                      </h3>
+                      {isApproved && (
+                        <span className="material-symbols-outlined" style={{ 
+                          fontSize: '20px', 
+                          color: 'var(--primary)',
+                          flexShrink: 0
+                        }} title="Tema aprovado">
+                          verified
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '8px', 
+                      flexWrap: 'wrap',
+                      marginTop: '4px'
+                    }}>
+                      {t.scientific_area && (
+                        <span style={{
+                          fontSize: 'var(--label-sm)',
+                          color: 'var(--on-surface-variant)',
+                          background: 'var(--surface-container)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-full)'
+                        }}>
+                          {t.scientific_area.name}
+                        </span>
+                      )}
+                      {t.course && (
+                        <span style={{
+                          fontSize: 'var(--label-sm)',
+                          color: 'var(--on-surface-variant)',
+                          background: 'var(--surface-container)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-full)'
+                        }}>
+                          {t.course.name}
+                        </span>
+                      )}
+                    </div>
                     <span style={{
-                      width: '6px',
-                      height: '6px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '2px 10px',
                       borderRadius: 'var(--radius-full)',
-                      background: badge.dot
-                    }} />
-                    {t.status_label || badge.label}
-                  </span>
+                      fontSize: 'var(--label-md)',
+                      fontWeight: 'var(--font-medium)',
+                      marginTop: '8px',
+                      background: isApproved 
+                        ? 'var(--primary-container)' 
+                        : `var(${badge.dot.includes('primary') ? 'primary-container' : badge.dot.includes('error') ? 'error-container' : badge.dot.includes('tertiary') ? 'tertiary-container' : 'surface-container'})`,
+                      color: isApproved 
+                        ? 'var(--on-primary-container)' 
+                        : `var(${badge.dot.includes('primary') ? 'on-primary-container' : badge.dot.includes('error') ? 'on-error-container' : badge.dot.includes('tertiary') ? 'on-tertiary-container' : 'on-surface-variant'})`
+                    }}>
+                      <span style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: 'var(--radius-full)',
+                        background: badge.dot
+                      }} />
+                      {t.status_label || badge.label}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Nota de protocolo - apenas para temas aprovados */}
+                {isApproved && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: 'var(--space-2) var(--space-3)',
+                    background: 'var(--primary-container)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--primary)',
+                    fontSize: 'var(--body-sm)',
+                    color: 'var(--on-primary-container)',
+                    fontFamily: 'var(--font-family)'
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--primary)' }}>
+                      verified
+                    </span>
+                    <span>
+                      Tema aprovado! Já pode submeter o protocolo de investigação.
+                    </span>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -357,8 +403,8 @@ export default function TopicPage() {
         </div>
       )}
 
-      {/* Aviso de tema bloqueante */}
-      {hasBlockingTopic && (
+      {/* Aviso de tema bloqueante - apenas para temas pendentes, não aprovados */}
+      {hasBlockingTopic && !topics.some(t => t.status === 'topic_approved_nucleo') && (
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -374,12 +420,12 @@ export default function TopicPage() {
             info
           </span>
           <p>
-            Já tens um tema em curso ou aprovado. Não podes submeter um novo tema neste momento.
+            Já tens um tema em curso. Não podes submeter um novo tema neste momento.
           </p>
         </div>
       )}
 
-      {/* Formulário de submissão */}
+      {/* Formulário de submissão - escondido se tiver tema bloqueante */}
       {!hasBlockingTopic && (
         <form
           onSubmit={handleSubmit}

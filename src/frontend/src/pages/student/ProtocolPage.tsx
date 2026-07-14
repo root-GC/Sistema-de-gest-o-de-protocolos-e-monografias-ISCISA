@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { protocolService, type Protocol } from '../../services/protocolService'
+import { topicService, type ApprovedTopic } from '../../services/topicService'
 import '../../styles/global.css'
 
 // ============================================================
@@ -30,14 +31,20 @@ function formatFileSize(bytes: number): string {
 // ============================================================
 export default function ProtocolPage() {
   const [protocols, setProtocols] = useState<Protocol[]>([])
+  const [approvedTopics, setApprovedTopics] = useState<ApprovedTopic[]>([])
   const [loading, setLoading] = useState(true)
-  const [topicId, setTopicId] = useState('')
+  const [loadingTopics, setLoadingTopics] = useState(false)
+  const [selectedTopicId, setSelectedTopicId] = useState('')
   const [protocolType, setProtocolType] = useState('protocol')
   const [file, setFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { 
+    load()
+    loadApprovedTopics()
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -51,19 +58,47 @@ export default function ProtocolPage() {
     }
   }
 
+  async function loadApprovedTopics() {
+    setLoadingTopics(true)
+    try {
+      const response = await topicService.getMyApprovedTopics()
+      // A API retorna { success: true, data: ApprovedTopic[] }
+      const topics = response.data || []
+      setApprovedTopics(topics)
+    } catch (e) {
+      console.error('Erro ao carregar temas aprovados:', e)
+      setApprovedTopics([])
+    } finally {
+      setLoadingTopics(false)
+    }
+  }
+
   const current = protocols[0]
   const canSubmitNew = !current || current.status === 'protocol_rejected_supervisor'
 
+  const selectedTopic = approvedTopics.find(t => t.id === Number(selectedTopicId))
+  const topicHasProtocol = selectedTopic?.has_protocol || false
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!file) return
+    if (!file || !selectedTopicId) return
+    
+    if (topicHasProtocol) {
+      setError('Este tema já possui um protocolo ativo.')
+      return
+    }
+
     setSubmitting(true)
     setError(null)
+    setSuccess(null)
     try {
-      await protocolService.submit(Number(topicId), protocolType, file)
+      await protocolService.submit(Number(selectedTopicId), protocolType, file)
       setFile(null)
-      setTopicId('')
+      setSelectedTopicId('')
+      setSuccess('Protocolo submetido com sucesso!')
       await load()
+      await loadApprovedTopics()
+      setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       const e = err as Error & { status?: number }
       if (e.status === 409) {
@@ -152,6 +187,25 @@ export default function ProtocolPage() {
         </span>
       </div>
 
+      {/* Mensagem de sucesso */}
+      {success && (
+        <div role="status" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-1)',
+          padding: 'var(--space-2) var(--space-3)',
+          background: 'var(--primary-container)',
+          color: 'var(--on-primary-container)',
+          borderRadius: 'var(--radius-lg)',
+          fontSize: 'var(--body-md)',
+          fontWeight: 'var(--font-medium)',
+          marginBottom: 'var(--space-4)'
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>check_circle</span>
+          {success}
+        </div>
+      )}
+
       {/* Erro */}
       {error && (
         <div role="alert" style={{
@@ -190,7 +244,6 @@ export default function ProtocolPage() {
                 flexDirection: 'column',
                 gap: 'var(--space-2)'
               }}>
-                {/* Cabeçalho do protocolo */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -240,10 +293,18 @@ export default function ProtocolPage() {
                     }}>
                       Submissão nº{p.submission_number} • Versão {p.version}
                     </p>
+                    {p.topic && (
+                      <p style={{
+                        fontSize: 'var(--label-sm)',
+                        color: 'var(--on-surface-variant)',
+                        marginTop: '4px'
+                      }}>
+                        Tema: {p.topic.title}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                {/* Justificação (se existir) */}
                 {p.justification && (
                   <div style={{
                     padding: 'var(--space-2) var(--space-3)',
@@ -268,7 +329,6 @@ export default function ProtocolPage() {
                   </div>
                 )}
 
-                {/* Documentos anexos */}
                 {activeDocs.length > 0 && (
                   <div style={{
                     display: 'flex',
@@ -356,13 +416,13 @@ export default function ProtocolPage() {
             Nenhum protocolo submetido
           </p>
           <p style={{ fontSize: 'var(--body-md)', marginTop: 'var(--space-1)' }}>
-            Submeta o seu primeiro protocolo abaixo.
+            Selecione um tema aprovado abaixo para submeter o seu protocolo.
           </p>
         </div>
       )}
 
       {/* Formulário de submissão */}
-      {canSubmitNew ? (
+      {canSubmitNew && (
         <form
           onSubmit={handleSubmit}
           className="card"
@@ -382,22 +442,21 @@ export default function ProtocolPage() {
             Submeter novo protocolo
           </h2>
 
-          {/* ID do tema */}
+          {/* Combobox de temas aprovados */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
             <label htmlFor="topicId" style={{
               fontSize: 'var(--label-md)',
               fontWeight: 'var(--font-medium)',
               color: 'var(--on-surface-variant)'
             }}>
-              ID do tema aprovado
+              Tema aprovado
             </label>
-            <input
+            <select
               id="topicId"
-              type="number"
-              value={topicId}
-              onChange={e => setTopicId(e.target.value)}
-              placeholder="Ex: 42"
+              value={selectedTopicId}
+              onChange={e => setSelectedTopicId(e.target.value)}
               required
+              disabled={loadingTopics || approvedTopics.length === 0}
               style={{
                 width: '100%',
                 padding: '12px var(--space-2)',
@@ -408,8 +467,10 @@ export default function ProtocolPage() {
                 fontFamily: 'var(--font-family)',
                 color: 'var(--on-surface)',
                 outline: 'none',
+                cursor: approvedTopics.length === 0 ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                appearance: 'auto'
               }}
               onFocus={e => {
                 e.target.style.borderColor = 'var(--primary)'
@@ -419,7 +480,39 @@ export default function ProtocolPage() {
                 e.target.style.borderColor = 'var(--outline-variant)'
                 e.target.style.boxShadow = 'none'
               }}
-            />
+            >
+              <option value="">
+                {loadingTopics 
+                  ? 'A carregar temas...' 
+                  : approvedTopics.length === 0 
+                    ? 'Nenhum tema aprovado disponível' 
+                    : 'Selecione um tema'
+                }
+              </option>
+              {approvedTopics.map(topic => (
+                <option 
+                  key={topic.id} 
+                  value={topic.id}
+                  disabled={topic.has_protocol}
+                >
+                  {topic.title} 
+                  {topic.has_protocol ? ' (já tem protocolo)' : ''} 
+                </option>
+              ))}
+            </select>
+            {selectedTopic && topicHasProtocol && (
+              <p style={{
+                fontSize: 'var(--label-sm)',
+                color: 'var(--error)',
+                marginTop: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>warning</span>
+                Este tema já possui um protocolo ativo.
+              </p>
+            )}
           </div>
 
           {/* Grid: Tipo + Ficheiro */}
@@ -428,7 +521,6 @@ export default function ProtocolPage() {
             gridTemplateColumns: '1fr 1fr',
             gap: 'var(--space-3)'
           }}>
-            {/* Tipo de protocolo */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
               <label htmlFor="protocolType" style={{
                 fontSize: 'var(--label-md)',
@@ -454,23 +546,13 @@ export default function ProtocolPage() {
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   boxSizing: 'border-box',
-                  appearance: 'none',
-                  backgroundImage: 'none'
-                }}
-                onFocus={e => {
-                  e.target.style.borderColor = 'var(--primary)'
-                  e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = 'var(--outline-variant)'
-                  e.target.style.boxShadow = 'none'
+                  appearance: 'auto'
                 }}
               >
                 <option value="protocol">Protocolo</option>
               </select>
             </div>
 
-            {/* Upload de ficheiro */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
               <label htmlFor="file" style={{
                 fontSize: 'var(--label-md)',
@@ -536,7 +618,7 @@ export default function ProtocolPage() {
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={submitting || !file}
+            disabled={submitting || !file || !selectedTopicId || topicHasProtocol}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -547,8 +629,8 @@ export default function ProtocolPage() {
               fontWeight: 'var(--font-semibold)',
               borderRadius: 'var(--radius-lg)',
               border: 'none',
-              cursor: submitting || !file ? 'not-allowed' : 'pointer',
-              opacity: submitting || !file ? 0.7 : 1,
+              cursor: submitting || !file || !selectedTopicId || topicHasProtocol ? 'not-allowed' : 'pointer',
+              opacity: submitting || !file || !selectedTopicId || topicHasProtocol ? 0.7 : 1,
               transition: 'all 0.2s ease',
               boxShadow: 'var(--elevation-1)',
               marginTop: 'var(--space-1)'
@@ -573,8 +655,10 @@ export default function ProtocolPage() {
             )}
           </button>
         </form>
-      ) : (
-        /* Mensagem de bloqueio */
+      )}
+
+      {/* Mensagem de bloqueio */}
+      {!canSubmitNew && (
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
