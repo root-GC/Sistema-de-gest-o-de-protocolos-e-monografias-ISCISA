@@ -116,6 +116,7 @@ class RoleSeeder extends Seeder
             'reviewer' => [
                 'description' => 'Revisor — avalia protocolos e preenche fichas de avaliação',
                 'permissions' => [
+                    'topic.review',             //Ver o tema, colocar comentarios e mais
                     'protocol.review',        // aceder ao protocolo para revisão
                     'protocol.evaluate',      // preencher ficha estruturada de avaliação (RF-036)
                     'evaluation.create',      // criar avaliação

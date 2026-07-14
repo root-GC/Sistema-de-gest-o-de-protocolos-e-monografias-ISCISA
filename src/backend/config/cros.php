@@ -13,6 +13,7 @@ return [
 
     'allowed_origins' => [
         'https://iscisamonografias.vercel.app',
+        'http://localhost:5173'
     ],
 
     'allowed_headers' => [

@@ -241,10 +241,11 @@ php artisan optimize:clear
 4. Criar as tabelas:
 
 ```powershell
-php artisan migrate:fresh `
---path=Modules/Auth/Database/Migrations `
---path=Modules/Organization/Database/Migrations `
+php artisan migrate:fresh 
+--path=Modules/Auth/Database/Migrations 
+--path=Modules/Organization/Database/Migrations 
 --path=Modules/Protocol/Database/Migrations
+
 ```
 
 5. Inserir dados iniciais:
@@ -253,6 +254,8 @@ php artisan migrate:fresh `
 php artisan db:seed --class="Modules\Auth\Database\Seeders\AuthDatabaseSeeder"
 
 php artisan db:seed --class="Modules\Organization\Database\Seeders\OrganizationDatabaseSeeder"
+
+ php artisan db:seed --class="Modules\Protocol\Database\Seeders\ProtocolDatabaseSeeder"                                                           
 ```
 
 6. Iniciar o servidor:

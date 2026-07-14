@@ -1,5 +1,14 @@
+// src/pages/TopicPage.tsx
 import { useEffect, useState } from 'react'
-import { topicService, type Topic, type SimilarTopicsWarning } from '../../services/topicService'
+import { 
+  topicService, 
+  scientificAreaService, 
+  courseService,
+  type Topic, 
+  type SimilarTopicsWarning,
+  type ScientificArea,
+  type Course
+} from '../../services/topicService'
 import '../../styles/global.css'
 
 export default function TopicPage() {
@@ -12,7 +21,26 @@ export default function TopicPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => { loadTopics() }, [])
+  // Estados para os selects
+  const [scientificAreas, setScientificAreas] = useState<ScientificArea[]>([])
+  const [courses, setCourses] = useState<Course[]>([])
+  const [loadingAreas, setLoadingAreas] = useState(false)
+  const [loadingCourses, setLoadingCourses] = useState(false)
+
+  useEffect(() => { 
+    loadTopics()
+    loadScientificAreas()
+  }, [])
+
+  // Carregar cursos quando a área científica mudar
+  useEffect(() => {
+    if (scientificAreaId) {
+      loadCourses(Number(scientificAreaId))
+    } else {
+      setCourses([])
+      setCourseId('')
+    }
+  }, [scientificAreaId])
 
   async function loadTopics() {
     setLoading(true)
@@ -23,6 +51,34 @@ export default function TopicPage() {
       setError((e as Error).message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadScientificAreas() {
+    setLoadingAreas(true)
+    try {
+      // O serviço agora retorna diretamente o array
+      const areas = await scientificAreaService.list()
+      setScientificAreas(areas)
+    } catch (e) {
+      console.error('Erro ao carregar áreas científicas:', e)
+      setScientificAreas([])
+    } finally {
+      setLoadingAreas(false)
+    }
+  }
+
+  async function loadCourses(areaId: number) {
+    setLoadingCourses(true)
+    try {
+      // O serviço agora retorna diretamente o array
+      const coursesList = await courseService.list({ scientific_area_id: areaId })
+      setCourses(coursesList)
+    } catch (e) {
+      console.error('Erro ao carregar cursos:', e)
+      setCourses([])
+    } finally {
+      setLoadingCourses(false)
     }
   }
 
@@ -43,6 +99,8 @@ export default function TopicPage() {
       })
       if (res.similar_topics_warning.has_similar) setWarning(res.similar_topics_warning)
       setTitle('')
+      setScientificAreaId('')
+      setCourseId('')
       await loadTopics()
     } catch (e) {
       setError((e as Error).message)
@@ -195,7 +253,7 @@ export default function TopicPage() {
           flexDirection: 'column',
           gap: 'var(--space-2)'
         }}>
-          {topics.map(t => {
+          {topics.map((t: Topic) => {
             const badge = getStatusBadge(t.status)
             return (
               <div
@@ -224,6 +282,35 @@ export default function TopicPage() {
                   }}>
                     {t.title}
                   </h3>
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '8px', 
+                    flexWrap: 'wrap',
+                    marginTop: '4px'
+                  }}>
+                    {t.scientific_area && (
+                      <span style={{
+                        fontSize: 'var(--label-sm)',
+                        color: 'var(--on-surface-variant)',
+                        background: 'var(--surface-container)',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-full)'
+                      }}>
+                        {t.scientific_area.name}
+                      </span>
+                    )}
+                    {t.course && (
+                      <span style={{
+                        fontSize: 'var(--label-sm)',
+                        color: 'var(--on-surface-variant)',
+                        background: 'var(--surface-container)',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-full)'
+                      }}>
+                        {t.course.name}
+                      </span>
+                    )}
+                  </div>
                   <span style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -232,8 +319,9 @@ export default function TopicPage() {
                     borderRadius: 'var(--radius-full)',
                     fontSize: 'var(--label-md)',
                     fontWeight: 'var(--font-medium)',
-                    background: `var(--${badge.dot.includes('primary') ? 'primary-container' : badge.dot.includes('error') ? 'error-container' : badge.dot.includes('tertiary') ? 'tertiary-container' : 'surface-container'})`,
-                    color: `var(--${badge.dot.includes('primary') ? 'on-primary-container' : badge.dot.includes('error') ? 'on-error-container' : badge.dot.includes('tertiary') ? 'on-tertiary-container' : 'on-surface-variant'})`
+                    marginTop: '8px',
+                    background: `var(${badge.dot.includes('primary') ? 'primary-container' : badge.dot.includes('error') ? 'error-container' : badge.dot.includes('tertiary') ? 'tertiary-container' : 'surface-container'})`,
+                    color: `var(${badge.dot.includes('primary') ? 'on-primary-container' : badge.dot.includes('error') ? 'on-error-container' : badge.dot.includes('tertiary') ? 'on-tertiary-container' : 'on-surface-variant'})`
                   }}>
                     <span style={{
                       width: '6px',
@@ -363,7 +451,7 @@ export default function TopicPage() {
             gridTemplateColumns: '1fr 1fr',
             gap: 'var(--space-3)'
           }}>
-            {/* Campo: Área Científica */}
+            {/* Campo: Área Científica (Select) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
               <label
                 htmlFor="scientificArea"
@@ -376,13 +464,12 @@ export default function TopicPage() {
               >
                 Área científica
               </label>
-              <input
+              <select
                 id="scientificArea"
-                type="number"
                 value={scientificAreaId}
                 onChange={e => setScientificAreaId(e.target.value)}
-                placeholder="ID da área"
                 required
+                disabled={loadingAreas}
                 style={{
                   width: '100%',
                   padding: '12px var(--space-2)',
@@ -394,7 +481,9 @@ export default function TopicPage() {
                   color: 'var(--on-surface)',
                   outline: 'none',
                   transition: 'all 0.2s ease',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  cursor: 'pointer',
+                  appearance: 'auto'
                 }}
                 onFocus={e => {
                   e.target.style.borderColor = 'var(--primary)'
@@ -404,10 +493,19 @@ export default function TopicPage() {
                   e.target.style.borderColor = 'var(--outline-variant)'
                   e.target.style.boxShadow = 'none'
                 }}
-              />
+              >
+                <option value="">
+                  {loadingAreas ? 'A carregar...' : 'Selecione uma área'}
+                </option>
+                {scientificAreas.map((area: ScientificArea) => (
+                  <option key={area.id} value={area.id}>
+                    {area.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* Campo: Curso */}
+            {/* Campo: Curso (Select) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
               <label
                 htmlFor="course"
@@ -420,13 +518,12 @@ export default function TopicPage() {
               >
                 Curso
               </label>
-              <input
+              <select
                 id="course"
-                type="number"
                 value={courseId}
                 onChange={e => setCourseId(e.target.value)}
-                placeholder="ID do curso"
                 required
+                disabled={!scientificAreaId || loadingCourses}
                 style={{
                   width: '100%',
                   padding: '12px var(--space-2)',
@@ -438,7 +535,10 @@ export default function TopicPage() {
                   color: 'var(--on-surface)',
                   outline: 'none',
                   transition: 'all 0.2s ease',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  cursor: !scientificAreaId ? 'not-allowed' : 'pointer',
+                  opacity: !scientificAreaId ? 0.6 : 1,
+                  appearance: 'auto'
                 }}
                 onFocus={e => {
                   e.target.style.borderColor = 'var(--primary)'
@@ -448,7 +548,21 @@ export default function TopicPage() {
                   e.target.style.borderColor = 'var(--outline-variant)'
                   e.target.style.boxShadow = 'none'
                 }}
-              />
+              >
+                <option value="">
+                  {!scientificAreaId 
+                    ? 'Selecione uma área primeiro' 
+                    : loadingCourses 
+                      ? 'A carregar...' 
+                      : 'Selecione um curso'
+                  }
+                </option>
+                {courses.map((course: Course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.name} {course.code ? `(${course.code})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -542,7 +656,7 @@ export default function TopicPage() {
             gap: 'var(--space-1)',
             padding: 0
           }}>
-            {warning.items.map(it => (
+            {warning.items.map((it: { id: number; title: string }) => (
               <li
                 key={it.id}
                 style={{

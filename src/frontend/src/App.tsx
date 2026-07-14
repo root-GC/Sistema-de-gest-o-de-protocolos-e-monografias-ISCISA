@@ -9,7 +9,7 @@ import TestOnlyOfficePage from './pages/TestOnlyOfficePage'
 import LoginPage from './pages/LoginPage.tsx'
 
 //Páginas protegidas — lazy load
-const DashboardPage          = lazy(() => import('./pages/shared/DashboardPage'))
+const DashboardPage          = lazy(() => import('./pages/dashboard/DashboardPage'))
 const Page403                = lazy(() => import('./pages/shared/Page403'))
 
 // Student

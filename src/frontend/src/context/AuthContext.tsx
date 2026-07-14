@@ -1,3 +1,4 @@
+// context/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 // @ts-ignore
@@ -48,6 +49,12 @@ interface AuthContextType {
   logout: () => Promise<void>;
   switchRole: (role: Role) => void;
   refresh: () => Promise<void>;
+  
+  // 🆕 Funções de verificação de permissões para o dashboard
+  hasPermission: (permission: string) => boolean;
+  hasAnyPermission: (permissions: string[]) => boolean;
+  hasAllPermissions: (permissions: string[]) => boolean;
+  canAccessWidget: (requiredPermissions?: string[], anyPermission?: boolean) => boolean;
 }
 
 // ---------- Contexto ----------
@@ -101,9 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Aguarda o React processar as atualizações de estado
       await new Promise<void>(resolve => {
-        // Usa requestAnimationFrame para garantir que o DOM foi atualizado
         requestAnimationFrame(() => {
-          // Timeout adicional para garantir que o estado está sincronizado
           setTimeout(() => {
             resolve();
           }, 100);
@@ -139,7 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hydrate(userData);
     } catch (error) {
       console.error('Failed to refresh user data:', error);
-      // Se falhar ao refresh, faz logout
       clear();
     }
   }, []);
@@ -154,6 +158,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfiles({} as Record<Role, Profile | null>);
     setActiveRole(null);
   }
+
+  // 🆕 Verifica se o usuário tem uma permissão específica
+  const hasPermission = useCallback((permission: string): boolean => {
+    return permissions.includes(permission);
+  }, [permissions]);
+
+  // 🆕 Verifica se o usuário tem pelo menos uma das permissões
+  const hasAnyPermission = useCallback((perms: string[]): boolean => {
+    return perms.some(p => permissions.includes(p));
+  }, [permissions]);
+
+  // 🆕 Verifica se o usuário tem todas as permissões
+  const hasAllPermissions = useCallback((perms: string[]): boolean => {
+    return perms.every(p => permissions.includes(p));
+  }, [permissions]);
+
+  // 🆕 Verifica se pode acessar um widget baseado em suas configurações
+  const canAccessWidget = useCallback((
+    requiredPermissions?: string[], 
+    anyPermission?: boolean
+  ): boolean => {
+    // Se não requer permissões, acesso público
+    if (!requiredPermissions || requiredPermissions.length === 0) {
+      return true;
+    }
+    
+    // Se anyPermission, basta ter uma
+    if (anyPermission) {
+      return hasAnyPermission(requiredPermissions);
+    }
+    
+    // Por padrão, precisa ter todas
+    return hasAllPermissions(requiredPermissions);
+  }, [hasAnyPermission, hasAllPermissions]);
 
   const activeProfile = profiles[activeRole!] ?? null;
 
@@ -171,6 +209,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         switchRole,
         refresh,
+        hasPermission,
+        hasAnyPermission,
+        hasAllPermissions,
+        canAccessWidget,
       }}
     >
       {children}

@@ -14,12 +14,84 @@ use Modules\Protocol\app\Http\Resources\TopicSecretaryResource;
 use Modules\Protocol\app\Http\Resources\TopicSupervisorResource;
 use Modules\Protocol\app\Models\Topic;
 use Modules\Protocol\app\Services\TopicService;
+use Illuminate\Support\Facades\Log;
 
 class TopicController extends Controller
 {
     use AuthorizesRequests;
 
     public function __construct(private TopicService $topicService) {}
+
+
+        /**
+     * getComments: Lista comentários de um tema.
+     * 
+     * Filtros opcionais via query string:
+     *   - status: active, inactive
+     *   - search: termo de busca no conteúdo
+     *   - order: asc, desc (padrão: desc)
+     * 
+     * Acesso: Supervisor do tema, Avaliadores atribuídos, Secretaria do núcleo, Admin
+     */
+    public function getComments(Request $request, Topic $topic)
+    {
+        $user = $request->user();
+
+
+        // Verifica permissões de acesso aos comentários
+        $this->authorize('viewComments', $topic);
+        //trocar para topic.review
+
+        // Validação dos filtros
+        $validated = $request->validate([
+            'status' => 'nullable|in:active,inactive',
+            'search' => 'nullable|string|max:255',
+            'order' => 'nullable|in:asc,desc',
+        ]);
+
+        // Query base: comentários do tópico
+        $query = TopicReviewComment::query()
+            ->where('topic_id', $topic->id)
+            ->with([
+                'user:id,name,email',
+                'evaluations' => function ($query) {
+                    $query->with('reviewer.user:id,name,email');
+                },
+            ]);
+
+        // Aplica filtro de status
+        if (!empty($validated['status'])) {
+            if ($validated['status'] === 'active') {
+                $query->active();
+            } elseif ($validated['status'] === 'inactive') {
+                $query->where('status', TopicReviewComment::STATUS_INACTIVE);
+            }
+        }
+
+        // Aplica busca por termo
+        if (!empty($validated['search'])) {
+            $query->search($validated['search']);
+        }
+
+        // Aplica ordenação
+        $order = $validated['order'] ?? 'desc';
+        $query->ordered($order);
+
+        // Paginação (15 por página)
+        $comments = $query->paginate(15);
+
+        return response()->json([
+            'success' => true,
+            'data' => TopicReviewCommentResource::collection($comments),
+            'meta' => [
+                'current_page' => $comments->currentPage(),
+                'last_page' => $comments->lastPage(),
+                'total' => $comments->total(),
+            ],
+        ]);
+    }
+
+
 
     public function store(SubmitTopicRequest $request)
     {

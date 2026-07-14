@@ -611,6 +611,48 @@ class TopicService
     }
 
     /**
+     * getComments: Retorna comentários de um tema com filtros e paginação.
+     *
+     * @param Topic $topic
+     * @param array $filters Filtros: status, search, order, per_page
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
+     */
+    public function getComments(Topic $topic, array $filters = [])
+    {
+        $query = TopicReviewComment::query()
+            ->where('topic_id', $topic->id)
+            ->with([
+                'user:id,name,email',
+                'evaluations' => function ($query) {
+                    $query->with('reviewer.user:id,name,email');
+                },
+            ]);
+
+        // Filtro por status
+        if (!empty($filters['status'])) {
+            if ($filters['status'] === 'active') {
+                $query->active();
+            } elseif ($filters['status'] === 'inactive') {
+                $query->where('status', TopicReviewComment::STATUS_INACTIVE);
+            }
+        }
+
+        // Busca por termo no conteúdo
+        if (!empty($filters['search'])) {
+            $query->search($filters['search']);
+        }
+
+        // Ordenação
+        $order = $filters['order'] ?? 'desc';
+        $query->ordered($order);
+
+        // Paginação (padrão 15 por página)
+        $perPage = $filters['per_page'] ?? 15;
+        
+        return $query->paginate($perPage);
+    }
+
+    /**
      * Query base de docentes elegíveis para revisão de um tema.
      *
      * Restrições:
@@ -636,4 +678,34 @@ class TopicService
             ->whereNull('users.deleted_at')
             ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
     }
+
+    public function viewComments(User $user, Topic $topic): bool
+{
+    // Admin
+    if ($user->hasPermission('admin.access')) {
+        return true;
+    }
+
+    // Supervisor
+    $teacher = $user->teacherProfile;
+
+    if (
+        $teacher &&
+        $teacher->id === $topic->supervisor_id
+    ) {
+        return true;
+    }
+
+    // Avaliador
+    if ($this->viewForReviewer($user, $topic)) {
+        return true;
+    }
+
+    // Secretaria
+    if ($this->viewForSecretary($user, $topic)) {
+        return true;
+    }
+
+    return false;
+}
 }

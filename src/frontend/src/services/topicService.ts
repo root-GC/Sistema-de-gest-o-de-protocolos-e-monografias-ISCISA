@@ -1,4 +1,7 @@
+// src/services/topicService.ts
 import { req } from './apiClient';
+
+// ============ Interfaces ============
 
 export interface Topic {
   id: number;
@@ -15,6 +18,60 @@ export interface SimilarTopicsWarning {
   has_similar: boolean;
   items: { id: number; title: string }[];
 }
+
+export interface ScientificArea {
+  id: number;
+  name: string;
+  organ_id: number;
+  organ?: {
+    id: number;
+    name: string;
+  };
+}
+
+export interface Course {
+  id: number;
+  name: string;
+  code: string;
+  scientific_area_id: number;
+}
+
+// Interface para resposta paginada do Laravel
+interface PaginatedResponse<T> {
+  current_page: number;
+  data: T[];
+  total: number;
+}
+
+// Interface para resposta padrão da API
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+}
+
+// ============ Helper para extrair dados ============
+
+function extractData<T>(response: any): T[] {
+  // Caso 1: Resposta paginada dentro de data
+  if (response?.data?.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  
+  // Caso 2: Array direto em data
+  if (response?.data && Array.isArray(response.data)) {
+    return response.data;
+  }
+  
+  // Caso 3: Resposta paginada direta
+  if (response?.data && Array.isArray(response.data)) {
+    return response.data;
+  }
+  
+  // Fallback: array vazio
+  return [];
+}
+
+// ============ Topic Service ============
 
 export const topicService = {
   submit: (payload: { title: string; scientific_area_id: number; course_id: number }) =>
@@ -58,4 +115,54 @@ export const topicService = {
 
   submitEvaluation: (topicId: number, decision: 'approved' | 'rejected', comment_id: number | null = null) =>
     req('POST', `/api/v1/topics/${topicId}/evaluations`, { decision, comment_id }),
+};
+
+// ============ Scientific Area Service ============
+
+export const scientificAreaService = {
+  list: async (params?: { organ_id?: number }): Promise<ScientificArea[]> => {
+    const query = params?.organ_id ? `?organ_id=${params.organ_id}` : '';
+    const response = await req('GET', `/api/v1/scientific-areas${query}`);
+    
+    // Extrai os dados independente da estrutura
+    const data = extractData<ScientificArea>(response);
+    return data;
+  },
+
+  search: async (term: string): Promise<ScientificArea[]> => {
+    const response = await req('GET', `/api/v1/scientific-areas/search?q=${encodeURIComponent(term)}`);
+    return extractData<ScientificArea>(response);
+  },
+
+  getById: (id: number) =>
+    req('GET', `/api/v1/scientific-areas/${id}`) as Promise<{
+      success: boolean;
+      data: ScientificArea;
+    }>,
+};
+
+// ============ Course Service ============
+
+export const courseService = {
+  list: async (params?: { scientific_area_id?: number }): Promise<Course[]> => {
+    const query = params?.scientific_area_id 
+      ? `?scientific_area_id=${params.scientific_area_id}` 
+      : '';
+    const response = await req('GET', `/api/v1/courses${query}`);
+    
+    // Extrai os dados independente da estrutura
+    const data = extractData<Course>(response);
+    return data;
+  },
+
+  search: async (term: string): Promise<Course[]> => {
+    const response = await req('GET', `/api/v1/courses/search?q=${encodeURIComponent(term)}`);
+    return extractData<Course>(response);
+  },
+
+  getByCode: (code: string) =>
+    req('GET', `/api/v1/courses/code/${encodeURIComponent(code)}`) as Promise<{
+      success: boolean;
+      data: Course;
+    }>,
 };
