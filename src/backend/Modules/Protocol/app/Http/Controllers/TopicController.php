@@ -163,7 +163,15 @@ class TopicController extends Controller
 
         $this->authorize('approveBySupervisor', $topic);
 
-        $result = $this->topicService->approveBySupervisor($topic, $user);
+        $validated = $request->validate([
+            'comment' => 'nullable|string|max:5000',
+            'comments' => 'nullable|string|max:5000',
+            'supervisor_comment' => 'nullable|string|max:5000',
+        ]);
+
+        $comment = $validated['comment'] ?? $validated['comments'] ?? $validated['supervisor_comment'] ?? null;
+
+        $result = $this->topicService->approveBySupervisor($topic, $user, $comment);
 
         return response()->json([
             'message' => 'Tema aprovado com sucesso pelo supervisor e encaminhado ao Nucleo Cientifico.',
@@ -177,12 +185,18 @@ class TopicController extends Controller
 
         $this->authorize('rejectBySupervisor', $topic);
 
-        $justification = $request->input('justification');
+        $validated = $request->validate([
+            'comment' => 'nullable|string|max:5000',
+            'comments' => 'nullable|string|max:5000',
+            'supervisor_comment' => 'nullable|string|max:5000',
+        ]);
 
-        $result = $this->topicService->rejectBySupervisor($topic, $user, $justification);
+        $comment = $validated['comment'] ?? $validated['comments'] ?? $validated['supervisor_comment'] ?? null;
+
+        $result = $this->topicService->rejectBySupervisor($topic, $user, $comment);
 
         return response()->json([
-            'message' => 'Tema rejeitado pelo supervisor.',
+            'message' => 'Tema não aprovado pelo supervisor.',
             'topic' => $result,
         ]);
     }

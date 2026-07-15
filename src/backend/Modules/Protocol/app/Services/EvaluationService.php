@@ -13,6 +13,7 @@ use Modules\Protocol\app\Models\Opinion;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Models\ProtocolReviewAssignment;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
+use Modules\User\app\Models\Organ;
 use Modules\User\app\Models\User;
 
 class EvaluationService
@@ -23,52 +24,70 @@ class EvaluationService
             $protocol = Protocol::lockForUpdate()->findOrFail($protocol->id);
             $version = $protocol->version ?: '1';
 
-            $form = EvaluationForm::create([
-                'protocol_id' => $protocol->id,
-                'version' => $version,
-                'organ' => $organ,
-                'status' => EvaluationForm::STATUS_PENDING_REVIEW,
-            ]);
+            $form = EvaluationForm::query()->firstOrCreate(
+                [
+                    'protocol_id' => $protocol->id,
+                    'version' => $version,
+                    'organ' => $organ,
+                ],
+                ['status' => EvaluationForm::STATUS_PENDING_REVIEW]
+            );
 
-            $criteria = EvaluationCriterion::query()
-                ->where('is_active', true)
-                ->orderBy('order_column')
-                ->get();
+            if (! $form->formCriteria()->exists()) {
+                $criteria = EvaluationCriterion::query()
+                    ->where('is_active', true)
+                    ->orderBy('order_column')
+                    ->get();
 
-            if ($criteria->isEmpty()) {
-                throw new HttpResponseException(
-                    response()->json([
-                        'message' => 'Nenhum critério de avaliação activo encontrado. Execute o seeder: php artisan module:seed Protocol',
-                    ], 500)
-                );
+                if ($criteria->isEmpty()) {
+                    throw new HttpResponseException(
+                        response()->json([
+                            'message' => 'Nenhum critério de avaliação activo encontrado. Execute o seeder: php artisan module:seed Protocol',
+                        ], 500)
+                    );
+                }
+
+                foreach ($criteria as $criterion) {
+                    EvaluationFormCriterion::create([
+                        'evaluation_form_id' => $form->id,
+                        'criterion_id' => $criterion->id,
+                        'group_name' => $criterion->group_name,
+                        'criterion_name' => $criterion->name,
+                        'order_column' => $criterion->order_column,
+                    ]);
+                }
             }
 
-            foreach ($criteria as $criterion) {
-                EvaluationFormCriterion::create([
-                    'evaluation_form_id' => $form->id,
-                    'criterion_id' => $criterion->id,
-                    'group_name' => $criterion->group_name,
-                    'criterion_name' => $criterion->name,
-                    'order_column' => $criterion->order_column,
-                ]);
-            }
+            $assignment = null;
 
-            $assignment = ProtocolReviewAssignment::query()
-                ->where('protocol_id', $protocol->id)
-                ->latest('assigned_at')
-                ->first();
+            if ($reviewerIds !== []) {
+                $assignment = ProtocolReviewAssignment::query()
+                    ->where('protocol_id', $protocol->id)
+                    ->latest('assigned_at')
+                    ->first();
+
+                if (! $assignment) {
+                    throw new HttpResponseException(
+                        response()->json(['message' => 'Nenhuma atribuição de revisores encontrada para este protocolo.'], 422)
+                    );
+                }
+            }
 
             foreach ($reviewerIds as $reviewerId) {
                 if (! $reviewerId) {
                     continue;
                 }
 
-                ReviewerEvaluation::create([
-                    'evaluation_form_id' => $form->id,
-                    'protocol_review_assignment_id' => $assignment->id,
-                    'reviewer_id' => $reviewerId,
-                    'status' => ReviewerEvaluation::STATUS_PENDING,
-                ]);
+                ReviewerEvaluation::query()->firstOrCreate(
+                    [
+                        'evaluation_form_id' => $form->id,
+                        'reviewer_id' => $reviewerId,
+                    ],
+                    [
+                        'protocol_review_assignment_id' => $assignment->id,
+                        'status' => ReviewerEvaluation::STATUS_PENDING,
+                    ]
+                );
             }
 
             return $form->load(['formCriteria', 'reviewerEvaluations']);
@@ -210,21 +229,58 @@ class EvaluationService
                 'conclusion_summary' => $conclusionSummary,
             ]);
 
-            $newStatus = $decision === 'approved'
-                ? Protocol::STATUS_PENDING_COMITE_CIENTIFICO
-                : Protocol::STATUS_REJECTED_FINAL;
+            $protocolUpdates = [];
+            $flow = null;
 
-            $protocolUpdates = ['status' => $newStatus];
+            if ($decision === 'rejected') {
+                $protocolUpdates['status'] = Protocol::STATUS_REJECTED_FINAL;
+            } else {
+                $organType = Protocol::organTypeFromFormOrgan($form->organ);
+                $flow = $organType ? Protocol::ORGAN_FLOW[$organType] ?? null : null;
 
-            if ($decision === 'approved' && $form->organ === 'nucleo') {
-                $committeeVersionNumber = max(1, ((int) $protocol->cc_version) + 1);
-                $committeeVersion = sprintf('CC_V%02d', $committeeVersionNumber);
+                if (! $flow) {
+                    throw new HttpResponseException(
+                        response()->json(['message' => "Orgao desconhecido: {$form->organ}"], 500)
+                    );
+                }
 
-                $protocolUpdates['version'] = $committeeVersion;
-                $protocolUpdates['cc_version'] = $committeeVersionNumber;
+                $protocolUpdates['status'] = $flow['next_status'];
+
+                if ($flow['next_organ_type']) {
+                    $nextOrgan = Organ::query()
+                        ->where('type', $flow['next_organ_type'])
+                        ->first();
+
+                    if (! $nextOrgan) {
+                        throw new HttpResponseException(
+                            response()->json(['message' => "Proximo orgao nao encontrado: {$flow['next_organ_type']}"], 500)
+                        );
+                    }
+
+                    $protocolUpdates['current_organ_id'] = $nextOrgan->id;
+                }
+
+                if ($flow['version_field'] && $flow['version_prefix']) {
+                    $field = $flow['version_field'];
+                    $versionNumber = max(1, ((int) $protocol->{$field}) + 1);
+
+                    $protocolUpdates[$field] = $versionNumber;
+                    $protocolUpdates['version'] = $flow['version_prefix'] . sprintf('%02d', $versionNumber);
+                } else {
+                    $protocolUpdates['version'] = 'APROVADO';
+                }
             }
 
             $protocol->update($protocolUpdates);
+
+            if ($decision === 'approved' && $flow && $flow['next_organ_type']) {
+                $this->createForProtocol(
+                    $protocol->fresh(),
+                    [],
+                    $decider,
+                    $flow['next_form_organ']
+                );
+            }
 
             $opinionVersion = $protocolUpdates['version'] ?? $form->version;
 
@@ -284,14 +340,40 @@ class EvaluationService
             return collect();
         }
 
+        $organ = $secretaryProfile->organ;
+
+        if (! $organ) {
+            return collect();
+        }
+
+        $statusMap = [
+            Protocol::ORGAN_TYPE_NUCLEUS => [
+                Protocol::STATUS_PENDING_NUCLEO,
+                Protocol::STATUS_IN_REVIEW_NUCLEO,
+            ],
+            Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => [
+                Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
+                Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
+            ],
+            Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE => [
+                Protocol::STATUS_PENDING_COMITE_BIOETICA,
+                Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
+            ],
+        ];
+
+        $statuses = $statusMap[$organ->type] ?? [];
+        $formOrgan = Protocol::formOrganFromOrganType($organ->type);
+
+        if ($statuses === [] || ! $formOrgan) {
+            return collect();
+        }
+
         return EvaluationForm::query()
             ->whereHas('protocol', fn($q) => $q
-                ->whereIn('status', [
-                    Protocol::STATUS_IN_REVIEW_NUCLEO,
-                    Protocol::STATUS_PENDING_NUCLEO,
-                ])
+                ->whereIn('status', $statuses)
+                ->where('current_organ_id', $organ->id)
             )
-            ->where('organ', 'nucleo')
+            ->where('organ', $formOrgan)
             ->with([
                 'protocol.topic:id,title,status,scientific_area_id,supervisor_id',
                 'protocol.topic.scientificArea:id,name,organ_id',

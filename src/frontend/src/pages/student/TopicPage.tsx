@@ -14,6 +14,7 @@ import '../../styles/global.css'
 export default function TopicPage() {
   const [topics, setTopics] = useState<Topic[]>([])
   const [title, setTitle] = useState('')
+  const [justification, setJustification] = useState('')
   const [scientificAreaId, setScientificAreaId] = useState('')
   const [courseId, setCourseId] = useState('')
   const [warning, setWarning] = useState<SimilarTopicsWarning | null>(null)
@@ -94,11 +95,13 @@ export default function TopicPage() {
     try {
       const res = await topicService.submit({
         title,
+        justification: justification.trim() || null,
         scientific_area_id: Number(scientificAreaId),
         course_id: Number(courseId),
       })
       if (res.similar_topics_warning.has_similar) setWarning(res.similar_topics_warning)
       setTitle('')
+      setJustification('')
       setScientificAreaId('')
       setCourseId('')
       await loadTopics()
@@ -433,6 +436,52 @@ export default function TopicPage() {
                 outline: 'none',
                 transition: 'all 0.2s ease',
                 boxSizing: 'border-box'
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = 'var(--primary)'
+                e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = 'var(--outline-variant)'
+                e.target.style.boxShadow = 'none'
+              }}
+            />
+          </div>
+
+          {/* Campo: Justificação */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <label
+              htmlFor="justification"
+              style={{
+                fontSize: 'var(--label-md)',
+                fontWeight: 'var(--font-medium)',
+                color: 'var(--on-surface-variant)',
+                fontFamily: 'var(--font-family)'
+              }}
+            >
+              Justificação do tema
+            </label>
+            <textarea
+              id="justification"
+              value={justification}
+              onChange={e => setJustification(e.target.value)}
+              placeholder="Explique brevemente a relevância do tema proposto."
+              rows={4}
+              maxLength={5000}
+              style={{
+                width: '100%',
+                padding: '12px var(--space-2)',
+                background: 'var(--surface-container-lowest)',
+                border: '1px solid var(--outline-variant)',
+                borderRadius: 'var(--radius-lg)',
+                fontSize: 'var(--body-md)',
+                fontFamily: 'var(--font-family)',
+                color: 'var(--on-surface)',
+                outline: 'none',
+                transition: 'all 0.2s ease',
+                boxSizing: 'border-box',
+                resize: 'vertical',
+                minHeight: '96px'
               }}
               onFocus={e => {
                 e.target.style.borderColor = 'var(--primary)'

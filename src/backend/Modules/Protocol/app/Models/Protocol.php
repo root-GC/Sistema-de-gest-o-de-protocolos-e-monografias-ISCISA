@@ -17,9 +17,46 @@ class Protocol extends Model
     public const STATUS_PENDING_NUCLEO = 'protocol_pending_nucleo';
     public const STATUS_IN_REVIEW_NUCLEO = 'protocol_in_review_nucleo';
     public const STATUS_PENDING_COMITE_CIENTIFICO = 'protocol_pending_comite_cientifico';
+    public const STATUS_IN_REVIEW_COMITE_CIENTIFICO = 'protocol_in_review_comite_cientifico';
     public const STATUS_PENDING_COMITE_BIOETICA = 'protocol_pending_comite_bioetica';
+    public const STATUS_IN_REVIEW_COMITE_BIOETICA = 'protocol_in_review_comite_bioetica';
     public const STATUS_APPROVED_FINAL = 'protocol_approved_final';
     public const STATUS_REJECTED_FINAL = 'protocol_rejected_final';
+
+    public const ORGAN_NUCLEO = 'nucleo';
+    public const ORGAN_COMITE_CIENTIFICO = 'comite_cientifico';
+    public const ORGAN_COMITE_BIOETICA = 'comite_bioetica';
+
+    public const ORGAN_TYPE_NUCLEUS = 'nucleus';
+    public const ORGAN_TYPE_SCIENTIFIC_COMMITTEE = 'scientific_committee';
+    public const ORGAN_TYPE_BIOETHICS_COMMITTEE = 'bioethics_committee';
+
+    public const ORGAN_FLOW = [
+        self::ORGAN_TYPE_NUCLEUS => [
+            'next_status' => self::STATUS_PENDING_COMITE_CIENTIFICO,
+            'in_review_status' => self::STATUS_IN_REVIEW_NUCLEO,
+            'next_organ_type' => self::ORGAN_TYPE_SCIENTIFIC_COMMITTEE,
+            'next_form_organ' => self::ORGAN_COMITE_CIENTIFICO,
+            'version_prefix' => 'CC_V',
+            'version_field' => 'cc_version',
+        ],
+        self::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => [
+            'next_status' => self::STATUS_PENDING_COMITE_BIOETICA,
+            'in_review_status' => self::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
+            'next_organ_type' => self::ORGAN_TYPE_BIOETHICS_COMMITTEE,
+            'next_form_organ' => self::ORGAN_COMITE_BIOETICA,
+            'version_prefix' => 'CB_V',
+            'version_field' => 'cb_version',
+        ],
+        self::ORGAN_TYPE_BIOETHICS_COMMITTEE => [
+            'next_status' => self::STATUS_APPROVED_FINAL,
+            'in_review_status' => self::STATUS_IN_REVIEW_COMITE_BIOETICA,
+            'next_organ_type' => null,
+            'next_form_organ' => null,
+            'version_prefix' => null,
+            'version_field' => null,
+        ],
+    ];
 
     protected $fillable = [
         'student',
@@ -61,10 +98,32 @@ class Protocol extends Model
             self::STATUS_PENDING_NUCLEO => 'Encaminhado ao Nucleo Cientifico',
             self::STATUS_IN_REVIEW_NUCLEO => 'Em avaliacao pelo Nucleo Cientifico',
             self::STATUS_PENDING_COMITE_CIENTIFICO => 'Encaminhado ao Comite Cientifico',
+            self::STATUS_IN_REVIEW_COMITE_CIENTIFICO => 'Em avaliacao pelo Comite Cientifico',
             self::STATUS_PENDING_COMITE_BIOETICA => 'Encaminhado ao Comite de Bioetica',
+            self::STATUS_IN_REVIEW_COMITE_BIOETICA => 'Em avaliacao pelo Comite de Bioetica',
             self::STATUS_APPROVED_FINAL => 'Aprovado',
             self::STATUS_REJECTED_FINAL => 'Rejeitado',
             default => $this->status,
+        };
+    }
+
+    public static function organTypeFromFormOrgan(string $organ): ?string
+    {
+        return match ($organ) {
+            self::ORGAN_NUCLEO, self::ORGAN_TYPE_NUCLEUS => self::ORGAN_TYPE_NUCLEUS,
+            self::ORGAN_COMITE_CIENTIFICO, self::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => self::ORGAN_TYPE_SCIENTIFIC_COMMITTEE,
+            self::ORGAN_COMITE_BIOETICA, self::ORGAN_TYPE_BIOETHICS_COMMITTEE => self::ORGAN_TYPE_BIOETHICS_COMMITTEE,
+            default => null,
+        };
+    }
+
+    public static function formOrganFromOrganType(string $organType): ?string
+    {
+        return match ($organType) {
+            self::ORGAN_TYPE_NUCLEUS => self::ORGAN_NUCLEO,
+            self::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => self::ORGAN_COMITE_CIENTIFICO,
+            self::ORGAN_TYPE_BIOETHICS_COMMITTEE => self::ORGAN_COMITE_BIOETICA,
+            default => null,
         };
     }
 

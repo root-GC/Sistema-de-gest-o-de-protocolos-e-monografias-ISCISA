@@ -34,11 +34,14 @@ class Topic extends Model
         'status',
         'supervisor_status',
         'justification',
+        'supervisor_comment',
+        'supervisor_decision_at',
         'submitted_at',
     ];
 
     protected $casts = [
         'submitted_at' => 'datetime',
+        'supervisor_decision_at' => 'datetime',
     ];
 
     protected $appends = [

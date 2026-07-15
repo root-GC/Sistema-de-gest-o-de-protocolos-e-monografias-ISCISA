@@ -6,6 +6,7 @@ import { req } from './apiClient';
 export interface Topic {
   id: number;
   title: string;
+  justification?: string | null;
   status: string;
   status_label: string;
   submitted_at: string;
@@ -36,19 +37,6 @@ export interface Course {
   scientific_area_id: number;
 }
 
-// Interface para resposta paginada do Laravel
-interface PaginatedResponse<T> {
-  current_page: number;
-  data: T[];
-  total: number;
-}
-
-// Interface para resposta padrão da API
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-}
-
 // ============ Helper para extrair dados ============
 
 function extractData<T>(response: any): T[] {
@@ -74,7 +62,7 @@ function extractData<T>(response: any): T[] {
 // ============ Topic Service ============
 
 export const topicService = {
-  submit: (payload: { title: string; scientific_area_id: number; course_id: number }) =>
+  submit: (payload: { title: string; scientific_area_id: number; course_id: number; justification?: string | null }) =>
     req('POST', '/api/v1/topics', payload) as Promise<{
       message: string;
       topic: Topic;

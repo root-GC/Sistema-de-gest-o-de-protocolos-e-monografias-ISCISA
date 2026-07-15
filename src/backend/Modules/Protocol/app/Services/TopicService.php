@@ -6,6 +6,9 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\Protocol\app\Events\TopicReviewersAssigned;
+use Modules\Protocol\app\Models\EvaluationForm;
+use Modules\Protocol\app\Models\Protocol;
+use Modules\Protocol\app\Models\ReviewerEvaluation;
 use Modules\Protocol\app\Models\Topic;
 use Modules\Protocol\app\Models\TopicReviewComment;
 use Modules\Protocol\app\Models\TopicReviewAssignment;
@@ -153,9 +156,9 @@ class TopicService
             ->all();
     }
 
-    public function approveBySupervisor(Topic $topic, User $supervisor): Topic
+    public function approveBySupervisor(Topic $topic, User $supervisor, ?string $comment = null): Topic
     {
-        return DB::transaction(function () use ($topic, $supervisor) {
+        return DB::transaction(function () use ($topic, $supervisor, $comment) {
             // Bloqueia a linha para evitar race condition
             $topic = Topic::lockForUpdate()->findOrFail($topic->id);
 
@@ -193,6 +196,7 @@ class TopicService
             $topic->update([
                 'status'                 => Topic::STATUS_PENDING_NUCLEO,
                 'supervisor_status'      => Topic::SUPERVISOR_STATUS_APPROVED,
+                'supervisor_comment'     => $comment,
                 'supervisor_decision_at' => now(),
             ]);
 
@@ -207,9 +211,9 @@ class TopicService
         });
     }
 
-    public function rejectBySupervisor(Topic $topic, User $supervisor, string $justification = null): Topic
+    public function rejectBySupervisor(Topic $topic, User $supervisor, ?string $comment = null): Topic
     {
-        return DB::transaction(function () use ($topic, $supervisor, $justification) {
+        return DB::transaction(function () use ($topic, $supervisor, $comment) {
             $topic = Topic::lockForUpdate()->findOrFail($topic->id);
 
             if ($topic->supervisor_id !== $supervisor->teacherProfile?->id) {
@@ -231,7 +235,7 @@ class TopicService
             $topic->update([
                 'status' => Topic::STATUS_REJECTED_SUPERVISOR,
                 'supervisor_status' => Topic::SUPERVISOR_STATUS_REJECTED,
-                'justification' => $justification,
+                'supervisor_comment' => $comment,
                 'supervisor_decision_at' => now(),
             ]);
 
@@ -298,13 +302,25 @@ class TopicService
             ->pluck('reviewer_id')
             ->toArray();
 
+        $pendingTopicReviews = $this->pendingTopicReviewsCountQuery();
+        $pendingProtocolReviews = $this->pendingProtocolReviewsCountQuery();
+
         return $query
             ->when($assignedReviewerIds !== [], fn($q) => $q->whereNotIn('teacher_profiles.id', $assignedReviewerIds))
+            ->leftJoinSub($pendingTopicReviews, 'pending_topic_reviews', fn($join) => $join
+                ->on('pending_topic_reviews.reviewer_id', '=', 'teacher_profiles.id')
+            )
+            ->leftJoinSub($pendingProtocolReviews, 'pending_protocol_reviews', fn($join) => $join
+                ->on('pending_protocol_reviews.reviewer_id', '=', 'teacher_profiles.id')
+            )
             ->select(
                 'teacher_profiles.id',
                 'users.name',
                 'users.email',
-                'scientific_areas.name as scientific_area_name'
+                'scientific_areas.name as scientific_area_name',
+                DB::raw('COALESCE(pending_topic_reviews.pending_topic_reviews_count, 0) as pending_topic_reviews_count'),
+                DB::raw('COALESCE(pending_protocol_reviews.pending_protocol_reviews_count, 0) as pending_protocol_reviews_count'),
+                DB::raw('(COALESCE(pending_topic_reviews.pending_topic_reviews_count, 0) + COALESCE(pending_protocol_reviews.pending_protocol_reviews_count, 0)) as pending_reviews_count')
             )
             ->orderBy('users.name')
             ->get();
@@ -677,6 +693,50 @@ class TopicService
             ->whereNull('teacher_profiles.deleted_at')
             ->whereNull('users.deleted_at')
             ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
+    }
+
+    private function pendingTopicReviewsCountQuery(): \Illuminate\Database\Query\Builder
+    {
+        return DB::table('topic_review_assignments')
+            ->join('topics', 'topic_review_assignments.topic_id', '=', 'topics.id')
+            ->leftJoin('topic_review_evaluations', function ($join) {
+                $join->on('topic_review_evaluations.assignment_id', '=', 'topic_review_assignments.id')
+                    ->whereNull('topic_review_evaluations.deleted_at');
+            })
+            ->whereNull('topic_review_assignments.deleted_at')
+            ->whereNull('topics.deleted_at')
+            ->whereIn('topics.status', [Topic::STATUS_ASSIGNED, Topic::STATUS_IN_REVIEW])
+            ->where(function ($query) {
+                $query->whereNull('topic_review_evaluations.id')
+                    ->orWhereNull('topic_review_evaluations.decision');
+            })
+            ->select(
+                'topic_review_assignments.reviewer_id',
+                DB::raw('COUNT(*) as pending_topic_reviews_count')
+            )
+            ->groupBy('topic_review_assignments.reviewer_id');
+    }
+
+    private function pendingProtocolReviewsCountQuery(): \Illuminate\Database\Query\Builder
+    {
+        return DB::table('reviewer_evaluations')
+            ->join('evaluation_forms', 'reviewer_evaluations.evaluation_form_id', '=', 'evaluation_forms.id')
+            ->join('protocols', 'evaluation_forms.protocol_id', '=', 'protocols.id')
+            ->whereNull('reviewer_evaluations.deleted_at')
+            ->whereNull('evaluation_forms.deleted_at')
+            ->whereNull('protocols.deleted_at')
+            ->whereNull('reviewer_evaluations.submitted_at')
+            ->where('reviewer_evaluations.status', '!=', ReviewerEvaluation::STATUS_SUBMITTED)
+            ->where('evaluation_forms.status', '!=', EvaluationForm::STATUS_CONCLUDED)
+            ->whereNotIn('protocols.status', [
+                Protocol::STATUS_APPROVED_FINAL,
+                Protocol::STATUS_REJECTED_FINAL,
+            ])
+            ->select(
+                'reviewer_evaluations.reviewer_id',
+                DB::raw('COUNT(*) as pending_protocol_reviews_count')
+            )
+            ->groupBy('reviewer_evaluations.reviewer_id');
     }
 
     public function viewComments(User $user, Topic $topic): bool

@@ -10,7 +10,7 @@ class ProtocolReviewerResource extends JsonResource
     public function toArray(Request $request): array
     {
         $myAssignment = $this->relationLoaded('reviewAssignments')
-            ? $this->reviewAssignments->first()
+            ? $this->reviewAssignments->firstWhere('organ_id', $this->current_organ_id) ?? $this->reviewAssignments->first()
             : null;
 
         return [
@@ -25,19 +25,11 @@ class ProtocolReviewerResource extends JsonResource
                 'id' => $this->topic?->id,
                 'title' => $this->topic?->title,
                 'status' => $this->topic?->status,
-                'scientific_area' => $this->topic?->scientificArea ? [
+                'scientific_area' => $this->topic?->relationLoaded('scientificArea') && $this->topic->scientificArea ? [
                     'id' => $this->topic->scientificArea->id,
                     'name' => $this->topic->scientificArea->name,
                 ] : null,
-                'course' => $this->topic?->course ? [
-                'id' => $this->topic->id,
-                'title' => $this->topic->title,
-                'status' => $this->topic->status,
-                'scientific_area' => $this->topic->relationLoaded('scientificArea') ? [
-                    'id' => $this->topic->scientificArea->id,
-                    'name' => $this->topic->scientificArea->name,
-                ] : null,
-                'course' => $this->topic?->course ? [
+                'course' => $this->topic?->relationLoaded('course') && $this->topic->course ? [
                     'id' => $this->topic->course->id,
                     'name' => $this->topic->course->name,
                     'code' => $this->topic->course->code,

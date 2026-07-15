@@ -41,7 +41,7 @@
     <table class="info-table">
         <tr><td>N.º do Protocolo:</td><td>{{ $protocol->code ?? $protocol->id }}</td></tr>
         <tr><td>Título:</td><td>{{ $protocol->topic->title ?? '---' }}</td></tr>
-        <tr><td>Proponente(s):</td><td>{{ $protocol->topic->student->name ?? '---' }}</td></tr>
+        <tr><td>Estudante(s):</td><td>{{ $protocol->topic->student->name ?? '---' }}</td></tr>
         <tr><td>Orientador(a):</td><td>{{ $protocol->topic->supervisor->user->name ?? '---' }}</td></tr>
         <tr><td>Curso:</td><td>{{ $protocol->topic->course->name ?? '---' }}</td></tr>
         <tr><td>Versão do Protocolo:</td><td>{{ $opinion->version ?? $protocol->version }}</td></tr>

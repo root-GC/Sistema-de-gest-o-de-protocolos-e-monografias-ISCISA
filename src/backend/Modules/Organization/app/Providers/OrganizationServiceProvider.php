@@ -21,16 +21,16 @@ class OrganizationServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (file_exists(__DIR__ . '/../../Routes/api.php')) {
-            $this->loadRoutesFrom(__DIR__ . '/../../Routes/api.php');
+        if (file_exists(__DIR__ . '/../../routes/api.php')) {
+            $this->loadRoutesFrom(__DIR__ . '/../../routes/api.php');
         }
 
-        if (file_exists(__DIR__ . '/../../Routes/web.php')) {
-            $this->loadRoutesFrom(__DIR__ . '/../../Routes/web.php');
+        if (file_exists(__DIR__ . '/../../routes/web.php')) {
+            $this->loadRoutesFrom(__DIR__ . '/../../routes/web.php');
         }
 
-        if (is_dir(__DIR__ . '/../../Database/Migrations')) {
-            $this->loadMigrationsFrom(__DIR__ . '/../../Database/Migrations');
+        if (is_dir(__DIR__ . '/../../database/migrations')) {
+            $this->loadMigrationsFrom(__DIR__ . '/../../database/migrations');
         }
     }
 }

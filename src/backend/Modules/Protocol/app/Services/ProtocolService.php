@@ -195,16 +195,47 @@ class ProtocolService
             return collect();
         }
 
+        $organ = $secretaryProfile->organ;
+
+        if (! $organ) {
+            return collect();
+        }
+
+        $statusMap = [
+            Protocol::ORGAN_TYPE_NUCLEUS => [
+                Protocol::STATUS_PENDING_NUCLEO,
+                Protocol::STATUS_IN_REVIEW_NUCLEO,
+            ],
+            Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => [
+                Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
+                Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
+            ],
+            Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE => [
+                Protocol::STATUS_PENDING_COMITE_BIOETICA,
+                Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
+            ],
+        ];
+
+        $statuses = $statusMap[$organ->type] ?? [];
+
+        if ($statuses === []) {
+            return collect();
+        }
+
         return Protocol::query()
-            ->whereIn('status', [Protocol::STATUS_PENDING_NUCLEO, Protocol::STATUS_IN_REVIEW_NUCLEO])
-            ->whereHas('topic.scientificArea', fn($q) => $q->where('organ_id', $secretaryProfile->organ_id))
+            ->whereIn('status', $statuses)
+            ->where('current_organ_id', $organ->id)
             ->with([
                 'topic:id,title,status,scientific_area_id,supervisor_id',
                 'topic.scientificArea:id,name,organ_id',
                 'topic.supervisor.user:id,name,email',
                 'student:id,name,email',
-                'reviewAssignments.reviewerOne.user:id,name,email',
-                'reviewAssignments.reviewerTwo.user:id,name,email',
+                'reviewAssignments' => fn($q) => $q
+                    ->where('organ_id', $organ->id)
+                    ->with([
+                        'reviewerOne.user:id,name,email',
+                        'reviewerTwo.user:id,name,email',
+                    ]),
             ])
             ->latest('submitted_at')
             ->get();
@@ -219,9 +250,14 @@ class ProtocolService
         }
 
         return Protocol::query()
-            ->where('status', Protocol::STATUS_IN_REVIEW_NUCLEO)
+            ->whereIn('status', [
+                Protocol::STATUS_IN_REVIEW_NUCLEO,
+                Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
+                Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
+            ])
             ->whereHas('reviewAssignments', fn($q) => $q
                 ->where('status', 'pending')
+                ->whereColumn('protocol_review_assignments.organ_id', 'protocols.current_organ_id')
                 ->where(fn($q) => $q
                     ->where('reviewer_one', $teacherProfile->id)
                     ->orWhere('reviewer_two', $teacherProfile->id)
@@ -293,20 +329,27 @@ class ProtocolService
                 );
             }
 
-            if ($protocol->status !== Protocol::STATUS_PENDING_NUCLEO) {
+            $assignableStatuses = [
+                Protocol::STATUS_PENDING_NUCLEO,
+                Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
+                Protocol::STATUS_PENDING_COMITE_BIOETICA,
+            ];
+
+            if (! in_array($protocol->status, $assignableStatuses, true)) {
                 throw new HttpResponseException(
                     response()->json(['message' => 'O protocolo nao esta em estado de atribuicao de revisores.'], 422)
                 );
             }
 
-            $protocol->loadMissing('topic.scientificArea:id,organ_id');
+            $organ = $secretaryProfile->organ;
 
-            $topicOrganId = $protocol->topic?->scientificArea?->organ_id;
-            if ($topicOrganId !== $secretaryProfile->organ_id) {
+            if (! $organ || (int) $protocol->current_organ_id !== (int) $organ->id) {
                 throw new HttpResponseException(
                     response()->json(['message' => 'Secretaria nao tem permissao para atribuir revisores a este protocolo.'], 403)
                 );
             }
+
+            $protocol->loadMissing('topic');
 
             $supervisorId = $protocol->topic?->supervisor_id;
 
@@ -336,8 +379,10 @@ class ProtocolService
             }
 
             $assignedExisting = $protocol->reviewAssignments()
-                ->whereIn('reviewer_one', $reviewerIds)
-                ->orWhereIn('reviewer_two', $reviewerIds)
+                ->where(fn($query) => $query
+                    ->whereIn('reviewer_one', $reviewerIds)
+                    ->orWhereIn('reviewer_two', $reviewerIds)
+                )
                 ->exists();
 
             if ($assignedExisting) {
@@ -346,11 +391,7 @@ class ProtocolService
                 );
             }
 
-<<<<<<< HEAD
-            $assignment = ProtocolReviewAssignment::create([
-=======
             ProtocolReviewAssignment::create([
->>>>>>> b3874dc (submisao e atribuicao de protocolo)
                 'protocol_id' => $protocol->id,
                 'organ_id' => $secretaryProfile->organ_id,
                 'reviewer_one' => $reviewerIds[0] ?? null,
@@ -360,27 +401,42 @@ class ProtocolService
                 'assigned_at' => now(),
             ]);
 
+            $inReviewStatusMap = [
+                Protocol::ORGAN_TYPE_NUCLEUS => Protocol::STATUS_IN_REVIEW_NUCLEO,
+                Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
+                Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE => Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
+            ];
+
+            $newStatus = $inReviewStatusMap[$organ->type] ?? null;
+            $formOrgan = Protocol::formOrganFromOrganType($organ->type);
+
+            if (! $newStatus || ! $formOrgan) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Tipo de orgao nao suporta atribuicao de revisores.'], 422)
+                );
+            }
+
             $protocol->update([
-                'status' => Protocol::STATUS_IN_REVIEW_NUCLEO,
+                'status' => $newStatus,
             ]);
 
-<<<<<<< HEAD
             app(EvaluationService::class)->createForProtocol(
                 $protocol,
                 $reviewerIds,
                 $secretary,
-                'nucleo'
+                $formOrgan
             );
-
-=======
->>>>>>> b3874dc (submisao e atribuicao de protocolo)
             return $protocol->load([
                 'topic:id,title,status,scientific_area_id,supervisor_id',
                 'topic.scientificArea:id,name,organ_id',
                 'topic.supervisor.user:id,name,email',
                 'student:id,name,email',
-                'reviewAssignments.reviewerOne.user:id,name,email',
-                'reviewAssignments.reviewerTwo.user:id,name,email',
+                'reviewAssignments' => fn($q) => $q
+                    ->where('organ_id', $organ->id)
+                    ->with([
+                        'reviewerOne.user:id,name,email',
+                        'reviewerTwo.user:id,name,email',
+                    ]),
             ]);
         });
     }

@@ -14,6 +14,9 @@ class TopicSupervisorResource extends JsonResource
             'title' => $this->title,
             'status' => $this->status,
             'status_label' => $this->status_label,
+            'supervisor_status' => $this->supervisor_status,
+            'supervisor_comment' => $this->supervisor_comment,
+            'supervisor_decision_at' => $this->supervisor_decision_at,
             'submitted_at' => $this->submitted_at,
             'student' => $this->whenLoaded('student', fn() => [
                 'id' => $this->student->id,

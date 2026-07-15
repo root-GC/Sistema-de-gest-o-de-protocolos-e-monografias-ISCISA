@@ -93,10 +93,16 @@ class EvaluationFormController extends Controller
         $path = $documentService->generateOpinionPdf($opinion);
         $opinion->update(['document_path' => $path]);
 
+        $protocol = $result['evaluation_form']->protocol;
+        $messages = [
+            \Modules\Protocol\app\Models\Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
+            \Modules\Protocol\app\Models\Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
+            \Modules\Protocol\app\Models\Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
+            \Modules\Protocol\app\Models\Protocol::STATUS_REJECTED_FINAL => 'Protocolo reprovado.',
+        ];
+
         return response()->json([
-            'message' => $request->input('decision') === 'approved'
-                ? 'Protocolo aprovado e encaminhado ao Comité Científico.'
-                : 'Protocolo reprovado.',
+            'message' => $messages[$protocol->status] ?? 'Protocolo actualizado.',
             'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
             'opinion' => [
                 'id' => $opinion->id,
