@@ -60,6 +60,7 @@ class Protocol extends Model
 
     protected $fillable = [
         'student',
+        'supervisor_id',
         'current_organ_id',
         'code',
         'topic_id',
@@ -155,5 +156,10 @@ class Protocol extends Model
     public function reviewAssignments()
     {
         return $this->hasMany(ProtocolReviewAssignment::class);
+    }
+
+        public function supervisor()
+    {
+        return $this->belongsTo(TeacherProfile::class, 'supervisor_id');
     }
 }

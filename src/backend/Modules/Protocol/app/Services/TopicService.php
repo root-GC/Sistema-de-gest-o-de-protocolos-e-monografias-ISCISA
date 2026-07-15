@@ -15,6 +15,8 @@ use Modules\Protocol\app\Models\TopicReviewAssignment;
 use Modules\Protocol\app\Models\TopicReviewEvaluation;
 use Modules\User\app\Models\StudentProfile;
 use Modules\User\app\Models\User;
+use Illuminate\Support\Facades\Log;
+
 
 class TopicService
 {
@@ -464,6 +466,43 @@ class TopicService
     {
         return DB::transaction(function () use ($topic, $reviewer, $data) {
             $topic = Topic::lockForUpdate()->findOrFail($topic->id);
+
+             Log::info('=== SUBMIT EVALUATION ===');
+
+        Log::info('Dados do Topic recebido', [
+            'id' => $topic->id,
+            'status' => $topic->status,
+            'title' => $topic->title ?? null,
+            'student_id' => $topic->student_id ?? null,
+            'supervisor_id' => $topic->supervisor_id ?? null,
+            'scientific_area_id' => $topic->scientific_area_id ?? null,
+            'created_at' => $topic->created_at,
+            'updated_at' => $topic->updated_at,
+        ]);
+
+
+        Log::info('Estados permitidos para avaliação', [
+            'STATUS_ASSIGNED' => Topic::STATUS_ASSIGNED,
+            'STATUS_IN_REVIEW' => Topic::STATUS_IN_REVIEW,
+            'current_status' => $topic->status,
+            'can_evaluate' => in_array(
+                $topic->status,
+                [
+                    Topic::STATUS_ASSIGNED,
+                    Topic::STATUS_IN_REVIEW
+                ],
+                true
+            )
+        ]);
+
+
+        Log::info('Dados enviados pelo avaliador', [
+            'reviewer_id' => $reviewer->id,
+            'reviewer_name' => $reviewer->name,
+            'decision' => $data['decision'] ?? null,
+            'comment_id' => $data['comment_id'] ?? null,
+        ]);
+
             $teacherProfile = $reviewer->teacherProfile;
 
             if (! $teacherProfile) {

@@ -259,7 +259,7 @@ function ProtocolsTab() {
 
   async function loadReviewers(protocolId: number) {
     try {
-      const { reviewers } = await protocolService.eligibleReviewers(protocolId)
+      const { reviewers } = await protocolService.getEligibleReviewers(protocolId)
       setReviewersByProtocol(prev => ({ ...prev, [protocolId]: reviewers }))
     } catch (e) { setError((e as Error).message) }
   }

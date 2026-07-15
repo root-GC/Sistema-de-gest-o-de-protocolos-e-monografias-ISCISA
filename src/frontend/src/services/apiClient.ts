@@ -1,34 +1,71 @@
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+// src/services/apiClient.ts
 
-function token() {
-  return localStorage.getItem('sgpmc_token');
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Headers padrão para JSON
+function getHeaders(): Record<string, string> {
+  const token = localStorage.getItem('sgpmc_token');
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return headers;
 }
 
-export async function req(method: string, path: string, body: unknown = null) {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (token()) headers['Authorization'] = `Bearer ${token()}`;
+// Requisição JSON padrão
+export async function req(method: string, url: string, body?: any): Promise<any> {
+  const headers = {
+    ...getHeaders(),
+    'Content-Type': 'application/json',
+  };
 
-  const isFormData = body instanceof FormData;
-  if (!isFormData && body) headers['Content-Type'] = 'application/json';
-
-  const res = await fetch(`${BASE}${path}`, {
+  const response = await fetch(`${API_BASE_URL}${url}`, {
     method,
     headers,
-    body: isFormData ? body : body ? JSON.stringify(body) : null,
+    body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const msg =
-      data?.message ??
-      (Object.values(data?.errors ?? {}) as (unknown[] | undefined)[])?.[0]?.[0] ??
-      'Erro desconhecido';
-    const err = new Error(msg) as Error & { status?: number; data?: unknown };
-    err.status = res.status;
-    err.data = data;
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
+    const err = new Error(error.message || 'Erro na requisição') as any;
+    err.status = response.status;
+    err.data = error;
     throw err;
   }
 
-  return data;
+  return response.json();
+}
+
+// Requisição FormData (para upload de arquivos)
+export async function reqFormData(method: string, url: string, formData: FormData): Promise<any> {
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  
+  const token = localStorage.getItem('sgpmc_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  // Não define Content-Type - o browser define automaticamente com boundary para FormData
+
+  const response = await fetch(`${API_BASE_URL}${url}`, {
+    method,
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
+    const err = new Error(error.message || 'Erro na requisição') as any;
+    err.status = response.status;
+    err.data = error;
+    throw err;
+  }
+
+  return response.json();
 }

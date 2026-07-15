@@ -18,6 +18,13 @@ Route::prefix('api')->middleware(['api'])->group(function () {
 
 
 Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () {
+
+    //Seus proprios temas
+     Route::get(
+        '/topics/my-approved',
+        [TopicController::class, 'getMyApprovedTopics']
+    );
+
     Route::post('topics', [TopicController::class, 'store'])->name('topic.store');
     Route::get('topics', [TopicController::class, 'index'])->name('topic.index');
 
@@ -34,6 +41,8 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::post('topics/{topic}/comments', [TopicController::class, 'submitComment'])->name('topic.comments.store');
     Route::post('topics/{topic}/evaluations', [TopicController::class, 'submitEvaluation'])->name('topic.evaluations.store');
 
+
+     Route::get('supervisor/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForSupervisor')->name('supervisor.protocols.list');
     Route::post('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@store')->name('protocol.store');
     Route::get('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@index')->name('protocol.index');
     Route::get('protocols/{protocol}', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@show')->name('protocol.show');
