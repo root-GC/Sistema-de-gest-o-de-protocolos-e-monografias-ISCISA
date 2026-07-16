@@ -92,6 +92,7 @@ export default function App() {
                 {/* ── Supervisor ──────────────────────────────── */}
                 <Route element={<ProtectedRoute permission="supervision.view" />}>
                   <Route path="/supervision"         element={<SupervisionPage />} />
+                  <Route path="/supervision/list"    element={<SupervisionPage />} />
                   <Route path="/supervision/pending" element={<SupervisionPage />} />
                 </Route>
 
@@ -104,11 +105,12 @@ export default function App() {
                 <Route element={<ProtectedRoute permission="workload.view" />}>
                   <Route path="/workload" element={<WorkloadPage />} />
                 </Route>
-                <Route element={<ProtectedRoute permission="protocol.review" />}>
+                <Route element={<ProtectedRoute permission="protocol.evaluate" />}>
                   <Route path="/reviews"          element={<ReviewsPage />} />
                   <Route path="/reviews/assigned" element={<ReviewsPage />} />
                   <Route path="/reviews/done"     element={<ReviewsPage />} />
                   {/* <Route path="/evaluation/:id"   element={<EvaluationPage />} /> */}
+                  <Route path="/reviews/topics/:topicId" element={<EvaluationPage />} />
                   <Route path="/reviews/:topicId" element={<EvaluationPage />} />
                 </Route>
 

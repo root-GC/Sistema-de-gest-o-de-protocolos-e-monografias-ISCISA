@@ -72,11 +72,11 @@ export const menuRegistry = [
     label: 'Revisões',
     icon: 'ti-eye',
     route: '/reviews',
-    permission: 'protocol.review',
+    permission: 'protocol.evaluate',
     roles: ['reviewer'],
     children: [
-      { label: 'Atribuídas a mim', route: '/reviews/assigned', permission: 'protocol.review' },
-      { label: 'Concluídas',       route: '/reviews/done',     permission: 'protocol.review' },
+      { label: 'Atribuídas a mim', route: '/reviews/assigned', permission: 'protocol.evaluate' },
+      { label: 'Concluídas',       route: '/reviews/done',     permission: 'protocol.evaluate' },
     ],
   },
 

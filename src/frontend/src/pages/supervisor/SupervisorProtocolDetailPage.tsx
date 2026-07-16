@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { protocolService, type Protocol, type Document } from '../../services/protocolService'
+import TopicJustification from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 export default function SupervisorProtocolDetailPage() {
@@ -85,9 +86,17 @@ export default function SupervisorProtocolDetailPage() {
           Protocolo {protocol.code}
         </h1>
         {protocol.topic && (
-          <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', marginTop: '4px' }}>
-            Tema: {protocol.topic.title}
-          </p>
+          <>
+            <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', marginTop: '4px' }}>
+              Tema: {protocol.topic.title}
+            </p>
+            <TopicJustification
+              justification={protocol.topic.justification}
+              showEmpty
+              compact
+              style={{ marginTop: 'var(--space-2)', maxWidth: '720px' }}
+            />
+          </>
         )}
         {protocol.student && (
           <p style={{ fontSize: 'var(--body-sm)', color: 'var(--on-surface-variant)' }}>

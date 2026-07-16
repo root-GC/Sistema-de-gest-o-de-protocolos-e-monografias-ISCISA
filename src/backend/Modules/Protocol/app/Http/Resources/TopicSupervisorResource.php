@@ -12,6 +12,7 @@ class TopicSupervisorResource extends JsonResource
         return [
             'id' => $this->id,
             'title' => $this->title,
+            'justification' => $this->justification,
             'status' => $this->status,
             'status_label' => $this->status_label,
             'supervisor_status' => $this->supervisor_status,

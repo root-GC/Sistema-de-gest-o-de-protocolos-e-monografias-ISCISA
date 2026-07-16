@@ -22,6 +22,7 @@ class TopicReviewerResource extends JsonResource
         return [
             'id' => $this->id,
             'title' => $this->title,
+            'justification' => $this->justification,
             'status' => $this->status,
             'status_label' => $this->status_label,
             'submitted_at' => $this->submitted_at,

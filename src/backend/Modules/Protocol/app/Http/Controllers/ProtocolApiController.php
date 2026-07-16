@@ -141,6 +141,109 @@ class ProtocolApiController extends Controller
         ]);
     }
 
+    public function getAssignedReviewers(Request $request, string $protocol)
+    {
+        $user = $request->user()->load('secretaryProfile');
+
+        if (! $user->hasPermission('protocol.assign')) {
+            return response()->json([
+                'message' => 'Utilizador nao tem permissao para ver revisores atribuidos.',
+            ], 403);
+        }
+
+        $protocol = \Modules\Protocol\app\Models\Protocol::query()->findOrFail($protocol);
+        $secretary = $user->secretaryProfile;
+
+        if ($secretary && (int) $secretary->organ_id !== (int) $protocol->current_organ_id) {
+            return response()->json([
+                'message' => 'Utilizador nao tem permissao para ver revisores deste protocolo.',
+            ], 403);
+        }
+
+        if (! $secretary && ! $user->hasPermission('protocol.view.all')) {
+            return response()->json([
+                'message' => 'Utilizador nao tem permissao para ver revisores deste protocolo.',
+            ], 403);
+        }
+
+        $assignments = $protocol->reviewAssignments()
+            ->with([
+                'organ:id,name,type',
+                'reviewerOne.user:id,name,email',
+                'reviewerTwo.user:id,name,email',
+            ])
+            ->orderBy('assigned_at')
+            ->get();
+
+        $reviewers = $assignments
+            ->flatMap(function ($assignment) {
+                return collect([
+                    $assignment->reviewerOne ? [
+                        'id' => $assignment->reviewerOne->id,
+                        'name' => $assignment->reviewerOne->user?->name,
+                        'email' => $assignment->reviewerOne->user?->email,
+                        'slot' => 'reviewer_one',
+                        'assignment_id' => $assignment->id,
+                        'organ_id' => $assignment->organ_id,
+                        'organ' => $assignment->organ ? [
+                            'id' => $assignment->organ->id,
+                            'name' => $assignment->organ->name,
+                            'type' => $assignment->organ->type,
+                        ] : null,
+                        'status' => $assignment->status,
+                        'review_order' => $assignment->review_order,
+                        'assigned_at' => $assignment->assigned_at,
+                    ] : null,
+                    $assignment->reviewerTwo ? [
+                        'id' => $assignment->reviewerTwo->id,
+                        'name' => $assignment->reviewerTwo->user?->name,
+                        'email' => $assignment->reviewerTwo->user?->email,
+                        'slot' => 'reviewer_two',
+                        'assignment_id' => $assignment->id,
+                        'organ_id' => $assignment->organ_id,
+                        'organ' => $assignment->organ ? [
+                            'id' => $assignment->organ->id,
+                            'name' => $assignment->organ->name,
+                            'type' => $assignment->organ->type,
+                        ] : null,
+                        'status' => $assignment->status,
+                        'review_order' => $assignment->review_order,
+                        'assigned_at' => $assignment->assigned_at,
+                    ] : null,
+                ])->filter();
+            })
+            ->values();
+
+        $reviewAssignments = $assignments->map(fn($assignment) => [
+            'id' => $assignment->id,
+            'organ_id' => $assignment->organ_id,
+            'organ' => $assignment->organ ? [
+                'id' => $assignment->organ->id,
+                'name' => $assignment->organ->name,
+                'type' => $assignment->organ->type,
+            ] : null,
+            'reviewer_one' => $assignment->reviewerOne ? [
+                'id' => $assignment->reviewerOne->id,
+                'name' => $assignment->reviewerOne->user?->name,
+                'email' => $assignment->reviewerOne->user?->email,
+            ] : null,
+            'reviewer_two' => $assignment->reviewerTwo ? [
+                'id' => $assignment->reviewerTwo->id,
+                'name' => $assignment->reviewerTwo->user?->name,
+                'email' => $assignment->reviewerTwo->user?->email,
+            ] : null,
+            'review_order' => $assignment->review_order,
+            'status' => $assignment->status,
+            'assigned_at' => $assignment->assigned_at,
+        ])->values();
+
+        return response()->json([
+            'reviewers' => $reviewers,
+            'review_assignments' => $reviewAssignments,
+            'total' => $reviewers->count(),
+        ]);
+    }
+
     public function assignReviewers(Request $request, string $protocol)
     {
         $user = $request->user();

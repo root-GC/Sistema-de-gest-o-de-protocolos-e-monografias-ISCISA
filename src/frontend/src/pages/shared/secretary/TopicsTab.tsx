@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { topicService, type Topic } from '../../../services/topicService'
+import { TopicJustificationToggle } from '../../../components/TopicJustification'
 import '../../../styles/global.css'
 
 // ============================================================
@@ -252,6 +253,8 @@ export function TopicsTab() {
                   </span>
                 </div>
               </div>
+
+              <TopicJustificationToggle justification={t.justification} showEmpty compact />
 
               {/* Área de atribuição (apenas pendentes no núcleo) */}
               {isPending && (

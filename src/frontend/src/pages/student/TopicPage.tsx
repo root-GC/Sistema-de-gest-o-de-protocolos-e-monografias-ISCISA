@@ -9,6 +9,7 @@ import {
   type ScientificArea,
   type Course
 } from '../../services/topicService'
+import { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 export default function TopicPage() {
@@ -358,6 +359,8 @@ export default function TopicPage() {
                     </span>
                   </div>
                 </div>
+
+                <TopicJustificationToggle justification={t.justification} showEmpty compact />
 
                 {/* Nota de protocolo - apenas para temas aprovados */}
                 {isApproved && (

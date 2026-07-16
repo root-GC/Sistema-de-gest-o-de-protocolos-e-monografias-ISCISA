@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { topicService, type Topic } from '../../services/topicService'
+import TopicJustification, { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 // ============================================================
@@ -31,6 +32,7 @@ export default function SupervisorProtocolsPage() {
   const [tab, setTab] = useState<'topics' | 'protocols'>('protocols')
   const [topics, setTopics] = useState<Topic[]>([])
   const [protocols, setProtocols] = useState<Protocol[]>([])
+  const [expandedTopicId, setExpandedTopicId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -209,97 +211,113 @@ export default function SupervisorProtocolsPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              {topics.map((t: Topic) => (
-                <div
-                  key={t.id}
-                  className="card"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: 'var(--space-2)',
-                    padding: 'var(--space-3) var(--space-4)'
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{
-                      fontSize: 'var(--body-lg)',
-                      fontWeight: 'var(--font-semibold)',
-                      color: 'var(--on-surface)',
-                      marginBottom: '4px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {t.title}
-                    </h3>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-                      {t.scientific_area && (
-                        <span style={{
-                          fontSize: 'var(--label-sm)',
-                          color: 'var(--on-surface-variant)',
-                          background: 'var(--surface-container)',
-                          padding: '2px 8px',
-                          borderRadius: 'var(--radius-full)'
-                        }}>
-                          {t.scientific_area.name}
-                        </span>
-                      )}
-                      {t.student && (
-                        <span style={{
-                          fontSize: 'var(--label-sm)',
-                          color: 'var(--on-surface-variant)',
-                          background: 'var(--surface-container)',
-                          padding: '2px 8px',
-                          borderRadius: 'var(--radius-full)'
-                        }}>
-                          {t.student.name}
-                        </span>
-                      )}
-                    </div>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      marginTop: '8px',
-                      padding: '2px 10px',
-                      borderRadius: 'var(--radius-full)',
-                      fontSize: 'var(--label-md)',
-                      fontWeight: 'var(--font-medium)',
-                      background: 'var(--tertiary-container)',
-                      color: 'var(--on-tertiary-container)'
-                    }}>
-                      <span style={{
-                        width: '6px', height: '6px',
-                        borderRadius: 'var(--radius-full)',
-                        background: 'var(--tertiary)'
-                      }} />
-                      {t.status_label || t.status}
-                    </span>
-                  </div>
-                  <Link
-                    to={`/supervisor/topics/${t.id}`}
+              {topics.map((t: Topic) => {
+                const isExpanded = expandedTopicId === t.id
+                return (
+                  <div
+                    key={t.id}
+                    className="card"
                     style={{
                       display: 'flex',
-                      alignItems: 'center',
-                      gap: 'var(--space-1)',
-                      padding: '8px var(--space-3)',
-                      background: 'var(--primary)',
-                      color: 'var(--on-primary)',
-                      borderRadius: 'var(--radius-lg)',
-                      textDecoration: 'none',
-                      fontSize: 'var(--body-md)',
-                      fontWeight: 'var(--font-semibold)',
-                      whiteSpace: 'nowrap',
-                      transition: 'all 0.2s'
+                      flexDirection: 'column',
+                      gap: 'var(--space-2)',
+                      padding: 'var(--space-3) var(--space-4)'
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>visibility</span>
-                    Abrir
-                  </Link>
-                </div>
-              ))}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 'var(--space-2)'
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h3 style={{
+                          fontSize: 'var(--body-lg)',
+                          fontWeight: 'var(--font-semibold)',
+                          color: 'var(--on-surface)',
+                          marginBottom: '4px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {t.title}
+                        </h3>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                          {t.scientific_area && (
+                            <span style={{
+                              fontSize: 'var(--label-sm)',
+                              color: 'var(--on-surface-variant)',
+                              background: 'var(--surface-container)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-full)'
+                            }}>
+                              {t.scientific_area.name}
+                            </span>
+                          )}
+                          {t.student && (
+                            <span style={{
+                              fontSize: 'var(--label-sm)',
+                              color: 'var(--on-surface-variant)',
+                              background: 'var(--surface-container)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-full)'
+                            }}>
+                              {t.student.name}
+                            </span>
+                          )}
+                        </div>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          marginTop: '8px',
+                          padding: '2px 10px',
+                          borderRadius: 'var(--radius-full)',
+                          fontSize: 'var(--label-md)',
+                          fontWeight: 'var(--font-medium)',
+                          background: 'var(--tertiary-container)',
+                          color: 'var(--on-tertiary-container)'
+                        }}>
+                          <span style={{
+                            width: '6px', height: '6px',
+                            borderRadius: 'var(--radius-full)',
+                            background: 'var(--tertiary)'
+                          }} />
+                          {t.status_label || t.status}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedTopicId(isExpanded ? null : t.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--space-1)',
+                          padding: '8px var(--space-3)',
+                          background: 'var(--primary)',
+                          color: 'var(--on-primary)',
+                          borderRadius: 'var(--radius-lg)',
+                          border: 'none',
+                          fontSize: 'var(--body-md)',
+                          fontWeight: 'var(--font-semibold)',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                          {isExpanded ? 'visibility_off' : 'visibility'}
+                        </span>
+                        {isExpanded ? 'Ocultar' : 'Ver'}
+                      </button>
+                    </div>
+                    {isExpanded && (
+                      <TopicJustification justification={t.justification} showEmpty compact />
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </>
@@ -416,6 +434,14 @@ export default function SupervisorProtocolsPage() {
                           Submissão nº{p.submission_number} • v{p.version}
                         </span>
                       </div>
+                      {p.topic && (
+                        <TopicJustificationToggle
+                          justification={p.topic.justification}
+                          showEmpty
+                          compact
+                          style={{ marginTop: 'var(--space-2)' }}
+                        />
+                      )}
                     </div>
 
                     {/* Botão para abrir o protocolo */}

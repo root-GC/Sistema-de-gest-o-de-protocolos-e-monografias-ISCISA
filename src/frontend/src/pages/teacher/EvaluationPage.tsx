@@ -1,23 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { topicService } from '../../services/topicService'
+import {
+  topicService,
+  type Topic,
+  type TopicReviewComment,
+} from '../../services/topicService'
+import TopicJustification from '../../components/TopicJustification'
 import '../../styles/global.css'
 
-interface TopicInfo {
-  id: number
-  title: string
-  status: string
-  status_label: string
+function isTopicClosed(status?: string) {
+  return status === 'topic_approved_nucleo' || status === 'topic_rejected_nucleo' || status === 'topic_rejected'
 }
 
-interface Comment {
-  id: number
-  content: string
-  created_at: string
-  user?: {
-    id: number
-    name: string
-  }
+function decisionLabel(decision: 'approved' | 'rejected' | null | undefined) {
+  if (decision === 'approved') return 'Aprovado'
+  if (decision === 'rejected') return 'Não aprovado'
+  return 'Pendente'
 }
 
 export default function EvaluationPage() {
@@ -25,10 +23,11 @@ export default function EvaluationPage() {
   const navigate = useNavigate()
   const id = Number(topicId)
 
-  const [topic, setTopic] = useState<TopicInfo | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
+  const [topic, setTopic] = useState<Topic | null>(null)
+  const [comments, setComments] = useState<TopicReviewComment[]>([])
   const [newComment, setNewComment] = useState('')
   const [decision, setDecision] = useState<'approved' | 'rejected' | ''>('')
+  const [myDecision, setMyDecision] = useState<'approved' | 'rejected' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -37,29 +36,35 @@ export default function EvaluationPage() {
 
   useEffect(() => { load() }, [id])
 
-  async function load() {
+  async function load(options?: { preserveSuccess?: boolean }) {
     setLoading(true)
     try {
-      // Carrega os dados do tema (precisa adicionar este endpoint)
       const topicsData = await topicService.listForReviewer()
       const currentTopic = topicsData.topics.find(t => t.id === id)
       
-      if (currentTopic) {
-        setTopic(currentTopic)
-        
-        // Verifica se o tema já foi aprovado/rejeitado
-        if (currentTopic.status === 'topic_approved_nucleo' || 
-            currentTopic.status === 'topic_rejected_nucleo' ||
-            currentTopic.status === 'topic_rejected') {
-          setEvaluationDone(true)
-          setSuccess('Este tema já foi avaliado e o processo de revisão está concluído.')
-        }
+      if (!currentTopic) {
+        throw new Error('Tema não encontrado entre as revisões atribuídas a si.')
       }
 
-      // Carrega comentários
+      setTopic(currentTopic)
+
+      const currentDecision = currentTopic.my_assignment?.evaluation?.decision ?? null
+      const isClosed = isTopicClosed(currentTopic.status)
+
+      setMyDecision(currentDecision)
+      setEvaluationDone(Boolean(currentDecision) || isClosed)
+      setDecision('')
+
+      if (currentDecision) {
+        setSuccess(`A sua avaliação já foi registada: ${decisionLabel(currentDecision)}.`)
+      } else if (isClosed) {
+        setSuccess('Este tema já foi avaliado e o processo de revisão está concluído.')
+      } else if (!options?.preserveSuccess) {
+        setSuccess(null)
+      }
+
       const response = await topicService.getComments(id)
-      // A API retorna { success: true, data: [...] }
-      setComments(response.data || response.comments || [])
+      setComments(response.comments || [])
       
       setError(null)
     } catch (e) {
@@ -78,7 +83,7 @@ export default function EvaluationPage() {
       await topicService.submitComment(id, newComment)
       setNewComment('')
       setSuccess('Comentário adicionado com sucesso!')
-      await load()
+      await load({ preserveSuccess: true })
       // Limpa mensagem de sucesso após 3 segundos
       setTimeout(() => setSuccess(null), 3000)
     } catch (e) {
@@ -93,10 +98,11 @@ export default function EvaluationPage() {
     setSubmitting(true)
     setError(null)
     try {
-      const response = await topicService.submitEvaluation(id, decision)
-      setDecision('')
+      await topicService.submitEvaluation(id, decision)
+      setMyDecision(decision)
       setSuccess(`Tema ${decision === 'approved' ? 'aprovado' : 'rejeitado'} com sucesso!`)
       setEvaluationDone(true)
+      setDecision('')
       await load()
       
       // Redireciona para a lista após 2 segundos
@@ -136,6 +142,15 @@ export default function EvaluationPage() {
       </div>
     )
   }
+
+  const topicClosed = isTopicClosed(topic?.status)
+  const evaluationStatusMessage = topicClosed
+    ? topic?.status === 'topic_approved_nucleo'
+      ? 'Este tema foi aprovado pelo Núcleo Científico. Não são permitidas novas avaliações ou comentários.'
+      : 'Este tema foi rejeitado pelo Núcleo Científico. Não são permitidas novas avaliações ou comentários.'
+    : myDecision
+      ? `A sua avaliação foi registada como "${decisionLabel(myDecision)}". O tema pode continuar em revisão até todos os avaliadores concluírem.`
+      : ''
 
   return (
     <div style={{
@@ -223,6 +238,10 @@ export default function EvaluationPage() {
         </div>
       </div>
 
+      {topic && (
+        <TopicJustification justification={topic.justification} showEmpty />
+      )}
+
       {/* Mensagem de sucesso */}
       {success && (
         <div role="status" style={{
@@ -293,10 +312,7 @@ export default function EvaluationPage() {
               Processo de avaliação concluído
             </strong>
             <p style={{ marginTop: '4px' }}>
-              {topic?.status === 'topic_approved_nucleo'
-                ? 'Este tema foi aprovado pelo Núcleo Científico.'
-                : 'Este tema foi rejeitado pelo Núcleo Científico.'}
-              {' '}Não são permitidas novas avaliações ou comentários.
+              {evaluationStatusMessage}
             </p>
           </div>
         </div>
@@ -347,7 +363,7 @@ export default function EvaluationPage() {
             maxHeight: '400px',
             overflow: 'auto'
           }}>
-            {comments.map((comment: Comment) => (
+            {comments.map((comment: TopicReviewComment) => (
               <div
                 key={comment.id}
                 style={{

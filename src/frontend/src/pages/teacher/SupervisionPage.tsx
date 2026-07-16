@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { topicService, type Topic } from '../../services/topicService'
 import { protocolService, type Protocol } from '../../services/protocolService'
+import { supervisorService, type Supervisee } from '../../services/supervisorService'
+import { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 // ============================================================
@@ -22,11 +24,31 @@ function getProtocolStatusStyle(status: string) {
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }
 
+function getPhaseStyle(phase: string) {
+  const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
+    topic: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Tema' },
+    protocol: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Protocolo' },
+    none: { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: 'Sem submissão' },
+  }
+  return map[phase] || map.none
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat('pt-MZ', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
+}
+
 // ============================================================
 // COMPONENTE
 // ============================================================
 export default function SupervisionPage() {
-  const [tab, setTab] = useState<'topics' | 'protocols'>('topics')
+  const location = useLocation()
+  const [tab, setTab] = useState<'supervisees' | 'topics' | 'protocols'>(() =>
+    location.pathname === '/supervision/list' ? 'supervisees' : 'topics'
+  )
+  const [supervisees, setSupervisees] = useState<Supervisee[]>([])
   const [topics, setTopics] = useState<Topic[]>([])
   const [protocols, setProtocols] = useState<Protocol[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,9 +56,27 @@ export default function SupervisionPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (tab === 'topics') loadTopics()
+    if (location.pathname === '/supervision/list') setTab('supervisees')
+    if (location.pathname === '/supervision/pending') setTab('topics')
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (tab === 'supervisees') loadSupervisees()
+    else if (tab === 'topics') loadTopics()
     else loadProtocols()
   }, [tab])
+
+  async function loadSupervisees() {
+    setLoading(true)
+    try {
+      const data = await supervisorService.listSupervisees()
+      setSupervisees(data.supervisees || [])
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function loadTopics() {
     setLoading(true)
@@ -192,10 +232,11 @@ export default function SupervisionPage() {
             color: 'var(--on-surface-variant)',
             fontFamily: 'var(--font-family)'
           }}>
-            Validação de temas e protocolos • 
-            {tab === 'topics' 
-              ? `${pendingTopics.length} tema${pendingTopics.length !== 1 ? 's' : ''} pendente${pendingTopics.length !== 1 ? 's' : ''}`
-              : `${pendingProtocols.length} protocolo${pendingProtocols.length !== 1 ? 's' : ''} pendente${pendingProtocols.length !== 1 ? 's' : ''}`
+            {tab === 'supervisees'
+              ? `Lista de supervisandos • ${supervisees.length} estudante${supervisees.length !== 1 ? 's' : ''}`
+              : tab === 'topics'
+                ? `Validação de temas • ${pendingTopics.length} tema${pendingTopics.length !== 1 ? 's' : ''} pendente${pendingTopics.length !== 1 ? 's' : ''}`
+                : `Validação de protocolos • ${pendingProtocols.length} protocolo${pendingProtocols.length !== 1 ? 's' : ''} pendente${pendingProtocols.length !== 1 ? 's' : ''}`
             }
           </p>
         </div>
@@ -211,8 +252,8 @@ export default function SupervisionPage() {
           color: 'var(--on-surface-variant)'
         }}>
           <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>school</span>
-          {tab === 'topics' ? topics.length : protocols.length} 
-          {tab === 'topics' ? ' aluno(s)' : ' protocolo(s)'}
+          {tab === 'supervisees' ? supervisees.length : tab === 'topics' ? topics.length : protocols.length}
+          {tab === 'supervisees' ? ' supervisando(s)' : tab === 'topics' ? ' tema(s)' : ' protocolo(s)'}
         </span>
       </div>
 
@@ -238,10 +279,45 @@ export default function SupervisionPage() {
       {/* Tabs */}
       <div style={{
         display: 'flex',
+        flexWrap: 'wrap',
         gap: 'var(--space-1)',
         borderBottom: '1px solid var(--outline-variant)',
         paddingBottom: 'var(--space-1)'
       }}>
+        <button
+          onClick={() => setTab('supervisees')}
+          style={{
+            padding: '10px var(--space-3)',
+            fontSize: 'var(--body-md)',
+            fontWeight: 'var(--font-semibold)',
+            fontFamily: 'var(--font-family)',
+            border: 'none',
+            borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+            cursor: 'pointer',
+            background: tab === 'supervisees' ? 'var(--primary-container)' : 'transparent',
+            color: tab === 'supervisees' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-1)'
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>groups</span>
+          Supervisandos
+          {supervisees.length > 0 && (
+            <span style={{
+              background: 'var(--primary)',
+              color: 'var(--on-primary)',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-full)',
+              fontSize: 'var(--label-sm)',
+              fontWeight: 'var(--font-bold)'
+            }}>
+              {supervisees.length}
+            </span>
+          )}
+        </button>
+
         <button
           onClick={() => setTab('topics')}
           style={{
@@ -310,6 +386,308 @@ export default function SupervisionPage() {
           )}
         </button>
       </div>
+
+      {/* ==================== CONTEÚDO: SUPERVISANDOS ==================== */}
+      {tab === 'supervisees' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          {supervisees.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: 'var(--space-5) var(--space-3)',
+              color: 'var(--on-surface-variant)',
+              background: 'var(--surface-container-low)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px dashed var(--outline-variant)',
+              fontSize: 'var(--body-md)'
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '40px', marginBottom: 'var(--space-1)', display: 'block' }}>
+                groups
+              </span>
+              Nenhum supervisando atribuído.
+            </div>
+          ) : (
+            supervisees.map((supervisee, index) => {
+              const phaseStyle = getPhaseStyle(supervisee.phase)
+              const submissionDate = formatDate(supervisee.current_submission?.submitted_at)
+              const protocolDate = formatDate(supervisee.current_protocol?.submitted_at)
+
+              return (
+                <div
+                  key={supervisee.student.id ?? supervisee.student.student_number ?? supervisee.student.email ?? index}
+                  className="card"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(260px, 0.9fr) minmax(320px, 1.1fr)',
+                    gap: 'var(--space-4)',
+                    padding: 'var(--space-3) var(--space-4)'
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--space-2)',
+                      marginBottom: 'var(--space-2)'
+                    }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--primary)' }}>
+                        account_circle
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <h3 style={{
+                          fontSize: 'var(--body-lg)',
+                          fontWeight: 'var(--font-semibold)',
+                          color: 'var(--on-surface)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {supervisee.student.name || 'Estudante'}
+                        </h3>
+                        {supervisee.student.email && (
+                          <p style={{
+                            fontSize: 'var(--label-md)',
+                            color: 'var(--on-surface-variant)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {supervisee.student.email}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {supervisee.student.student_number && (
+                        <span style={{
+                          fontSize: 'var(--label-sm)',
+                          color: 'var(--on-surface-variant)',
+                          background: 'var(--surface-container)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-full)'
+                        }}>
+                          Nº {supervisee.student.student_number}
+                        </span>
+                      )}
+                      {supervisee.student.course && (
+                        <span style={{
+                          fontSize: 'var(--label-sm)',
+                          color: 'var(--on-surface-variant)',
+                          background: 'var(--surface-container)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-full)'
+                        }}>
+                          {supervisee.student.course.name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 'var(--space-2)',
+                      flexWrap: 'wrap',
+                      marginBottom: 'var(--space-2)'
+                    }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '2px 10px',
+                        borderRadius: 'var(--radius-full)',
+                        fontSize: 'var(--label-md)',
+                        fontWeight: 'var(--font-medium)',
+                        background: phaseStyle.bg,
+                        color: phaseStyle.color
+                      }}>
+                        <span style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: 'var(--radius-full)',
+                          background: phaseStyle.dot
+                        }} />
+                        {supervisee.phase_label || phaseStyle.label}
+                      </span>
+                      {submissionDate && (
+                        <span style={{ fontSize: 'var(--label-md)', color: 'var(--on-surface-variant)' }}>
+                          Submetido em {submissionDate}
+                        </span>
+                      )}
+                    </div>
+
+                    {supervisee.phase === 'none' || !supervisee.current_submission ? (
+                      <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', fontStyle: 'italic' }}>
+                        Sem tema ou protocolo submetido.
+                      </p>
+                    ) : supervisee.phase === 'protocol' ? (
+                      <>
+                        <h4 style={{
+                          fontSize: 'var(--body-md)',
+                          fontWeight: 'var(--font-semibold)',
+                          color: 'var(--on-surface)',
+                          marginBottom: '4px'
+                        }}>
+                          Protocolo {supervisee.current_protocol?.code || supervisee.current_submission.code}
+                        </h4>
+                        {supervisee.current_topic && (
+                          <p style={{
+                            fontSize: 'var(--body-sm)',
+                            color: 'var(--on-surface-variant)',
+                            marginBottom: 'var(--space-1)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            Tema: {supervisee.current_topic.title}
+                          </p>
+                        )}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: 'var(--space-2)' }}>
+                          <span style={{
+                            fontSize: 'var(--label-sm)',
+                            color: 'var(--on-surface-variant)',
+                            background: 'var(--surface-container)',
+                            padding: '2px 8px',
+                            borderRadius: 'var(--radius-full)'
+                          }}>
+                            {supervisee.current_protocol?.status_label || supervisee.current_submission.status_label}
+                          </span>
+                          {supervisee.current_protocol?.submission_number && (
+                            <span style={{
+                              fontSize: 'var(--label-sm)',
+                              color: 'var(--on-surface-variant)',
+                              background: 'var(--surface-container)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-full)'
+                            }}>
+                              Submissão nº{supervisee.current_protocol.submission_number}
+                            </span>
+                          )}
+                          {supervisee.current_protocol?.version && (
+                            <span style={{
+                              fontSize: 'var(--label-sm)',
+                              color: 'var(--on-surface-variant)',
+                              background: 'var(--surface-container)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-full)'
+                            }}>
+                              Versão {supervisee.current_protocol.version}
+                            </span>
+                          )}
+                          {protocolDate && protocolDate !== submissionDate && (
+                            <span style={{
+                              fontSize: 'var(--label-sm)',
+                              color: 'var(--on-surface-variant)',
+                              background: 'var(--surface-container)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-full)'
+                            }}>
+                              {protocolDate}
+                            </span>
+                          )}
+                        </div>
+                        {supervisee.current_topic && (
+                          <TopicJustificationToggle
+                            justification={supervisee.current_topic.justification}
+                            showEmpty
+                            compact
+                            style={{ marginBottom: 'var(--space-2)' }}
+                          />
+                        )}
+                        {supervisee.current_protocol && (
+                          <Link
+                            to={`/supervisor/protocols/${supervisee.current_protocol.id}`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 'var(--space-1)',
+                              padding: '8px var(--space-3)',
+                              background: 'var(--surface-container)',
+                              color: 'var(--on-surface)',
+                              border: '1px solid var(--outline-variant)',
+                              borderRadius: 'var(--radius-lg)',
+                              textDecoration: 'none',
+                              fontSize: 'var(--label-md)',
+                              fontWeight: 'var(--font-medium)'
+                            }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>visibility</span>
+                            Ver protocolo
+                          </Link>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <h4 style={{
+                          fontSize: 'var(--body-md)',
+                          fontWeight: 'var(--font-semibold)',
+                          color: 'var(--on-surface)',
+                          marginBottom: '4px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {supervisee.current_topic?.title || supervisee.current_submission.title}
+                        </h4>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: 'var(--space-2)' }}>
+                          <span style={{
+                            fontSize: 'var(--label-sm)',
+                            color: 'var(--on-surface-variant)',
+                            background: 'var(--surface-container)',
+                            padding: '2px 8px',
+                            borderRadius: 'var(--radius-full)'
+                          }}>
+                            {supervisee.current_topic?.status_label || supervisee.current_submission.status_label}
+                          </span>
+                          {supervisee.current_topic?.scientific_area && (
+                            <span style={{
+                              fontSize: 'var(--label-sm)',
+                              color: 'var(--on-surface-variant)',
+                              background: 'var(--surface-container)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-full)'
+                            }}>
+                              {supervisee.current_topic.scientific_area.name}
+                            </span>
+                          )}
+                        </div>
+                        <TopicJustificationToggle
+                          justification={supervisee.current_topic?.justification}
+                          showEmpty
+                          compact
+                          style={{ marginBottom: 'var(--space-2)' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setTab('topics')}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 'var(--space-1)',
+                            padding: '8px var(--space-3)',
+                            background: 'var(--surface-container)',
+                            color: 'var(--on-surface)',
+                            border: '1px solid var(--outline-variant)',
+                            borderRadius: 'var(--radius-lg)',
+                            fontSize: 'var(--label-md)',
+                            fontWeight: 'var(--font-medium)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>lightbulb</span>
+                          Ver temas
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
 
       {/* ==================== CONTEÚDO: TEMAS ==================== */}
       {tab === 'topics' && (
@@ -385,6 +763,12 @@ export default function SupervisionPage() {
                           {topic.student.name}
                         </p>
                       )}
+                      <TopicJustificationToggle
+                        justification={topic.justification}
+                        showEmpty
+                        compact
+                        style={{ marginTop: 'var(--space-2)' }}
+                      />
                     </div>
 
                     <div style={{ display: 'flex', gap: 'var(--space-1)', flexShrink: 0 }}>
@@ -508,6 +892,12 @@ export default function SupervisionPage() {
                           {topic.student.name}
                         </p>
                       )}
+                      <TopicJustificationToggle
+                        justification={topic.justification}
+                        showEmpty
+                        compact
+                        style={{ marginTop: 'var(--space-2)' }}
+                      />
                     </div>
                     <span style={{
                       display: 'inline-flex',
@@ -626,13 +1016,21 @@ export default function SupervisionPage() {
                           </span>
                         </div>
                         {protocol.topic && (
-                          <p style={{
-                            fontSize: 'var(--body-sm)',
-                            color: 'var(--on-surface-variant)',
-                            marginBottom: '2px'
-                          }}>
-                            Tema: {protocol.topic.title}
-                          </p>
+                          <>
+                            <p style={{
+                              fontSize: 'var(--body-sm)',
+                              color: 'var(--on-surface-variant)',
+                              marginBottom: '2px'
+                            }}>
+                              Tema: {protocol.topic.title}
+                            </p>
+                            <TopicJustificationToggle
+                              justification={protocol.topic.justification}
+                              showEmpty
+                              compact
+                              style={{ marginTop: 'var(--space-2)', marginBottom: 'var(--space-2)' }}
+                            />
+                          </>
                         )}
                         <p style={{
                           fontSize: 'var(--label-md)',
@@ -801,9 +1199,17 @@ export default function SupervisionPage() {
                           </span>
                         </div>
                         {protocol.topic && (
-                          <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
-                            {protocol.topic.title}
-                          </p>
+                          <>
+                            <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
+                              {protocol.topic.title}
+                            </p>
+                            <TopicJustificationToggle
+                              justification={protocol.topic.justification}
+                              showEmpty
+                              compact
+                              style={{ marginTop: 'var(--space-2)' }}
+                            />
+                          </>
                         )}
                       </div>
                       <Link

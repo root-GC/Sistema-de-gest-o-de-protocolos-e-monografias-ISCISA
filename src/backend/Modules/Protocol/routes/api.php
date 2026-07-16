@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\Protocol\app\Http\Controllers\TopicController;
 use Modules\Protocol\app\Http\Controllers\EvaluationFormController;
 use Modules\Protocol\app\Http\Controllers\OnlyOfficeController;
+use Modules\Protocol\app\Http\Controllers\SupervisorController;
 
 
 Route::prefix('api')->middleware(['api'])->group(function () {
@@ -30,11 +31,13 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
 
     Route::patch('topics/{topic}/supervisor-approve', [TopicController::class, 'approveBySupervisor'])->name('topic.approve');
     Route::patch('topics/{topic}/supervisor-reject', [TopicController::class, 'rejectBySupervisor'])->name('topic.reject');
+    Route::get('supervisor/supervisees', [SupervisorController::class, 'supervisees'])->name('supervisor.supervisees.list');
     Route::get('supervisor/topics', [TopicController::class, 'getForSupervisor'])->name('supervisor.topics.list');
 
     // Secretary operations: list topics for assignment, get eligible reviewers, assign reviewers
     Route::get('secretary/topics', [TopicController::class, 'getForSecretary'])->name('secretary.topics.list');
     Route::get('topics/{topic}/eligible-reviewers', [TopicController::class, 'getEligibleReviewers'])->name('topic.eligible-reviewers');
+    Route::get('topics/{topic}/reviewers', [TopicController::class, 'getAssignedReviewers'])->name('topic.reviewers.index');
     Route::post('topics/{topic}/assign-reviewers', [TopicController::class, 'assignReviewers'])->name('topic.assign-reviewers');
     Route::get('reviewer/topics', [TopicController::class, 'getForReviewer'])->name('reviewer.topics.list');
     Route::get('topics/{topic}/comments', [TopicController::class, 'getComments'])->name('topic.comments.index');
@@ -52,6 +55,7 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     // Secretary operations: list protocols for nucleus, get eligible reviewers, assign reviewers
     Route::get('secretary/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForSecretary')->name('secretary.protocols.list');
     Route::get('protocols/{protocol}/eligible-reviewers', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getEligibleReviewers')->name('protocol.eligible-reviewers');
+    Route::get('protocols/{protocol}/reviewers', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getAssignedReviewers')->name('protocol.reviewers.index');
     Route::post('protocols/{protocol}/assign-reviewers', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@assignReviewers')->name('protocol.assign-reviewers');
 
     // Reviewer operations: list assigned protocols for evaluation

@@ -8,6 +8,7 @@ export interface Protocol {
   topic?: {
     id: number;
     title: string;
+    justification?: string | null;
     status: string;
   };
   status: string;
@@ -68,6 +69,23 @@ export interface EligibleReviewer {
   scientific_area_name: string;
 }
 
+export interface AssignedProtocolReviewer {
+  id: number;
+  name: string | null;
+  email?: string | null;
+  slot: 'reviewer_one' | 'reviewer_two';
+  assignment_id: number;
+  organ_id?: number;
+  organ?: {
+    id: number;
+    name: string;
+    type: string;
+  } | null;
+  status?: string;
+  review_order?: boolean;
+  assigned_at?: string;
+}
+
 export const protocolService = {
   submit: (topicId: number, protocolType: string, file: File) => {
     const formData = new FormData();
@@ -107,6 +125,13 @@ export const protocolService = {
   getEligibleReviewers: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/eligible-reviewers`) as Promise<{
       reviewers: EligibleReviewer[];
+    }>,
+
+  getAssignedReviewers: (protocolId: number) =>
+    req('GET', `/api/v1/protocols/${protocolId}/reviewers`) as Promise<{
+      reviewers: AssignedProtocolReviewer[];
+      review_assignments: ReviewAssignment[];
+      total: number;
     }>,
 
   assignReviewers: (protocolId: number, reviewerOneId: number, reviewerTwoId: number) =>

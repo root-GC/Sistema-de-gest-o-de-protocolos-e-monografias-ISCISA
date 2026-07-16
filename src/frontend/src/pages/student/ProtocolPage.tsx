@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { topicService, type ApprovedTopic } from '../../services/topicService'
+import { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 // ============================================================
@@ -294,13 +295,21 @@ export default function ProtocolPage() {
                       Submissão nº{p.submission_number} • Versão {p.version}
                     </p>
                     {p.topic && (
-                      <p style={{
-                        fontSize: 'var(--label-sm)',
-                        color: 'var(--on-surface-variant)',
-                        marginTop: '4px'
-                      }}>
-                        Tema: {p.topic.title}
-                      </p>
+                      <>
+                        <p style={{
+                          fontSize: 'var(--label-sm)',
+                          color: 'var(--on-surface-variant)',
+                          marginTop: '4px'
+                        }}>
+                          Tema: {p.topic.title}
+                        </p>
+                        <TopicJustificationToggle
+                          justification={p.topic.justification}
+                          showEmpty
+                          compact
+                          style={{ marginTop: 'var(--space-2)' }}
+                        />
+                      </>
                     )}
                   </div>
                 </div>
@@ -500,6 +509,14 @@ export default function ProtocolPage() {
                 </option>
               ))}
             </select>
+            {selectedTopic && (
+              <TopicJustificationToggle
+                justification={selectedTopic.justification}
+                showEmpty
+                compact
+                style={{ marginTop: 'var(--space-1)' }}
+              />
+            )}
             {selectedTopic && topicHasProtocol && (
               <p style={{
                 fontSize: 'var(--label-sm)',

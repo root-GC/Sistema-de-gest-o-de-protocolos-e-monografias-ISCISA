@@ -30,6 +30,7 @@ class ProtocolResource extends JsonResource
             'topic' => $this->whenLoaded('topic', fn() => [
                 'id' => $this->topic->id,
                 'title' => $this->topic->title,
+                'justification' => $this->topic->justification,
                 'status' => $this->topic->status,
             ]),
             'supervisor' => $this->whenLoaded('supervisor', fn() => [

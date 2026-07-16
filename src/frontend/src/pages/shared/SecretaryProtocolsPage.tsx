@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { topicService, type Topic } from '../../services/topicService'
-import { protocolService, type Protocol } from '../../services/protocolService'
+import { topicService, type AssignedTopicReviewer, type Topic } from '../../services/topicService'
+import { protocolService, type AssignedProtocolReviewer, type Protocol } from '../../services/protocolService'
+import TopicJustification, { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 // ============================================================
@@ -10,6 +11,8 @@ function getTopicStatusStyle(status: string) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
     topic_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
     topic_pending_nucleo:     { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',     dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
+    topic_assigned_for_review:{ bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Revisores atribuídos' },
+    topic_in_review:          { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',     dot: 'var(--tertiary)', label: 'Em revisão' },
     topic_approved_nucleo:    { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
     topic_rejected:           { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
   }
@@ -24,6 +27,7 @@ function getProtocolStatusStyle(status: string) {
     protocol_rejected_supervisor: { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado (Supervisor)' },
     protocol_in_review:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Em Revisão' },
     protocol_pending_nucleo:      { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
+    protocol_in_review_nucleo:    { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (Núcleo)' },
     protocol_approved_nucleo:     { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
     protocol_rejected_nucleo:     { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
     protocol_resubmitted:         { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Re-submetido' },
@@ -137,6 +141,9 @@ function TopicsTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reviewersByTopic, setReviewersByTopic] = useState<Record<number, { id: number; name: string }[]>>({})
+  const [assignedReviewersByTopic, setAssignedReviewersByTopic] = useState<Record<number, AssignedTopicReviewer[]>>({})
+  const [expandedTopicId, setExpandedTopicId] = useState<number | null>(null)
+  const [loadingAssignedTopicId, setLoadingAssignedTopicId] = useState<number | null>(null)
   const [selected, setSelected] = useState<Record<number, number[]>>({})
   const [assigningId, setAssigningId] = useState<number | null>(null)
 
@@ -158,6 +165,28 @@ function TopicsTab() {
     } catch (e) { setError((e as Error).message) }
   }
 
+  async function loadAssignedReviewers(topicId: number) {
+    setLoadingAssignedTopicId(topicId)
+    try {
+      const { reviewers } = await topicService.getAssignedReviewers(topicId)
+      setAssignedReviewersByTopic(prev => ({ ...prev, [topicId]: reviewers }))
+    } catch (e) { setError((e as Error).message) }
+    finally { setLoadingAssignedTopicId(null) }
+  }
+
+  async function toggleAssignedReviewers(topicId: number) {
+    if (expandedTopicId === topicId) {
+      setExpandedTopicId(null)
+      return
+    }
+
+    setExpandedTopicId(topicId)
+
+    if (!assignedReviewersByTopic[topicId]) {
+      await loadAssignedReviewers(topicId)
+    }
+  }
+
   function toggleReviewer(topicId: number, reviewerId: number) {
     setSelected(prev => {
       const cur = prev[topicId] ?? []
@@ -174,6 +203,8 @@ function TopicsTab() {
       setSelected(p => { const n = { ...p }; delete n[topicId]; return n })
       setReviewersByTopic(p => { const n = { ...p }; delete n[topicId]; return n })
       await load()
+      setExpandedTopicId(topicId)
+      await loadAssignedReviewers(topicId)
     } catch (e) { setError((e as Error).message) }
     finally { setAssigningId(null) }
   }
@@ -220,10 +251,52 @@ function TopicsTab() {
           <SectionTitle icon="checklist" title="Outras submissões" />
           {others.map(t => {
             const s = getTopicStatusStyle(t.status)
+            const isExpanded = expandedTopicId === t.id
+            const assignedReviewers = assignedReviewersByTopic[t.id]
+            const isLoadingAssigned = loadingAssignedTopicId === t.id
             return (
-              <div key={t.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-2) var(--space-3)' }}>
-                <span style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
-                <StatusBadge s={s} label={t.status_label} />
+              <div key={t.id} className="card" style={{ padding: 'var(--space-2) var(--space-3)' }}>
+                <button
+                  type="button"
+                  onClick={() => toggleAssignedReviewers(t.id)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-family)',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
+                    <StatusBadge s={s} label={t.status_label || s.label} />
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--on-surface-variant)' }}>
+                      {isExpanded ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </span>
+                </button>
+
+                {isExpanded && (
+                  <>
+                    <TopicJustification
+                      justification={t.justification}
+                      showEmpty
+                      compact
+                      style={{ marginTop: 'var(--space-2)' }}
+                    />
+                    <AssignedReviewersPanel
+                      reviewers={assignedReviewers}
+                      loading={isLoadingAssigned}
+                    />
+                  </>
+                )}
               </div>
             )
           })}
@@ -242,6 +315,9 @@ function ProtocolsTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reviewersByProtocol, setReviewersByProtocol] = useState<Record<number, { id: number; name: string }[]>>({})
+  const [assignedReviewersByProtocol, setAssignedReviewersByProtocol] = useState<Record<number, AssignedProtocolReviewer[]>>({})
+  const [expandedProtocolId, setExpandedProtocolId] = useState<number | null>(null)
+  const [loadingAssignedProtocolId, setLoadingAssignedProtocolId] = useState<number | null>(null)
   const [pickOne, setPickOne] = useState<Record<number, number | ''>>({})
   const [pickTwo, setPickTwo] = useState<Record<number, number | ''>>({})
   const [assigningId, setAssigningId] = useState<number | null>(null)
@@ -264,6 +340,28 @@ function ProtocolsTab() {
     } catch (e) { setError((e as Error).message) }
   }
 
+  async function loadAssignedReviewers(protocolId: number) {
+    setLoadingAssignedProtocolId(protocolId)
+    try {
+      const { reviewers } = await protocolService.getAssignedReviewers(protocolId)
+      setAssignedReviewersByProtocol(prev => ({ ...prev, [protocolId]: reviewers }))
+    } catch (e) { setError((e as Error).message) }
+    finally { setLoadingAssignedProtocolId(null) }
+  }
+
+  async function toggleAssignedReviewers(protocolId: number) {
+    if (expandedProtocolId === protocolId) {
+      setExpandedProtocolId(null)
+      return
+    }
+
+    setExpandedProtocolId(protocolId)
+
+    if (!assignedReviewersByProtocol[protocolId]) {
+      await loadAssignedReviewers(protocolId)
+    }
+  }
+
   async function assign(protocolId: number) {
     const one = pickOne[protocolId]
     const two = pickTwo[protocolId]
@@ -275,6 +373,8 @@ function ProtocolsTab() {
       setPickTwo(p => { const n = { ...p }; delete n[protocolId]; return n })
       setReviewersByProtocol(p => { const n = { ...p }; delete n[protocolId]; return n })
       await load()
+      setExpandedProtocolId(protocolId)
+      await loadAssignedReviewers(protocolId)
     } catch (e) { setError((e as Error).message) }
     finally { setAssigningId(null) }
   }
@@ -300,10 +400,30 @@ function ProtocolsTab() {
         const revs = reviewersByProtocol[p.id]
         const s1 = pickOne[p.id]
         const s2 = pickTwo[p.id]
+        const isExpanded = expandedProtocolId === p.id
+        const assignedReviewers = assignedReviewersByProtocol[p.id]
+        const isLoadingAssigned = loadingAssignedProtocolId === p.id
 
         return (
           <div key={p.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+            <button
+              type="button"
+              onClick={() => toggleAssignedReviewers(p.id)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 'var(--space-2)',
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                color: 'inherit',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-family)',
+                textAlign: 'left'
+              }}
+            >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '4px', flexWrap: 'wrap' }}>
                   <h3 style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-bold)' }}>{p.code}</h3>
@@ -311,7 +431,28 @@ function ProtocolsTab() {
                 </div>
                 <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>Tema: {p.topic?.title || '—'}</p>
               </div>
-            </div>
+              <span className="material-symbols-outlined" style={{ fontSize: '22px', color: 'var(--on-surface-variant)', flexShrink: 0 }}>
+                {isExpanded ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+
+            {isExpanded && (
+              <>
+                {p.topic && (
+                  <TopicJustification
+                    justification={p.topic.justification}
+                    showEmpty
+                    compact
+                    style={{ marginTop: 'var(--space-2)' }}
+                  />
+                )}
+                <AssignedReviewersPanel
+                  reviewers={assignedReviewers}
+                  loading={isLoadingAssigned}
+                  emptyText="Nenhum revisor atribuído a este protocolo."
+                />
+              </>
+            )}
 
             {isPending && (
               <div style={{ padding: 'var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)' }}>
@@ -421,6 +562,88 @@ function SelectRevisor({ label, value, onChange, reviewers, disabledId }: { labe
   )
 }
 
+function AssignedReviewersPanel({
+  reviewers,
+  loading,
+  emptyText = 'Nenhum revisor atribuído a este tema.'
+}: {
+  reviewers?: Array<AssignedTopicReviewer | AssignedProtocolReviewer>;
+  loading: boolean;
+  emptyText?: string;
+}) {
+  return (
+    <div style={{
+      marginTop: 'var(--space-2)',
+      padding: 'var(--space-3)',
+      background: 'var(--surface-container-low)',
+      borderRadius: 'var(--radius-lg)',
+      border: '1px solid var(--outline-variant)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 'var(--space-2)'
+    }}>
+      <p style={{
+        fontSize: 'var(--label-md)',
+        fontWeight: 'var(--font-semibold)',
+        color: 'var(--on-surface-variant)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em'
+      }}>
+        Revisores atribuídos
+      </p>
+
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', color: 'var(--on-surface-variant)', fontSize: 'var(--body-md)' }}>
+          <span style={{ width: '16px', height: '16px', border: '2px solid var(--outline-variant)', borderTopColor: 'var(--primary)', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} />
+          A carregar revisores...
+        </div>
+      ) : !reviewers || reviewers.length === 0 ? (
+        <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', fontStyle: 'italic' }}>
+          {emptyText}
+        </p>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 'var(--space-2)' }}>
+          {reviewers.map((reviewer, index) => {
+            const label = 'slot' in reviewer
+              ? reviewer.slot === 'reviewer_one' ? 'Revisor 1' : 'Revisor 2'
+              : `Revisor ${index + 1}`
+
+            return (
+              <div
+                key={`${reviewer.assignment_id}-${reviewer.id}-${index}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 'var(--space-2)',
+                  padding: '10px var(--space-2)',
+                  background: 'var(--surface-container-lowest)',
+                  border: '1px solid var(--outline-variant)',
+                  borderRadius: 'var(--radius-md)'
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--primary)', marginTop: '2px' }}>person_check</span>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', marginBottom: '2px' }}>
+                    {label}
+                  </p>
+                  <p style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {reviewer.name || `Revisor #${reviewer.id}`}
+                  </p>
+                  {reviewer.email && (
+                    <p style={{ fontSize: 'var(--label-md)', color: 'var(--on-surface-variant)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {reviewer.email}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TopicCard({ topic, reviewers, selected, assigning, onLoadReviewers, onToggle, onAssign }: {
   topic: Topic
   reviewers?: { id: number; name: string }[]
@@ -437,6 +660,7 @@ function TopicCard({ topic, reviewers, selected, assigning, onLoadReviewers, onT
         <h3 style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-bold)', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic.title}</h3>
         <StatusBadge s={s} label={topic.status_label} />
       </div>
+      <TopicJustificationToggle justification={topic.justification} showEmpty compact />
       {!reviewers ? (
         <button onClick={onLoadReviewers} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '10px var(--space-3)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)', borderRadius: 'var(--radius-lg)', cursor: 'pointer', border: '1px solid var(--outline-variant)', background: 'var(--surface-container-lowest)', color: 'var(--primary)', width: 'fit-content' }}>
           <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span> Ver avaliadores elegíveis

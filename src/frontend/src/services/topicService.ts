@@ -13,11 +13,49 @@ export interface Topic {
   scientific_area?: { id: number; name: string };
   course?: { id: number; name: string };
   student?: { id: string; name: string; email: string };
+  my_assignment?: TopicReviewAssignment | null;
+}
+
+export interface TopicReviewComment {
+  id: number;
+  content: string;
+  status?: string;
+  created_at: string;
+  updated_at?: string;
+  user?: {
+    id: number;
+    name: string;
+    email?: string;
+  };
+}
+
+export interface TopicReviewEvaluation {
+  id?: number;
+  decision: 'approved' | 'rejected' | null;
+  comment?: TopicReviewComment | null;
+  comments?: string | null;
+  evaluated_at?: string | null;
+}
+
+export interface TopicReviewAssignment {
+  id: number;
+  assigned_at?: string;
+  evaluation?: TopicReviewEvaluation | null;
+}
+
+export interface AssignedTopicReviewer {
+  id: number;
+  name: string | null;
+  email?: string | null;
+  assignment_id: number;
+  assigned_at?: string;
+  evaluation?: TopicReviewEvaluation | null;
 }
 
 export interface ApprovedTopic {
   id: number;
   title: string;
+  justification?: string | null;
   status: string;
   status_label: string;
   submitted_at: string;
@@ -121,6 +159,13 @@ export const topicService = {
       total: number;
     }>,
 
+  getAssignedReviewers: (topicId: number) =>
+    req('GET', `/api/v1/topics/${topicId}/reviewers`) as Promise<{
+      reviewers: AssignedTopicReviewer[];
+      review_assignments: TopicReviewAssignment[];
+      total: number;
+    }>,
+
   assignReviewers: (topicId: number, reviewerIds: number[]) =>
     req('POST', `/api/v1/topics/${topicId}/assign-reviewers`, { reviewer_ids: reviewerIds }),
 
@@ -128,13 +173,29 @@ export const topicService = {
     req('GET', '/api/v1/reviewer/topics') as Promise<{ topics: Topic[] }>,
 
   getComments: (topicId: number, filters: Record<string, string> = {}) =>
-    req('GET', `/api/v1/topics/${topicId}/comments?${new URLSearchParams(filters)}`),
+    req(
+      'GET',
+      `/api/v1/topics/${topicId}/comments${Object.keys(filters).length ? `?${new URLSearchParams(filters)}` : ''}`
+    ) as Promise<{
+      success: boolean;
+      comments: TopicReviewComment[];
+      pagination?: {
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+      };
+    }>,
 
   submitComment: (topicId: number, content: string) =>
     req('POST', `/api/v1/topics/${topicId}/comments`, { content }),
 
   submitEvaluation: (topicId: number, decision: 'approved' | 'rejected', comment_id: number | null = null) =>
-    req('POST', `/api/v1/topics/${topicId}/evaluations`, { decision, comment_id }),
+    req('POST', `/api/v1/topics/${topicId}/evaluations`, { decision, comment_id }) as Promise<{
+      message: string;
+      topic: Topic;
+      evaluation: TopicReviewEvaluation;
+    }>,
 };
 
 // ============ Scientific Area Service ============

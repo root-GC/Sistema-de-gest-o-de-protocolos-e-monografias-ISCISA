@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { topicService, type Topic } from '../../services/topicService'
+import { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 // ============================================================
@@ -271,6 +272,12 @@ export default function ProtocolsOverviewPage() {
                       }}>
                         {t.title}
                       </h3>
+                      <TopicJustificationToggle
+                        justification={t.justification}
+                        showEmpty
+                        compact
+                        style={{ marginTop: 'var(--space-2)' }}
+                      />
                     </div>
                     <StatusBadge s={s} label={t.status_label} />
                   </div>

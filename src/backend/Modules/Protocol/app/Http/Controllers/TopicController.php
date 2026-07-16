@@ -8,6 +8,7 @@ use Illuminate\Routing\Controller;
 use Modules\Protocol\app\Http\Requests\SubmitTopicRequest;
 use Modules\Protocol\app\Http\Resources\EligibleReviewerResource;
 use Modules\Protocol\app\Http\Resources\TopicEvaluationResource;
+use Modules\Protocol\app\Http\Resources\TopicReviewAssignmentSecretaryResource;
 use Modules\Protocol\app\Http\Resources\TopicReviewCommentResource;
 use Modules\Protocol\app\Http\Resources\TopicReviewerResource;
 use Modules\Protocol\app\Http\Resources\TopicSecretaryResource;
@@ -302,6 +303,66 @@ public function getComments(Request $request, Topic $topic)
 
         return response()->json([
             'reviewers' => EligibleReviewerResource::collection($reviewers),
+            'total' => $reviewers->count(),
+        ]);
+    }
+
+    public function getAssignedReviewers(Request $request, Topic $topic)
+    {
+        $user = $request->user()->load('secretaryProfile');
+
+        if (! $user->hasPermission('protocol.assign')) {
+            return response()->json([
+                'message' => 'Utilizador não tem permissão para ver revisores atribuídos.',
+            ], 403);
+        }
+
+        $topic->loadMissing('scientificArea:id,name,organ_id');
+
+        $secretary = $user->secretaryProfile;
+        if ($secretary && (int) $secretary->organ_id !== (int) $topic->scientificArea?->organ_id) {
+            return response()->json([
+                'message' => 'Utilizador não tem permissão para ver revisores deste tema.',
+            ], 403);
+        }
+
+        if (! $secretary && ! $user->hasPermission('protocol.view.all')) {
+            return response()->json([
+                'message' => 'Utilizador não tem permissão para ver revisores deste tema.',
+            ], 403);
+        }
+
+        $assignments = $topic->reviewAssignments()
+            ->with([
+                'reviewer.user:id,name,email',
+                'evaluation.comment:id,content,status,created_at',
+            ])
+            ->orderBy('assigned_at')
+            ->get();
+
+        $reviewers = $assignments
+            ->map(fn($assignment) => [
+                'id' => $assignment->reviewer?->id,
+                'name' => $assignment->reviewer?->user?->name,
+                'email' => $assignment->reviewer?->user?->email,
+                'assignment_id' => $assignment->id,
+                'assigned_at' => $assignment->assigned_at,
+                'evaluation' => $assignment->evaluation ? [
+                    'decision' => $assignment->evaluation->decision,
+                    'comment' => $assignment->evaluation->comment ? [
+                        'id' => $assignment->evaluation->comment->id,
+                        'content' => $assignment->evaluation->comment->content,
+                        'status' => $assignment->evaluation->comment->status,
+                    ] : null,
+                    'evaluated_at' => $assignment->evaluation->evaluated_at,
+                ] : null,
+            ])
+            ->filter(fn($reviewer) => $reviewer['id'] !== null)
+            ->values();
+
+        return response()->json([
+            'reviewers' => $reviewers,
+            'review_assignments' => TopicReviewAssignmentSecretaryResource::collection($assignments),
             'total' => $reviewers->count(),
         ]);
     }

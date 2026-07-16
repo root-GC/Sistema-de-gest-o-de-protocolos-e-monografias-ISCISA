@@ -24,6 +24,7 @@ class ProtocolReviewerResource extends JsonResource
             'topic' => $this->whenLoaded('topic', fn () => [
                 'id' => $this->topic?->id,
                 'title' => $this->topic?->title,
+                'justification' => $this->topic?->justification,
                 'status' => $this->topic?->status,
                 'scientific_area' => $this->topic?->relationLoaded('scientificArea') && $this->topic->scientificArea ? [
                     'id' => $this->topic->scientificArea->id,

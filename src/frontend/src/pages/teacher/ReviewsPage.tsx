@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { topicService, type Topic } from '../../services/topicService'
 import { protocolService, type Protocol } from '../../services/protocolService'
+import { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 // ============================================================
@@ -11,6 +12,7 @@ function getTopicStatusStyle(status: string) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
     topic_pending_nucleo:   { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Pendente' },
     topic_assigned:         { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Atribuído' },
+    topic_assigned_for_review: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Atribuído' },
     topic_in_review:        { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Em Revisão' },
     topic_approved_nucleo:  { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
     topic_rejected_nucleo:  { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
@@ -388,6 +390,12 @@ export default function ReviewsPage() {
                         }}>
                           {topic.title}
                         </h3>
+                        <TopicJustificationToggle
+                          justification={topic.justification}
+                          showEmpty
+                          compact
+                          style={{ marginTop: 'var(--space-2)' }}
+                        />
                       </div>
                       <span style={{
                         display: 'inline-flex',
@@ -490,16 +498,24 @@ export default function ReviewsPage() {
                           </h3>
                         </div>
                         {protocol.topic && (
-                          <p style={{
-                            fontSize: 'var(--body-sm)',
-                            color: 'var(--on-surface-variant)',
-                            marginBottom: '6px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            Tema: {protocol.topic.title}
-                          </p>
+                          <>
+                            <p style={{
+                              fontSize: 'var(--body-sm)',
+                              color: 'var(--on-surface-variant)',
+                              marginBottom: '6px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              Tema: {protocol.topic.title}
+                            </p>
+                            <TopicJustificationToggle
+                              justification={protocol.topic.justification}
+                              showEmpty
+                              compact
+                              style={{ marginBottom: 'var(--space-2)' }}
+                            />
+                          </>
                         )}
                         <span style={{
                           display: 'inline-flex',
@@ -569,15 +585,23 @@ export default function ReviewsPage() {
                           {protocol.code}
                         </h3>
                         {protocol.topic && (
-                          <p style={{
-                            fontSize: 'var(--label-sm)',
-                            color: 'var(--on-surface-variant)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            {protocol.topic.title}
-                          </p>
+                          <>
+                            <p style={{
+                              fontSize: 'var(--label-sm)',
+                              color: 'var(--on-surface-variant)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {protocol.topic.title}
+                            </p>
+                            <TopicJustificationToggle
+                              justification={protocol.topic.justification}
+                              showEmpty
+                              compact
+                              style={{ marginTop: 'var(--space-2)' }}
+                            />
+                          </>
                         )}
                       </div>
                       <span style={{

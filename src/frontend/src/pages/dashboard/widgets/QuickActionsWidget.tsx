@@ -44,7 +44,7 @@ export function QuickActionsWidget(_props: WidgetProps) {
       id: 'my-reviews',
       label: 'Minhas Revisões',
       icon: 'rate_review',
-      permission: 'protocol.review',
+      permission: 'protocol.evaluate',
       onClick: () => console.log('Revisões'),
       href: '/reviews'
     },

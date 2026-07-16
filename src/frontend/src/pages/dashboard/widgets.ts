@@ -78,7 +78,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     order: 1,
     size: 'large',
     component: PendingReviewsWidget,
-    permissions: ['protocol.review'],
+    permissions: ['protocol.evaluate'],
     endpoint: '/api/dashboard/pending-reviews'
   },
   {

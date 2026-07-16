@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { protocolService, type Protocol } from '../../../services/protocolService'
+import { TopicJustificationToggle } from '../../../components/TopicJustification'
 import '../../../styles/global.css'
 
 // ============================================================
@@ -255,6 +256,14 @@ export function ProtocolsTab() {
                   }}>
                     Tema: {p.topic?.title || '—'}
                   </p>
+                  {p.topic && (
+                    <TopicJustificationToggle
+                      justification={p.topic.justification}
+                      showEmpty
+                      compact
+                      style={{ marginTop: 'var(--space-2)' }}
+                    />
+                  )}
                 </div>
               </div>
 

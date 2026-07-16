@@ -51,8 +51,10 @@ Erro:
 | GET | `/topics` | `auth:sanctum` + `topic.view` ou `topic.view.all` | Listar temas do estudante ou de todos, conforme permissão |
 | PATCH | `/topics/{topic}/supervisor-approve` | supervisor atribuído + `supervision.approve` | Aprovar tema submetido e encaminhar ao núcleo |
 | PATCH | `/topics/{topic}/supervisor-reject` | supervisor atribuído + `supervision.approve` | Rejeitar tema submetido |
+| GET | `/supervisor/supervisees` | docente autenticado + `supervision.view` | Listar supervisandos do docente autenticado e a fase atual (`topic`, `protocol` ou `none`) |
 | GET | `/secretary/topics` | `protocol.assign` | Listar todos os temas do núcleo da secretaria |
 | GET | `/topics/{topic}/eligible-reviewers` | `protocol.assign` | Listar avaliadores elegíveis do mesmo núcleo |
+| GET | `/topics/{topic}/reviewers` | `protocol.assign` | Listar avaliadores já atribuídos ao tema |
 | POST | `/topics/{topic}/assign-reviewers` | `protocol.assign` | Atribuir avaliadores ao tema |
 | GET | `/reviewer/topics` | `protocol.evaluate` | Listar temas atribuídos ao revisor autenticado |
 | GET | `/topics/{topic}/comments` | `protocol.evaluate` | Listar comentários do tema para revisores atribuídos |
@@ -65,6 +67,7 @@ Erro:
 | PATCH | `/protocols/{protocol}/supervisor-reject` | supervisor atribuído | Rejeitar protocolo submetido |
 | GET | `/secretary/protocols` | `protocol.assign` | Listar protocolos pendentes no núcleo da secretaria |
 | GET | `/protocols/{protocol}/eligible-reviewers` | `protocol.assign` | Listar revisores elegíveis do mesmo núcleo |
+| GET | `/protocols/{protocol}/reviewers` | `protocol.assign` | Listar revisores já atribuídos ao protocolo |
 | POST | `/protocols/{protocol}/assign-reviewers` | `protocol.assign` | Atribuir revisores e transicionar para `protocol_in_review_nucleo` |
 | GET | `/reviewer/protocols` | `protocol.evaluate` | Listar protocolos atribuídos ao revisor autenticado (blind review) |
 
