@@ -41,6 +41,11 @@ const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtoc
 const AdminUsersPage         = lazy(() => import('./pages/admin/AdminUsersPage'))
 const AdminOrgansPage        = lazy(() => import('./pages/admin/AdminOrgansPage'))
 
+// Páginas públicas (lazy load)
+const RegisterPage       = lazy(() => import('./pages/RegisterPage'))
+const VerifyOtpPage      = lazy(() => import('./pages/VerifyOtpPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
+const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
 const Loader = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
     <span style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>A carregar...</span>
@@ -68,6 +73,11 @@ export default function App() {
             {/* ── Públicas ─────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/403"   element={<Page403 />} />
+
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/verify-otp" element={<VerifyOtpPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
 
             {/* ── Protegidas — qualquer utilizador autenticado ── */}
             <Route element={<ProtectedRoute />}>

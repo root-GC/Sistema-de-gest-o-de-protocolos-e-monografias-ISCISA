@@ -1,50 +1,59 @@
 <?php
 
-namespace Modules\Auth\Services;
+namespace Modules\Auth\app\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Modules\User\Models\Role;
-use Modules\User\Models\User;
-use Modules\User\Models\StudentProfile;
+use Modules\User\app\Models\User;
 
-/**
- * Registo público — apenas estudantes.
- *
- * Fluxo:
- *  1. Criar user com status = active
- *  2. Atribuir role 'student'
- *  3. Criar student_profile com course_id + student_number
- *
- * Tudo numa transação — se qualquer passo falhar reverte tudo.
- */
 class RegisterService
 {
+    public function __construct(private OtpService $otpService) {}
+
     public function register(array $data): User
     {
-        return DB::transaction(function () use ($data) {
-
-            // 1 — Criar utilizador
+        $user = DB::transaction(function () use ($data) {
             $user = User::create([
                 'name'     => $data['name'],
                 'email'    => $data['email'],
                 'password' => Hash::make($data['password']),
-                'status'   => 'active',
+                'status'   => 'pending', // só passa a 'active' após verificar o OTP
             ]);
 
-            // 2 — Atribuir role 'student'
-            $studentRole = Role::where('name', 'student')->firstOrFail();
-            $user->roles()->attach($studentRole->id);
+            $roleName = $data['type'] === 'student' ? 'student' : 'teacher';
+            $roleId   = DB::table('roles')->where('name', $roleName)->value('id');
 
-            // 3 — Criar perfil de estudante
-            StudentProfile::create([
-                'user_id'        => $user->id,
-                'course_id'      => $data['course_id'],
-                'student_number' => $data['student_number'],
-                'supervisorID'   => null, // atribuído depois pelo coordenador(logica ainda por definir)
+            if (! $roleId) {
+                throw new \RuntimeException("Role '{$roleName}' não encontrada — corre o RoleSeeder primeiro.");
+            }
+
+            DB::table('user_roles')->insert([
+                'user_id'    => $user->id,
+                'role_id'    => $roleId,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
+
+                if ($data['type'] === 'student') {
+                    $user->studentProfile()->create([
+                        'course_id'      => $data['course_id'],
+                        'supervisor_id'  => $data['supervisor_id'],
+                        'student_number' => $data['student_number'],
+                    ]);
+                } else {
+                $user->teacherProfile()->create([
+                    'scientific_area_id' => $data['scientific_area_id'],
+                    'academic_degree'    => $data['academic_degree'],
+                    'department'         => $data['department'] ?? null,
+                    'is_internal'        => true,
+                ]);
+            }
 
             return $user;
         });
+
+        $this->otpService->generateAndSend($user->email, 'register', $user->name);
+
+        return $user;
     }
 }

@@ -27,7 +27,7 @@ export interface User {
   status: 'active' | 'inactive';
 }
 
-interface UserPayload {
+export interface UserPayload {
   id: string;
   name: string;
   email: string;
@@ -46,11 +46,12 @@ interface AuthContextType {
   activeProfile: Profile | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<UserPayload>;
+  completeAuth: (token: string, userData: UserPayload) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: (role: Role) => void;
   refresh: () => Promise<void>;
-  
-  // 🆕 Funções de verificação de permissões para o dashboard
+
+  // Funções de verificação de permissões para o dashboard
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
   hasAllPermissions: (permissions: string[]) => boolean;
@@ -98,14 +99,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticating(true);
     try {
       const { token, user: userData } = await authService.login(email, password);
-      
+
       // Persiste os dados primeiro
       localStorage.setItem('sgpmc_token', token);
       localStorage.setItem('sgpmc_user', JSON.stringify(userData));
-      
+
       // Atualiza o estado
       hydrate(userData);
-      
+
       // Aguarda o React processar as atualizações de estado
       await new Promise<void>(resolve => {
         requestAnimationFrame(() => {
@@ -114,8 +115,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 100);
         });
       });
-      
+
       return userData;
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, []);
+
+  // Usado depois de fluxos que já devolvem token + user prontos
+  // (ex: verificação de OTP no registo), sem passar por email/password.
+  const completeAuth = useCallback(async (token: string, userData: UserPayload): Promise<void> => {
+    setIsAuthenticating(true);
+    try {
+      localStorage.setItem('sgpmc_token', token);
+      localStorage.setItem('sgpmc_user', JSON.stringify(userData));
+
+      hydrate(userData);
+
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          setTimeout(() => resolve(), 100);
+        });
+      });
     } finally {
       setIsAuthenticating(false);
     }
@@ -159,36 +180,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveRole(null);
   }
 
-  // 🆕 Verifica se o usuário tem uma permissão específica
+  // Verifica se o usuário tem uma permissão específica
   const hasPermission = useCallback((permission: string): boolean => {
     return permissions.includes(permission);
   }, [permissions]);
 
-  // 🆕 Verifica se o usuário tem pelo menos uma das permissões
+  // Verifica se o usuário tem pelo menos uma das permissões
   const hasAnyPermission = useCallback((perms: string[]): boolean => {
     return perms.some(p => permissions.includes(p));
   }, [permissions]);
 
-  // 🆕 Verifica se o usuário tem todas as permissões
+  // Verifica se o usuário tem todas as permissões
   const hasAllPermissions = useCallback((perms: string[]): boolean => {
     return perms.every(p => permissions.includes(p));
   }, [permissions]);
 
-  // 🆕 Verifica se pode acessar um widget baseado em suas configurações
+  // Verifica se pode acessar um widget baseado em suas configurações
   const canAccessWidget = useCallback((
-    requiredPermissions?: string[], 
+    requiredPermissions?: string[],
     anyPermission?: boolean
   ): boolean => {
     // Se não requer permissões, acesso público
     if (!requiredPermissions || requiredPermissions.length === 0) {
       return true;
     }
-    
+
     // Se anyPermission, basta ter uma
     if (anyPermission) {
       return hasAnyPermission(requiredPermissions);
     }
-    
+
     // Por padrão, precisa ter todas
     return hasAllPermissions(requiredPermissions);
   }, [hasAnyPermission, hasAllPermissions]);
@@ -206,6 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         activeProfile,
         loading: loading || isAuthenticating,
         login,
+        completeAuth,
         logout,
         switchRole,
         refresh,

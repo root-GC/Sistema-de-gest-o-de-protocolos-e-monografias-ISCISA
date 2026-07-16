@@ -1,33 +1,22 @@
 <?php
 
-// namespace Modules\Auth\Http\Controllers;
+namespace Modules\Auth\app\Http\Controllers;
 
-// use Illuminate\Routing\Controller;
-// use Modules\Auth\Builders\AuthPayloadBuilder;
-// use Modules\Auth\Events\UserRegistered;
-// use Modules\Auth\Http\Requests\RegisterRequest;
-// use Modules\Auth\Services\RegisterService;
-// use Modules\Auth\Services\TokenService;
+use Illuminate\Routing\Controller;
+use Modules\Auth\app\Http\Requests\RegisterRequest;
+use Modules\Auth\app\Services\RegisterService;
 
-// class RegisterController extends Controller
-// {
-//     public function __construct(
-//         private RegisterService    $registerService,
-//         private TokenService       $tokenService,
-//         private AuthPayloadBuilder $payloadBuilder,
-//     ) {}
+class RegisterController extends Controller
+{
+    public function __construct(private RegisterService $registerService) {}
 
-//     public function __invoke(RegisterRequest $request)
-//     {
-//         $user  = $this->registerService->register($request->validated());
-//         $token = $this->tokenService->create($user);
+    public function __invoke(RegisterRequest $request)
+    {
+        $user = $this->registerService->register($request->validated());
 
-//         event(new UserRegistered($user));
-
-//         return response()->json([
-//             'message' => 'Registo efectuado com sucesso.',
-//             'token'   => $token,
-//             'user'    => $this->payloadBuilder->build($user),
-//         ], 201);
-//     }
-// }
+        return response()->json([
+            'message' => 'Registo criado com sucesso. Verifique o código enviado para o seu email para activar a conta.',
+            'email'   => $user->email,
+        ], 201);
+    }
+}

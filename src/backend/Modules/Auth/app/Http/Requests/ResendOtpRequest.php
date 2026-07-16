@@ -4,14 +4,17 @@ namespace Modules\Auth\app\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class ForgotPasswordRequest extends FormRequest
+class ResendOtpRequest extends FormRequest
 {
-    public function authorize(): bool { return true; }
+    public function authorize(): bool
+    {
+        return true;
+    }
 
     public function rules(): array
     {
         return [
-            'email' => ['required', 'email'],
+            'email' => ['required', 'email', 'exists:users,email'],
         ];
     }
 
@@ -19,7 +22,7 @@ class ForgotPasswordRequest extends FormRequest
     {
         return [
             'email.required' => 'O email é obrigatório.',
-            'email.email'    => 'Formato de email inválido.',
+            'email.exists'   => 'Não existe nenhum registo pendente para este email.',
         ];
     }
 }

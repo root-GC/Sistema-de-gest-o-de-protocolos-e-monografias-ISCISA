@@ -442,7 +442,7 @@ export default function LoginPage() {
             }}>
               Não tem conta?{' '}
               <Link
-                to="/request-access"
+                to="/register"
                 style={{
                   color: 'var(--primary)',
                   fontWeight: 'var(--font-semibold)',
@@ -453,7 +453,7 @@ export default function LoginPage() {
                 onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
                 onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
               >
-                Solicite acesso
+                Registe-se
               </Link>
             </div>
           </div>

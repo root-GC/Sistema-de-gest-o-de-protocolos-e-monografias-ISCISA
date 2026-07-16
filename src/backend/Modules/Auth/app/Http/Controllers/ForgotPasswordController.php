@@ -1,10 +1,10 @@
 <?php
 
-namespace Modules\Auth\Http\Controllers;
+namespace Modules\Auth\app\Http\Controllers;
 
 use Illuminate\Routing\Controller;
-use Modules\Auth\Http\Requests\ForgotPasswordRequest;
-use Modules\Auth\Services\PasswordService;
+use Modules\Auth\app\Http\Requests\ForgotPasswordRequest;
+use Modules\Auth\app\Services\PasswordService;
 
 class ForgotPasswordController extends Controller
 {

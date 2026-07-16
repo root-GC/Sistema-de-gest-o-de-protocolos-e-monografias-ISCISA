@@ -28,7 +28,10 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->loadRoutesFrom(__DIR__ . "/../../routes/api.php");
         $this->loadMigrationsFrom(__DIR__ . "/../../database/migrations");
-
+        $this->loadViewsFrom(
+                module_path('Auth', 'resources/views'),
+                'auth'
+            );
         // Registar listeners
         \Illuminate\Support\Facades\Event::listen(
             UserLoggedIn::class,
@@ -47,5 +50,7 @@ class AuthServiceProvider extends ServiceProvider
                 return true;
             }
         });
+
+        
     }
 }

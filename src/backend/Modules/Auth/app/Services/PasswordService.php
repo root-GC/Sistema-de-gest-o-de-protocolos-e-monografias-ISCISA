@@ -1,13 +1,13 @@
 <?php
 
-namespace Modules\Auth\Services;
+namespace Modules\Auth\app\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Modules\Auth\Notifications\ResetPasswordNotification;
-use Modules\User\Models\User;
+use Modules\Auth\app\Notifications\ResetPasswordNotification;
+use Modules\User\app\Models\User;
 
 class PasswordService
 {
@@ -33,7 +33,7 @@ class PasswordService
             'created_at' => now(),
         ]);
 
-        $user->notify(new ResetPasswordNotification($plainToken));
+        $user->notify(new ResetPasswordNotification($plainToken, $this->expiresMinutes));
     }
 
     // ── Reset ─────────────────────────────────────────────────────────
