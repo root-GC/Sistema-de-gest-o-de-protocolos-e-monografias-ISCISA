@@ -8,8 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('protocols', function (Blueprint $table) {
+        if (Schema::hasColumn('protocols', 'supervisor_id')) {
+            return;
+        }
 
+        Schema::table('protocols', function (Blueprint $table) {
             $table->foreignId('supervisor_id')
                 ->nullable()
                 ->after('student')
@@ -22,12 +25,14 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('protocols', function (Blueprint $table) {
+        if (! Schema::hasColumn('protocols', 'supervisor_id')) {
+            return;
+        }
 
+        Schema::table('protocols', function (Blueprint $table) {
             $table->dropForeign(['supervisor_id']);
             $table->dropIndex(['supervisor_id']);
             $table->dropColumn('supervisor_id');
-
         });
     }
 };

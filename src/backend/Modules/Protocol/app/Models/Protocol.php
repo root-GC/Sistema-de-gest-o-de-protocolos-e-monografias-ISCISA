@@ -158,7 +158,7 @@ class Protocol extends Model
         return $this->hasMany(ProtocolReviewAssignment::class);
     }
 
-        public function supervisor()
+    public function supervisor()
     {
         return $this->belongsTo(TeacherProfile::class, 'supervisor_id');
     }

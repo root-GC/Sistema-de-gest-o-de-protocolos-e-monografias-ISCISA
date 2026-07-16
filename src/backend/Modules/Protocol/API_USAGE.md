@@ -66,11 +66,7 @@ Erro:
 | GET | `/secretary/protocols` | `protocol.assign` | Listar protocolos pendentes no núcleo da secretaria |
 | GET | `/protocols/{protocol}/eligible-reviewers` | `protocol.assign` | Listar revisores elegíveis do mesmo núcleo |
 | POST | `/protocols/{protocol}/assign-reviewers` | `protocol.assign` | Atribuir revisores e transicionar para `protocol_in_review_nucleo` |
-<<<<<<< HEAD
-| GET | `/reviewer/protocols` | `protocol.evaluate` | Listar protocolos atribuídos ao revisor autenticado, incluindo os já avaliados (blind review) |
-=======
 | GET | `/reviewer/protocols` | `protocol.evaluate` | Listar protocolos atribuídos ao revisor autenticado (blind review) |
->>>>>>> b3874dc (submisao e atribuicao de protocolo)
 
 ## Fluxo atual de estados
 

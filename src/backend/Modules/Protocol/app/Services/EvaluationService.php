@@ -63,12 +63,13 @@ class EvaluationService
             if ($reviewerIds !== []) {
                 $assignment = ProtocolReviewAssignment::query()
                     ->where('protocol_id', $protocol->id)
+                    ->where('organ_id', $protocol->current_organ_id)
                     ->latest('assigned_at')
                     ->first();
 
                 if (! $assignment) {
                     throw new HttpResponseException(
-                        response()->json(['message' => 'Nenhuma atribuição de revisores encontrada para este protocolo.'], 422)
+                        response()->json(['message' => 'Nenhuma atribuição de revisores encontrada para este protocolo neste orgao.'], 422)
                     );
                 }
             }
@@ -378,6 +379,7 @@ class EvaluationService
                 'protocol.topic:id,title,status,scientific_area_id,supervisor_id',
                 'protocol.topic.scientificArea:id,name,organ_id',
                 'protocol.student:id,name,email',
+                'protocol.supervisor.user:id,name,email',
                 'reviewerEvaluations.reviewer.user:id,name,email',
                 'formCriteria',
             ])

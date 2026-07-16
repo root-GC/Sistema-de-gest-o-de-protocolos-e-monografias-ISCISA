@@ -13,6 +13,7 @@ class ProtocolResource extends JsonResource
             'id' => $this->id,
             'code' => $this->code,
             'student' => $this->student,
+            'supervisor_id' => $this->supervisor_id,
             'current_organ_id' => $this->current_organ_id,
             'status' => $this->status,
             'status_label' => $this->status_label,
@@ -31,7 +32,14 @@ class ProtocolResource extends JsonResource
                 'title' => $this->topic->title,
                 'status' => $this->topic->status,
             ]),
-            'documents' => $this->whenLoaded('documents', fn() => DocumentResource::collection($this->documents)),
+            'supervisor' => $this->whenLoaded('supervisor', fn() => [
+                'id' => $this->supervisor?->id,
+                'user' => $this->supervisor?->relationLoaded('user') && $this->supervisor->user ? [
+                    'id' => $this->supervisor->user->id,
+                    'name' => $this->supervisor->user->name,
+                    'email' => $this->supervisor->user->email,
+                ] : null,
+            ]),
             'documents' => $this->whenLoaded('documents', fn() => $this->documents->map(fn($doc) => [
                 'id' => $doc->id,
                 'document_type' => $doc->document_type,

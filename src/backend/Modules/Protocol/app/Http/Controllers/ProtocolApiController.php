@@ -63,34 +63,23 @@ class ProtocolApiController extends Controller
         ]);
     }
 
-      /**
-     * getForSupervisor: Lista protocolos pendentes e processados para o supervisor.
-     * 
-     * Retorna os protocolos associados aos tópicos supervisionados pelo docente logado.
-     * Filtra por supervisor_id = teacherProfile->id do utilizador.
-     * 
-     * GET /api/v1/supervisor/protocols
-     */
-/**
- * GET /api/v1/supervisor/protocols
- */
-public function getForSupervisor(Request $request)
-{
-    $user = $request->user()->load('teacherProfile');
+    public function getForSupervisor(Request $request)
+    {
+        $user = $request->user()->load('teacherProfile');
 
-    if (! $user->hasPermission('supervision.view')) {
+        if (! $user->hasPermission('supervision.view')) {
+            return response()->json([
+                'message' => 'Utilizador não tem permissão para ver protocolos supervisionados.',
+            ], 403);
+        }
+
+        $protocols = $this->protocolService()->getForSupervisor($user);
+
         return response()->json([
-            'message' => 'Utilizador não tem permissão para ver protocolos supervisionados.',
-        ], 403);
+            'protocols' => ProtocolResource::collection($protocols),
+            'total' => $protocols->count(),
+        ]);
     }
-
-    $protocols = $this->protocolService()->getForSupervisor($user);
-
-    return response()->json([
-        'protocols' => ProtocolResource::collection($protocols),
-        'total' => $protocols->count(),
-    ]);
-}
 
     public function approveBySupervisor(Request $request, string $protocol)
     {

@@ -25,6 +25,24 @@ class ProtocolService
             ], 403));
         }
 
+        if (! in_array($topic->status, [Topic::STATUS_APPROVED_NUCLEO, 'topic_approved'], true)) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'O protocolo so pode ser submetido apos aprovacao do tema pelo Nucleo Cientifico.',
+            ], 422));
+        }
+
+        if (! $topic->supervisor_id) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'O tema nao possui supervisor atribuido.',
+            ], 422));
+        }
+
+        if (! $topic->scientificArea?->organ_id) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'A area cientifica do tema nao possui orgao associado.',
+            ], 422));
+        }
+
         $existing = Protocol::query()
             ->where('topic_id', $topic->id)
             ->latest('submitted_at')
@@ -107,46 +125,46 @@ class ProtocolService
                 'status' => Document::STATUS_ACTIVE,
             ]);
 
-            return $protocol->load(['topic:id,title,status', 'documents']);
+            return $protocol->load(['topic:id,title,status', 'supervisor.user:id,name,email', 'documents']);
         });
     }
-public function getForSupervisor(User $supervisor)
-{
-    return Protocol::query()
-        ->where('supervisor_id', $supervisor->teacherProfile?->id)
-        ->with([
-            'topic:id,title,status',
-            'student:id,name,email',
-            'supervisor.user:id,name,email',
-            'documents',
-        ])
-        ->latest('submitted_at')
-        ->get();
-}
-    public function listForStudent(User $user)
+
+    public function getForSupervisor(User $supervisor): Collection
     {
-       return Protocol::query()
-    ->where('student', $user->id)
-    ->with([
-        'topic:id,title,status',
-        'supervisor.user:id,name,email',
-        'documents'
-    ])
-    ->latest('submitted_at')
-    ->get();
+        return $this->listForSupervisor($supervisor);
     }
 
-    public function listForSupervisor(User $supervisor)
+    public function listForStudent(User $user)
     {
         return Protocol::query()
-    ->where('supervisor_id', $supervisor->teacherProfile?->id)
-    ->with([
-        'topic:id,title,status',
-        'student.user:id,name,email',
-        'documents'
-    ])
-    ->latest('submitted_at')
-    ->get();
+            ->where('student', $user->id)
+            ->with([
+                'topic:id,title,status',
+                'supervisor.user:id,name,email',
+                'documents',
+            ])
+            ->latest('submitted_at')
+            ->get();
+    }
+
+    public function listForSupervisor(User $supervisor): Collection
+    {
+        $teacherProfileId = $supervisor->teacherProfile?->id;
+
+        if (! $teacherProfileId) {
+            return collect();
+        }
+
+        return Protocol::query()
+            ->where('supervisor_id', $teacherProfileId)
+            ->with([
+                'topic:id,title,status',
+                'student:id,name,email',
+                'supervisor.user:id,name,email',
+                'documents',
+            ])
+            ->latest('submitted_at')
+            ->get();
     }
 
     public function approveBySupervisor(Protocol $protocol, User $supervisor): Protocol
@@ -165,8 +183,9 @@ public function getForSupervisor(User $supervisor)
             $protocol = Protocol::lockForUpdate()->findOrFail($protocol->id);
             $teacherProfile = $supervisor->teacherProfile;
             $topic = $protocol->topic()->first();
+            $assignedSupervisorId = $protocol->supervisor_id ?: $topic?->supervisor_id;
 
-            if (! $teacherProfile || ! $topic || $topic->supervisor_id !== $teacherProfile->id) {
+            if (! $teacherProfile || ! $topic || (int) $assignedSupervisorId !== (int) $teacherProfile->id) {
                 throw new HttpResponseException(response()->json([
                     'message' => 'Apenas o supervisor atribuido pode avaliar este protocolo.',
                 ], 403));
@@ -185,6 +204,7 @@ public function getForSupervisor(User $supervisor)
                 $protocol->update([
                     'status' => Protocol::STATUS_PENDING_NUCLEO,
                     'approved_by_supervisor' => true,
+                    'supervisor_id' => $assignedSupervisorId,
                     'supervisor_decision_at' => now(),
                     'justification' => null,
                     'current_organ_id' => $topic->scientificArea?->organ_id ?: $protocol->current_organ_id,
@@ -197,6 +217,7 @@ public function getForSupervisor(User $supervisor)
                 $protocol->update([
                     'status' => Protocol::STATUS_REJECTED_SUPERVISOR,
                     'approved_by_supervisor' => false,
+                    'supervisor_id' => $assignedSupervisorId,
                     'supervisor_decision_at' => now(),
                     'justification' => $justification,
                     'nc_version' => 0,
@@ -205,7 +226,7 @@ public function getForSupervisor(User $supervisor)
                 ]);
             }
 
-            return $protocol->load(['topic:id,title,status', 'documents']);
+            return $protocol->load(['topic:id,title,status', 'supervisor.user:id,name,email', 'documents']);
         });
     }
 
@@ -251,6 +272,7 @@ public function getForSupervisor(User $supervisor)
                 'topic:id,title,status,scientific_area_id,supervisor_id',
                 'topic.scientificArea:id,name,organ_id',
                 'topic.supervisor.user:id,name,email',
+                'supervisor.user:id,name,email',
                 'student:id,name,email',
                 'reviewAssignments' => fn($q) => $q
                     ->where('organ_id', $organ->id)
@@ -306,7 +328,7 @@ public function getForSupervisor(User $supervisor)
 
         $topicOrganId = $protocol->topic?->scientificArea?->organ_id;
         $topicScientificAreaId = $protocol->topic?->scientific_area_id;
-        $supervisorId = $protocol->topic?->supervisor_id;
+        $supervisorId = $protocol->supervisor_id ?: $protocol->topic?->supervisor_id;
 
         if (! $topicOrganId || ! $topicScientificAreaId) {
             return collect();
@@ -373,7 +395,7 @@ public function getForSupervisor(User $supervisor)
 
             $protocol->loadMissing('topic');
 
-            $supervisorId = $protocol->topic?->supervisor_id;
+            $supervisorId = $protocol->supervisor_id ?: $protocol->topic?->supervisor_id;
 
             foreach ($reviewerIds as $reviewerId) {
                 if ((int) $reviewerId === (int) $supervisorId) {
@@ -452,6 +474,7 @@ public function getForSupervisor(User $supervisor)
                 'topic:id,title,status,scientific_area_id,supervisor_id',
                 'topic.scientificArea:id,name,organ_id',
                 'topic.supervisor.user:id,name,email',
+                'supervisor.user:id,name,email',
                 'student:id,name,email',
                 'reviewAssignments' => fn($q) => $q
                     ->where('organ_id', $organ->id)
