@@ -44,6 +44,24 @@ class User extends Authenticatable
             ->contains('code', $code);
     }
 
+    public function hasAnyPermission(array $codes): bool
+    {
+        $userCodes = $this->roles
+            ->flatMap(fn($r) => $r->permissions->pluck('code'))
+            ->unique();
+
+        return collect($codes)->contains(fn($code) => $userCodes->contains($code));
+    }
+
+    public function hasAllPermissions(array $codes): bool
+    {
+        $userCodes = $this->roles
+            ->flatMap(fn($r) => $r->permissions->pluck('code'))
+            ->unique();
+
+        return collect($codes)->every(fn($code) => $userCodes->contains($code));
+    }
+
     // ── Perfis ───────────────────────────────────────────────────────
     public function teacherProfile()
     {

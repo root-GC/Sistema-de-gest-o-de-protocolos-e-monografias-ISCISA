@@ -170,5 +170,5 @@ Mapa de permissões por widget:
 - [ ] Justificação no fluxo de protocolos (controller + frontend)
 - [ ] Corrigir perda de documento na transição entre núcleos
 - [ ] Concluir integração ONLYOFFICE (versionamento em `protocoldocumentos`, webhooks de save)
-- [ ] Implementar/validar `DashboardController` e `config/dashboard.php` no backend
+- [x] Implementar/validar `DashboardController` e `config/dashboard.php` no backend
 - [ ] Expor `/api/auth/me` com dados completos do utilizador (roles, permissões, órgão, curso)

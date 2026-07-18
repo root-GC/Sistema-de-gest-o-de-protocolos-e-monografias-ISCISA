@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Auth\app\Http\Controllers\DashboardController;
 use Modules\Auth\app\Http\Controllers\LoginController;
 use Modules\Auth\app\Http\Controllers\LogoutController;
 use Modules\Auth\app\Http\Controllers\MeController;
@@ -52,4 +53,11 @@ Route::prefix('auth')->name('auth.')->group(function () {
         Route::get('me', MeController::class)
             ->name('me');
     });
+});
+
+// Dashboard API (prefixo /api para compatibilidade com frontend)
+Route::prefix('api')->middleware('auth:sanctum')->group(function () {
+
+    Route::post('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard.index');
 });
