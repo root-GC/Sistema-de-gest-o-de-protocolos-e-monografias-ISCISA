@@ -65,6 +65,9 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     // Reviewer operations: list assigned protocols for evaluation
     Route::get('reviewer/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForReviewer')->name('reviewer.protocols.list');
 
+    // Document download
+    Route::get('protocols/{protocol}/download', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@downloadDocument')->name('protocols.document.download');
+
     // Evaluation forms
     Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('evaluation-forms.show');
     Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('evaluation-forms.criteria.review');

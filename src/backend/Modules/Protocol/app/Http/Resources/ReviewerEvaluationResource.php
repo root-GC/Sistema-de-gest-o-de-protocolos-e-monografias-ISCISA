@@ -17,6 +17,13 @@ class ReviewerEvaluationResource extends JsonResource
             'recommendation' => $this->recommendation,
             'status' => $this->status,
             'submitted_at' => $this->submitted_at,
+            'reviewer' => $this->whenLoaded('reviewer', fn() => [
+                'id' => $this->reviewer->id,
+                'user' => $this->reviewer->relationLoaded('user') && $this->reviewer->user ? [
+                    'id' => $this->reviewer->user->id,
+                    'name' => $this->reviewer->user->name,
+                ] : null,
+            ]),
             'criterion_reviews' => EvaluationCriterionReviewResource::collection(
                 $this->whenLoaded('criterionReviews')
             ),

@@ -5,6 +5,7 @@ namespace Modules\Protocol\app\Http\Controllers;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Http\Requests\DecideEvaluationRequest;
 use Modules\Protocol\app\Http\Requests\SubmitCriterionReviewRequest;
 use Modules\Protocol\app\Http\Requests\SubmitEvaluationRequest;
@@ -108,7 +109,7 @@ class EvaluationFormController extends Controller
                 'id' => $opinion->id,
                 'decision' => $opinion->decision,
                 'issued_at' => $opinion->issued_at,
-                'document_url' => url('storage/' . $path),
+                'document_url' => Storage::disk('public')->url($path),
             ],
         ]);
     }
@@ -186,7 +187,7 @@ class EvaluationFormController extends Controller
                     'id' => $o->issuedBy->id,
                     'name' => $o->issuedBy->name,
                 ] : null,
-                'document_url' => $o->document_path ? url('storage/' . $o->document_path) : null,
+                'document_url' => $o->document_path ? Storage::disk('public')->url($o->document_path) : null,
             ]);
 
         return response()->json([

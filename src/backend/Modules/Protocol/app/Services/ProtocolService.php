@@ -311,6 +311,7 @@ class ProtocolService
                 'topic:id,title,status,scientific_area_id',
                 'topic.scientificArea:id,name',
                 'topic.course:id,name,code,scientific_area_id',
+                'latestDocument',
                 'reviewAssignments' => fn($q) => $q
                     ->where('status', 'pending')
                     ->where(fn($q) => $q

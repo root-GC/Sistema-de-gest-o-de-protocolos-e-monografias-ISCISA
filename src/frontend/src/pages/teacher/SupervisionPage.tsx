@@ -68,6 +68,7 @@ export default function SupervisionPage() {
 
   async function loadSupervisees() {
     setLoading(true)
+    setError(null)
     try {
       const data = await supervisorService.listSupervisees()
       setSupervisees(data.supervisees || [])
@@ -80,6 +81,7 @@ export default function SupervisionPage() {
 
   async function loadTopics() {
     setLoading(true)
+    setError(null)
     try {
       const data = await topicService.getForSupervisor()
       setTopics(data.topics || [])
@@ -92,6 +94,7 @@ export default function SupervisionPage() {
 
   async function loadProtocols() {
     setLoading(true)
+    setError(null)
     try {
       const data = await protocolService.listForSupervisor()
       setProtocols(data.protocols || [])

@@ -30,6 +30,15 @@ export interface Protocol {
     email: string;
   };
   documents?: Document[];
+  latest_document?: {
+    id: number;
+    file_name: string;
+    file_url: string;
+    download_url?: string;
+    file_path: string;
+    version: number;
+    status: string;
+  } | null;
   review_assignments?: ReviewAssignment[];
 }
 
@@ -38,6 +47,7 @@ export interface Document {
   file_name: string;
   file_url: string;
   file_path: string;
+  download_url?: string;
   status: string;
   version: number;
 }

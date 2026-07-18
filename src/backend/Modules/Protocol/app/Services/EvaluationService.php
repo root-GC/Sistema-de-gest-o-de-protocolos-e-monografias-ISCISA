@@ -216,6 +216,16 @@ class EvaluationService
                 );
             }
 
+            $allSubmitted = ! $form->reviewerEvaluations()
+                ->whereNotIn('status', [ReviewerEvaluation::STATUS_SUBMITTED])
+                ->exists();
+
+            if (! $allSubmitted) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'A decisão final só pode ser tomada após todos os revisores submeterem as suas avaliações.'], 422)
+                );
+            }
+
             if ($form->status === EvaluationForm::STATUS_CONCLUDED) {
                 throw new HttpResponseException(
                     response()->json(['message' => 'Esta ficha já foi concluída.'], 422)

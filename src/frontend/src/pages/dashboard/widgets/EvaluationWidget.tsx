@@ -1,5 +1,6 @@
 // pages/dashboard/widgets/EvaluationWidget.tsx
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Evaluation {
@@ -13,6 +14,7 @@ interface Evaluation {
 }
 
 export function EvaluationWidget({ data, isLoading }: WidgetProps) {
+  const navigate = useNavigate();
   const evaluations: Evaluation[] = data?.evaluations || [];
   const stats = data?.stats || {};
 
@@ -54,7 +56,12 @@ export function EvaluationWidget({ data, isLoading }: WidgetProps) {
                   <span className="text-small">Nota: {evaluation.score}</span>
                 )}
                 {evaluation.status === 'pending' && (
-                  <button className="btn btn-small btn-primary">Avaliar</button>
+                  <button
+                    className="btn btn-small btn-primary"
+                    onClick={() => navigate(`/reviews/protocols/${evaluation.id}`)}
+                  >
+                    Avaliar
+                  </button>
                 )}
               </div>
             </div>

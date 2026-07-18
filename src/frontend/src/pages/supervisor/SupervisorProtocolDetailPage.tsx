@@ -17,6 +17,7 @@ export default function SupervisorProtocolDetailPage() {
 
   async function load() {
     setLoading(true)
+    setError(null)
     try {
       const data = await protocolService.getById(Number(protocolId))
       setProtocol(data.protocol)
@@ -52,6 +53,32 @@ export default function SupervisorProtocolDetailPage() {
   }
 
   if (!protocol) {
+    if (error) {
+      return (
+        <div>
+          <div style={{
+            padding: 'var(--space-4)',
+            textAlign: 'center',
+            color: 'var(--on-error-container)',
+            background: 'var(--error-container)',
+            borderRadius: 'var(--radius-lg)',
+            margin: 'var(--space-4)',
+            fontSize: 'var(--body-md)',
+            fontFamily: 'var(--font-family)'
+          }}>
+            {error}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 'var(--space-2)' }}>
+            <Link to="/supervisor" style={{
+              color: 'var(--primary)',
+              fontFamily: 'var(--font-family)'
+            }}>
+              Voltar para lista de protocolos
+            </Link>
+          </div>
+        </div>
+      )
+    }
     return <div>Protocolo não encontrado.</div>
   }
 
@@ -173,13 +200,10 @@ export default function SupervisorProtocolDetailPage() {
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
             {activeDocs.map((doc: Document) => (
-              <a
+              <div
                 key={doc.id}
-                href={doc.file_url}
-                target="_blank"
-                rel="noreferrer"
                 style={{
-                  display: 'inline-flex',
+                  display: 'flex',
                   alignItems: 'center',
                   gap: 'var(--space-2)',
                   padding: '12px var(--space-3)',
@@ -187,31 +211,40 @@ export default function SupervisorProtocolDetailPage() {
                   borderRadius: 'var(--radius-lg)',
                   border: '1px solid var(--outline-variant)',
                   fontSize: 'var(--body-md)',
-                  color: 'var(--primary)',
-                  textDecoration: 'none',
+                  color: 'var(--on-surface)',
                   fontWeight: 'var(--font-medium)',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'var(--primary-container)'
-                  e.currentTarget.style.color = 'var(--on-primary-container)'
-                  e.currentTarget.style.borderColor = 'var(--primary)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'var(--surface-container-low)'
-                  e.currentTarget.style.color = 'var(--primary)'
-                  e.currentTarget.style.borderColor = 'var(--outline-variant)'
                 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>description</span>
-                <div>
+                <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--primary)' }}>description</span>
+                <div style={{ flex: 1 }}>
                   <p style={{ fontWeight: 'var(--font-semibold)' }}>{doc.file_name}</p>
                   <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
                     Versão {doc.version}
                   </p>
                 </div>
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>open_in_new</span>
-              </a>
+                <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                  <a
+                    href={`${doc.download_url}?inline=1`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-small"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', background: 'var(--primary)', color: 'var(--on-primary)', borderRadius: 'var(--radius-md)', textDecoration: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>visibility</span>
+                    Ver
+                  </a>
+                  {doc.download_url && (
+                    <a
+                      href={doc.download_url}
+                      className="btn btn-small"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', background: 'var(--surface-container)', color: 'var(--on-surface)', borderRadius: 'var(--radius-md)', textDecoration: 'none', border: '1px solid var(--outline-variant)', cursor: 'pointer' }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
+                      Baixar
+                    </a>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}

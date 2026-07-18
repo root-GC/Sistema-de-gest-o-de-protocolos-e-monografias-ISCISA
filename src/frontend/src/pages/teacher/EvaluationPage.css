@@ -1,0 +1,444 @@
+.evaluation-protocol-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  color: var(--on-background);
+  font-family: var(--font-family);
+}
+
+.evaluation-protocol-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.evaluation-title-row,
+.evaluation-status-line,
+.evaluation-document-actions,
+.evaluation-outcome-actions,
+.reviewer-chips,
+.recommendation-options,
+.final-decision-options {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.evaluation-title-row {
+  gap: 12px;
+}
+
+.evaluation-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--on-surface-variant);
+  text-decoration: none;
+  border-radius: var(--radius-full);
+}
+
+.evaluation-back:hover {
+  background: var(--surface-container);
+  color: var(--primary);
+}
+
+.evaluation-protocol-code {
+  margin: 0;
+  color: var(--on-surface);
+  font-size: var(--headline-lg);
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.01em;
+}
+
+.evaluation-organ-badge,
+.protocol-state-chip,
+.reviewer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: var(--font-semibold);
+  line-height: 1;
+}
+
+.evaluation-organ-badge {
+  padding: 7px 14px;
+  background: #e9002b;
+  color: #fff;
+}
+
+.evaluation-status-line {
+  gap: 16px;
+  margin: 8px 0 0 40px;
+  color: var(--on-surface-variant);
+  font-size: 14px;
+}
+
+.protocol-state-chip {
+  padding: 5px 12px;
+  background: var(--tertiary-fixed);
+  color: var(--on-tertiary-fixed);
+}
+
+.protocol-state-chip.is-complete {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.protocol-state-chip.is-rejected {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.status-dot,
+.reviewer-chip::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  content: '';
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.evaluation-document-actions {
+  gap: 8px;
+}
+
+.evaluation-document-button,
+.evaluation-outcome-button,
+.evaluation-submit-button,
+.final-confirm-button,
+.back-to-reviews {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  font: inherit;
+  font-size: 14px;
+  font-weight: var(--font-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.evaluation-document-button:hover,
+.evaluation-outcome-button:hover,
+.back-to-reviews:hover {
+  box-shadow: var(--elevation-2);
+  border-color: var(--primary);
+}
+
+.evaluation-document-button.is-primary,
+.evaluation-submit-button,
+.final-confirm-button {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.evaluation-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 22px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  font-weight: var(--font-medium);
+}
+
+.evaluation-notice.is-submitted {
+  background: var(--tertiary-fixed);
+  border-color: #827000;
+  color: var(--on-tertiary-fixed);
+}
+
+.evaluation-notice.is-error {
+  background: var(--error-container);
+  border-color: transparent;
+  color: var(--on-error-container);
+}
+
+.evaluation-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 32px;
+  border: 2px solid var(--error);
+  border-radius: var(--radius-xl);
+  background: var(--error-container);
+}
+
+.evaluation-outcome.is-approved {
+  border-color: var(--primary);
+  background: var(--primary-fixed);
+}
+
+.evaluation-outcome-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.evaluation-outcome-icon {
+  margin-top: 2px;
+  color: var(--error);
+  font-size: 34px;
+}
+
+.is-approved .evaluation-outcome-icon {
+  color: var(--primary);
+}
+
+.evaluation-outcome h2 {
+  margin: 0 0 4px;
+  color: var(--on-surface);
+  font-size: 18px;
+  font-weight: var(--font-bold);
+}
+
+.evaluation-outcome p {
+  margin: 0;
+  color: var(--on-surface-variant);
+  line-height: 1.5;
+}
+
+.evaluation-outcome-actions {
+  gap: 20px;
+  margin-left: 52px;
+}
+
+.evaluation-outcome-button {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+}
+
+.evaluation-panel {
+  padding: 28px 32px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--surface-container-lowest);
+}
+
+.evaluation-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 20px;
+  color: var(--on-surface);
+  font-size: 18px;
+  font-weight: var(--font-semibold);
+}
+
+.reviewer-chips {
+  gap: 14px;
+}
+
+.reviewer-chip {
+  padding: 8px 13px;
+  background: var(--surface-container);
+  color: var(--on-surface-variant);
+}
+
+.reviewer-chip.is-submitted {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.evaluation-criteria-panel {
+  padding-top: 26px;
+}
+
+.criteria-group + .criteria-group {
+  margin-top: 30px;
+}
+
+.criteria-group-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--outline-variant);
+  color: var(--primary);
+  font-size: 20px;
+  font-weight: var(--font-semibold);
+}
+
+.criterion-field + .criterion-field {
+  margin-top: 20px;
+}
+
+.criterion-field label,
+.evaluation-field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--on-surface);
+  font-size: 14px;
+  font-weight: var(--font-medium);
+}
+
+.criterion-field textarea,
+.evaluation-textarea {
+  width: 100%;
+  min-height: 74px;
+  padding: 13px 15px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  outline: none;
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: vertical;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.criterion-field textarea:focus,
+.evaluation-textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 105, 51, 0.13);
+}
+
+.criterion-field textarea:disabled {
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
+  cursor: not-allowed;
+}
+
+.evaluation-panel--recommendation,
+.evaluation-panel--decision {
+  display: flex;
+  flex-direction: column;
+}
+
+.evaluation-panel--recommendation {
+  gap: 18px;
+}
+
+.evaluation-panel--decision > p {
+  margin: -6px 0 4px;
+  color: var(--on-surface-variant);
+  line-height: 1.5;
+}
+
+.recommendation-options,
+.final-decision-options {
+  gap: 16px;
+}
+
+.recommendation-choice,
+.final-decision-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 10px 18px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
+  font-size: 14px;
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+
+.recommendation-choice input,
+.final-decision-choice input {
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.recommendation-choice.is-selected-approved,
+.final-decision-choice.is-selected-approved {
+  border-color: var(--primary);
+  background: var(--primary-fixed);
+  color: var(--on-primary-fixed);
+}
+
+.recommendation-choice.is-selected-rejected,
+.final-decision-choice.is-selected-rejected {
+  border-color: var(--error);
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.recommendation-choice .is-approved,
+.final-decision-choice .is-approved {
+  color: var(--primary);
+}
+
+.recommendation-choice .is-rejected,
+.final-decision-choice .is-rejected {
+  color: var(--error);
+}
+
+.evaluation-submit-button,
+.final-confirm-button {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 2px;
+  border: 0;
+  font-size: 16px;
+}
+
+.final-confirm-button {
+  margin-top: 22px;
+  background: var(--primary);
+}
+
+.evaluation-submit-button:disabled,
+.final-confirm-button:disabled {
+  border-color: #a8b4ab;
+  background: #a8b4ab;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.back-to-reviews {
+  align-self: center;
+}
+
+@media (max-width: 640px) {
+  .evaluation-protocol-code {
+    font-size: 28px;
+  }
+
+  .evaluation-status-line {
+    margin-left: 0;
+  }
+
+  .evaluation-panel,
+  .evaluation-outcome {
+    padding: 20px;
+  }
+
+  .evaluation-outcome-actions {
+    margin-left: 0;
+  }
+
+  .evaluation-document-actions,
+  .evaluation-document-button,
+  .recommendation-choice,
+  .final-decision-choice {
+    width: 100%;
+  }
+}

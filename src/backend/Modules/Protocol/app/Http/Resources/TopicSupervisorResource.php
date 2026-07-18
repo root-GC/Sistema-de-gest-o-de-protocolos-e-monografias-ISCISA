@@ -19,11 +19,11 @@ class TopicSupervisorResource extends JsonResource
             'supervisor_comment' => $this->supervisor_comment,
             'supervisor_decision_at' => $this->supervisor_decision_at,
             'submitted_at' => $this->submitted_at,
-            'student' => $this->whenLoaded('student', fn() => [
+            'student' => $this->whenLoaded('student', fn() => $this->student ? [
                 'id' => $this->student->id,
                 'name' => $this->student->name,
                 'email' => $this->student->email,
-            ]),
+            ] : null),
             'scientific_area' => $this->whenLoaded('scientificArea', fn() => [
                 'id' => $this->scientificArea->id,
                 'name' => $this->scientificArea->name,

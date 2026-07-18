@@ -4,6 +4,7 @@ namespace Modules\Protocol\app\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class ProtocolResource extends JsonResource
 {
@@ -12,7 +13,6 @@ class ProtocolResource extends JsonResource
         return [
             'id' => $this->id,
             'code' => $this->code,
-            'student' => $this->student,
             'supervisor_id' => $this->supervisor_id,
             'current_organ_id' => $this->current_organ_id,
             'status' => $this->status,
@@ -27,6 +27,19 @@ class ProtocolResource extends JsonResource
             'nc_version' => $this->nc_version,
             'cc_version' => $this->cc_version,
             'cb_version' => $this->cb_version,
+            // "student" é também a coluna que guarda o ID do estudante. Ao
+            // aceder por propriedade, o Eloquent devolve esse inteiro antes da
+            // relação; por isso a relação carregada precisa de ser obtida
+            // explicitamente.
+            'student' => $this->whenLoaded('student', function () {
+                $student = $this->resource->getRelation('student');
+
+                return $student ? [
+                    'id' => $student->id,
+                    'name' => $student->name,
+                    'email' => $student->email,
+                ] : null;
+            }),
             'topic' => $this->whenLoaded('topic', fn() => [
                 'id' => $this->topic->id,
                 'title' => $this->topic->title,
@@ -46,6 +59,8 @@ class ProtocolResource extends JsonResource
                 'document_type' => $doc->document_type,
                 'file_name' => $doc->file_name,
                 'file_path' => $doc->file_path,
+                'file_url' => Storage::disk('public')->url($doc->file_path),
+                'download_url' => url("api/v1/protocols/{$this->id}/download"),
                 'pages' => $doc->pages,
                 'version' => $doc->version,
                 'status' => $doc->status,

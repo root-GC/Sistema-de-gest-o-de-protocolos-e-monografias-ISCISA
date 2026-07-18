@@ -1,5 +1,6 @@
 // pages/dashboard/widgets/PendingReviewsWidget.tsx
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Review {
@@ -14,6 +15,7 @@ interface Review {
 }
 
 export function PendingReviewsWidget({ data, isLoading }: WidgetProps) {
+  const navigate = useNavigate();
   const reviews: Review[] = data?.reviews || [];
 
   return (
@@ -63,7 +65,10 @@ export function PendingReviewsWidget({ data, isLoading }: WidgetProps) {
                     </span>
                   </td>
                   <td>
-                    <button className="btn btn-small btn-primary">
+                    <button
+                      className="btn btn-small btn-primary"
+                      onClick={() => navigate(`/reviews/protocols/${review.id}`)}
+                    >
                       Revisar
                     </button>
                   </td>

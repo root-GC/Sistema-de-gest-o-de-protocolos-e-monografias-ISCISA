@@ -5,9 +5,12 @@ namespace Modules\Protocol\app\Http\Controllers;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Http\Requests\SubmitProtocolRequest;
 use Modules\Protocol\app\Http\Resources\ProtocolResource;
 use Modules\Protocol\app\Http\Resources\ProtocolReviewerResource;
+use Modules\Protocol\app\Models\Document;
+use Modules\Protocol\app\Models\Protocol;
 
 class ProtocolApiController extends Controller
 {
@@ -32,7 +35,7 @@ class ProtocolApiController extends Controller
 
         return response()->json([
             'message' => 'Protocolo submetido com sucesso e aguardando aprovacao do supervisor.',
-            'protocol' => $protocol->load('topic:id,title,status')->toArray(),
+            'protocol' => ProtocolResource::make($protocol->load('topic:id,title,status')),
         ], 201);
     }
 
@@ -45,21 +48,36 @@ class ProtocolApiController extends Controller
             : $this->protocolService()->listForStudent($user);
 
         return response()->json([
-            'protocols' => $protocols->map(fn($protocol) => $protocol->load('topic:id,title,status')->toArray())->values(),
+            'protocols' => ProtocolResource::collection($protocols),
         ]);
     }
 
     public function show(Request $request, string $protocol)
     {
-        $user = $request->user();
+        $user = $request->user()->load('teacherProfile');
         $protocol = \Modules\Protocol\app\Models\Protocol::query()->findOrFail($protocol);
 
-        if ((int) $protocol->student !== (int) $user->id && ! $user->hasPermission('protocol.view.all')) {
+        $isStudent = (int) $protocol->student === (int) $user->id;
+        $isSupervisor = $user->teacherProfile && (int) $protocol->supervisor_id === (int) $user->teacherProfile->id;
+        $canViewAll = $user->hasPermission('protocol.view.all')
+            || $user->hasPermission('supervision.view')
+            || $user->hasPermission('protocol.evaluate')
+            || $user->hasPermission('protocol.assign');
+
+        if (! $isStudent && ! $isSupervisor && ! $canViewAll) {
             abort(403);
         }
 
+        $protocol->load([
+            'topic:id,title,justification,status',
+            'topic.scientificArea:id,name',
+            'student:id,name,email',
+            'supervisor.user:id,name,email',
+            'documents' => fn($q) => $q->where('status', 'active'),
+        ]);
+
         return response()->json([
-            'protocol' => $protocol->load('topic:id,title,status')->toArray(),
+            'protocol' => ProtocolResource::make($protocol),
         ]);
     }
 
@@ -287,5 +305,37 @@ class ProtocolApiController extends Controller
                 $this->protocolService()->listForReviewer($user)
             ),
         ]);
+    }
+
+    public function downloadDocument(Request $request, Protocol $protocol)
+    {
+        $user = $request->user();
+
+        $canDownload = (int) $protocol->student === (int) $user->id
+            || $user->hasPermission('supervision.view')
+            || $user->hasPermission('protocol.evaluate')
+            || $user->hasPermission('protocol.assign')
+            || $user->hasPermission('protocol.view.all');
+
+        if (! $canDownload) {
+            abort(403);
+        }
+
+        $document = $protocol->latestDocument()->first();
+
+        if (! $document || ! Storage::disk('public')->exists($document->file_path)) {
+            abort(404, 'Documento não encontrado.');
+        }
+
+        $inline = $request->query('inline') === '1';
+
+        if ($inline) {
+            return Storage::disk('public')->response($document->file_path, $document->file_name, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'Content-Disposition' => 'inline; filename="' . $document->file_name . '"',
+            ]);
+        }
+
+        return Storage::disk('public')->download($document->file_path, $document->file_name);
     }
 }
