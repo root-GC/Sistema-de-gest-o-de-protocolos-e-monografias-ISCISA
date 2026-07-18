@@ -6,6 +6,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Shared\Core\Exceptions\WorkflowException;
 use Shared\Core\Exceptions\PermissionDeniedException;
@@ -21,13 +22,19 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Shared\Core\Http\Middleware\PermissionMiddleware::class,
         ]);
 
-        // Evita Route [login] not defined em requests sem token.
-        $middleware->redirectGuestsTo(fn () => route('auth.login'));
+        // APIs sem token devem responder 401, nao redirecionar para uma rota web.
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/login');
 
         // Sanctum stateful domains para SPA (React)
         $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 401);
+            }
+        });
+
         // WorkflowException → 422
         $exceptions->render(function (WorkflowException $e, Request $request) {
             if ($request->expectsJson()) {

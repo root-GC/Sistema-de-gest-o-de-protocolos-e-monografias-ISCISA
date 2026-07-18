@@ -11,6 +11,7 @@ use Modules\Protocol\app\Http\Resources\ProtocolResource;
 use Modules\Protocol\app\Http\Resources\ProtocolReviewerResource;
 use Modules\Protocol\app\Models\Document;
 use Modules\Protocol\app\Models\Protocol;
+use Modules\User\app\Models\User;
 
 class ProtocolApiController extends Controller
 {
@@ -19,6 +20,40 @@ class ProtocolApiController extends Controller
     private function protocolService()
     {
         return app(\Modules\Protocol\app\Services\ProtocolService::class);
+    }
+
+    private function canAccessProtocolDocument(User $user, Protocol $protocol): bool
+    {
+        $user->loadMissing(['teacherProfile', 'secretaryProfile']);
+
+        if ($user->hasPermission('protocol.view.all') || (int) $protocol->student === (int) $user->id) {
+            return true;
+        }
+
+        $teacherProfile = $user->teacherProfile;
+
+        if ($teacherProfile && (int) $protocol->supervisor_id === (int) $teacherProfile->id) {
+            return true;
+        }
+
+        if ($teacherProfile && $user->hasPermission('protocol.evaluate')) {
+            return $protocol->reviewAssignments()
+                ->where(fn($query) => $query
+                    ->where('reviewer_one', $teacherProfile->id)
+                    ->orWhere('reviewer_two', $teacherProfile->id)
+                )
+                ->exists();
+        }
+
+        if ($user->hasPermission('protocol.assign')) {
+            $secretaryProfile = $user->secretaryProfile;
+
+            return ! $secretaryProfile
+                || ! $secretaryProfile->organ_id
+                || (int) $protocol->current_organ_id === (int) $secretaryProfile->organ_id;
+        }
+
+        return false;
     }
 
     public function store(SubmitProtocolRequest $request)
@@ -311,17 +346,14 @@ class ProtocolApiController extends Controller
     {
         $user = $request->user();
 
-        $canDownload = (int) $protocol->student === (int) $user->id
-            || $user->hasPermission('supervision.view')
-            || $user->hasPermission('protocol.evaluate')
-            || $user->hasPermission('protocol.assign')
-            || $user->hasPermission('protocol.view.all');
-
-        if (! $canDownload) {
+        if (! $this->canAccessProtocolDocument($user, $protocol)) {
             abort(403);
         }
 
-        $document = $protocol->latestDocument()->first();
+        $document = $protocol->documents()
+            ->where('status', Document::STATUS_ACTIVE)
+            ->latest('version')
+            ->first() ?: $protocol->latestDocument()->first();
 
         if (! $document || ! Storage::disk('public')->exists($document->file_path)) {
             abort(404, 'Documento não encontrado.');

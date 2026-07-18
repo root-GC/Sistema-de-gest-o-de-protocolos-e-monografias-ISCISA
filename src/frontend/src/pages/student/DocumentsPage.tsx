@@ -45,6 +45,26 @@ export default function DocumentsPage() {
 
   const totalDocs = protocols.reduce((sum, p) => sum + (p.documents?.length || 0), 0)
 
+  async function openFile(url: string | null | undefined, fallbackFilename?: string) {
+    if (!url) return
+
+    try {
+      await protocolService.openFile(url, fallbackFilename)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function downloadFile(url: string | null | undefined, fallbackFilename?: string) {
+    if (!url) return
+
+    try {
+      await protocolService.downloadFile(url, fallbackFilename)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   // ============================================================
   // LOADING
   // ============================================================
@@ -243,22 +263,25 @@ export default function DocumentsPage() {
                     <tbody>
                       {docs.map(doc => {
                         const ds = getStatusStyle(doc.status)
+                        const fileUrl = doc.download_url || doc.file_url
                         return (
                           <tr key={doc.id}>
                             <td style={{ padding: 'var(--space-2) var(--space-4)' }}>
-                              <a
-                                href={doc.file_url}
-                                target="_blank"
-                                rel="noreferrer"
+                              <button
+                                type="button"
+                                onClick={() => openFile(fileUrl, doc.file_name)}
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: 'var(--space-1)',
                                   color: 'var(--primary)',
-                                  textDecoration: 'none',
                                   fontWeight: 'var(--font-medium)',
                                   fontSize: 'var(--body-md)',
-                                  transition: 'color 0.2s'
+                                  transition: 'color 0.2s',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  padding: 0,
+                                  cursor: 'pointer'
                                 }}
                                 onMouseEnter={e => e.currentTarget.style.color = 'var(--on-primary-fixed-variant)'}
                                 onMouseLeave={e => e.currentTarget.style.color = 'var(--primary)'}
@@ -270,7 +293,30 @@ export default function DocumentsPage() {
                                 <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
                                   open_in_new
                                 </span>
-                              </a>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => downloadFile(fileUrl, doc.file_name)}
+                                style={{
+                                  marginLeft: 'var(--space-2)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px var(--space-1)',
+                                  fontSize: 'var(--label-sm)',
+                                  background: 'var(--surface-container)',
+                                  color: 'var(--on-surface)',
+                                  borderRadius: 'var(--radius-md)',
+                                  border: '1px solid var(--outline-variant)',
+                                  cursor: 'pointer',
+                                  fontWeight: 'var(--font-medium)'
+                                }}
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                                  download
+                                </span>
+                                Baixar
+                              </button>
                             </td>
                             <td style={{
                               padding: 'var(--space-2) var(--space-4)',
@@ -309,13 +355,13 @@ export default function DocumentsPage() {
                               color: 'var(--on-surface-variant)',
                               whiteSpace: 'nowrap'
                             }}>
-                              {new Date(doc.submitted_at).toLocaleDateString('pt-PT', {
+                              {doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('pt-PT', {
                                 day: 'numeric',
                                 month: 'short',
                                 year: 'numeric',
                                 hour: '2-digit',
                                 minute: '2-digit'
-                              })}
+                              }) : '—'}
                             </td>
                           </tr>
                         )

@@ -1,4 +1,4 @@
-import { req } from './apiClient';
+import { downloadApiFile, openApiFile, req } from './apiClient';
 
 export interface EvaluationForm {
   id: number;
@@ -59,6 +59,15 @@ export interface CriterionReview {
   form_criterion?: FormCriterion;
 }
 
+export interface EvaluationOpinionResult {
+  id: number;
+  decision: string;
+  issued_at: string;
+  document_url?: string;
+  download_url?: string;
+  evaluation_form_download_url?: string;
+}
+
 export const evaluationService = {
   getForm: (formId: number) =>
     req('GET', `/api/v1/evaluation-forms/${formId}`) as Promise<{
@@ -87,16 +96,15 @@ export const evaluationService = {
     }) as Promise<{
       message: string;
       evaluation_form: EvaluationForm;
-      opinion: {
-        id: number;
-        decision: string;
-        issued_at: string;
-        document_url: string;
-      };
+      opinion: EvaluationOpinionResult;
     }>,
 
   listForReviewer: () =>
     req('GET', '/api/v1/reviewer/evaluations') as Promise<{
       evaluation_forms: EvaluationForm[];
     }>,
+
+  openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
+
+  downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
 };

@@ -1,13 +1,14 @@
 // src/pages/supervisor/SupervisorProtocolDetailPage.tsx
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { protocolService, type Protocol, type Document } from '../../services/protocolService'
+import { protocolService, type Protocol, type Document, type ProtocolOpinion } from '../../services/protocolService'
 import TopicJustification from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 export default function SupervisorProtocolDetailPage() {
   const { protocolId } = useParams<{ protocolId: string }>()
   const [protocol, setProtocol] = useState<Protocol | null>(null)
+  const [opinions, setOpinions] = useState<ProtocolOpinion[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,10 +22,36 @@ export default function SupervisorProtocolDetailPage() {
     try {
       const data = await protocolService.getById(Number(protocolId))
       setProtocol(data.protocol)
+      try {
+        const opinionsData = await protocolService.listOpinions(Number(protocolId))
+        setOpinions(opinionsData.opinions || [])
+      } catch {
+        setOpinions([])
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function openFile(url: string | null | undefined, fallbackFilename?: string) {
+    if (!url) return
+
+    try {
+      await protocolService.openFile(url, fallbackFilename)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function downloadFile(url: string | null | undefined, fallbackFilename?: string) {
+    if (!url) return
+
+    try {
+      await protocolService.downloadFile(url, fallbackFilename)
+    } catch (e) {
+      setError((e as Error).message)
     }
   }
 
@@ -223,25 +250,26 @@ export default function SupervisorProtocolDetailPage() {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
-                  <a
-                    href={`${doc.download_url}?inline=1`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => openFile(doc.download_url, doc.file_name)}
+                    disabled={!doc.download_url}
                     className="btn btn-small"
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', background: 'var(--primary)', color: 'var(--on-primary)', borderRadius: 'var(--radius-md)', textDecoration: 'none', border: 'none', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', background: 'var(--primary)', color: 'var(--on-primary)', borderRadius: 'var(--radius-md)', border: 'none', cursor: doc.download_url ? 'pointer' : 'not-allowed' }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>visibility</span>
                     Ver
-                  </a>
+                  </button>
                   {doc.download_url && (
-                    <a
-                      href={doc.download_url}
+                    <button
+                      type="button"
+                      onClick={() => downloadFile(doc.download_url, doc.file_name)}
                       className="btn btn-small"
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', background: 'var(--surface-container)', color: 'var(--on-surface)', borderRadius: 'var(--radius-md)', textDecoration: 'none', border: '1px solid var(--outline-variant)', cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', background: 'var(--surface-container)', color: 'var(--on-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--outline-variant)', cursor: 'pointer' }}
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
                       Baixar
-                    </a>
+                    </button>
                   )}
                 </div>
               </div>
@@ -249,6 +277,68 @@ export default function SupervisorProtocolDetailPage() {
           </div>
         )}
       </div>
+
+      {opinions.length > 0 && (
+        <div className="card" style={{
+          padding: 'var(--space-4)',
+          marginBottom: 'var(--space-4)'
+        }}>
+          <h2 style={{
+            fontSize: 'var(--title-md)',
+            fontWeight: 'var(--font-semibold)',
+            color: 'var(--on-surface)',
+            marginBottom: 'var(--space-3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-1)'
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>fact_check</span>
+            Pareceres e fichas de avaliação
+          </h2>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            {opinions.map(opinion => (
+              <div
+                key={opinion.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 'var(--space-2)',
+                  padding: '12px var(--space-3)',
+                  background: 'var(--surface-container-low)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--outline-variant)',
+                  flexWrap: 'wrap'
+                }}
+              >
+                <div>
+                  <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>
+                    {opinion.organ} • {opinion.decision === 'approved' ? 'Aprovado' : 'Reprovado'}
+                  </p>
+                  <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
+                    Versão {opinion.version}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap' }}>
+                  {opinion.download_url && (
+                    <button type="button" onClick={() => downloadFile(opinion.download_url, `parecer-${protocol.code}.pdf`)} className="btn btn-small">
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
+                      Parecer
+                    </button>
+                  )}
+                  {opinion.evaluation_form_download_url && (
+                    <button type="button" onClick={() => downloadFile(opinion.evaluation_form_download_url, `ficha-${protocol.code}.pdf`)} className="btn btn-small">
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>assignment</span>
+                      Ficha
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Botões de ação (apenas para pendentes) */}
       {isPending && (

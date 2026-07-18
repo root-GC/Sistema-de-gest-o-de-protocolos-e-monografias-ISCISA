@@ -16,8 +16,129 @@ function getHeaders(): Record<string, string> {
   return headers;
 }
 
+interface ApiErrorPayload {
+  message?: string;
+}
+
+interface HttpError extends Error {
+  status?: number;
+  data?: unknown;
+}
+
+function isApiErrorPayload(value: unknown): value is ApiErrorPayload {
+  return typeof value === 'object' && value !== null && 'message' in value;
+}
+
+async function readError(response: Response, fallbackMessage: string): Promise<HttpError> {
+  const error = await response.json().catch(() => ({ message: fallbackMessage })) as unknown;
+  const message = isApiErrorPayload(error) && error.message ? error.message : fallbackMessage;
+  const err = new Error(message) as HttpError;
+
+  err.status = response.status;
+  err.data = error;
+
+  return err;
+}
+
+function toApiUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_BASE_URL}${url}`;
+}
+
+function withInlineQuery(url: string): string {
+  if (url.includes('inline=')) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}inline=1`;
+}
+
+function filenameFromDisposition(value: string | null): string | null {
+  if (!value) return null;
+
+  const utfMatch = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1].replace(/"/g, ''));
+
+  const match = value.match(/filename="?([^"]+)"?/i);
+  return match?.[1] || null;
+}
+
+export interface ApiFile {
+  blob: Blob;
+  filename: string;
+}
+
+export interface ApiFileObjectUrl {
+  objectUrl: string;
+  filename: string;
+  revoke: () => void;
+}
+
+export async function reqFile(url: string, fallbackFilename = 'documento'): Promise<ApiFile> {
+  const response = await fetch(toApiUrl(url), {
+    method: 'GET',
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    throw await readError(response, 'Erro ao obter ficheiro');
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameFromDisposition(response.headers.get('Content-Disposition')) || fallbackFilename,
+  };
+}
+
+export async function createApiFileObjectUrl(
+  url: string,
+  fallbackFilename?: string,
+  inline = false
+): Promise<ApiFileObjectUrl> {
+  const file = await reqFile(inline ? withInlineQuery(url) : url, fallbackFilename);
+  const objectUrl = URL.createObjectURL(file.blob);
+
+  return {
+    objectUrl,
+    filename: file.filename,
+    revoke: () => URL.revokeObjectURL(objectUrl),
+  };
+}
+
+export async function openApiFile(url: string, fallbackFilename?: string): Promise<void> {
+  const popup = window.open('', '_blank');
+
+  try {
+    const file = await reqFile(withInlineQuery(url), fallbackFilename);
+    const objectUrl = URL.createObjectURL(file.blob);
+
+    if (popup) {
+      popup.opener = null;
+      popup.location.href = objectUrl;
+    } else {
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch (error) {
+    if (popup && !popup.closed) popup.close();
+    throw error;
+  }
+}
+
+export async function downloadApiFile(url: string, fallbackFilename?: string): Promise<void> {
+  const file = await reqFile(url, fallbackFilename);
+  const objectUrl = URL.createObjectURL(file.blob);
+  const link = document.createElement('a');
+
+  link.href = objectUrl;
+  link.download = file.filename || fallbackFilename || 'documento';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
+
 // Requisição JSON padrão
-export async function req(method: string, url: string, body?: any): Promise<any> {
+export async function req<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
   const headers = {
     ...getHeaders(),
     'Content-Type': 'application/json',
@@ -30,18 +151,14 @@ export async function req(method: string, url: string, body?: any): Promise<any>
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
-    const err = new Error(error.message || 'Erro na requisição') as any;
-    err.status = response.status;
-    err.data = error;
-    throw err;
+    throw await readError(response, 'Erro na requisição');
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }
 
 // Requisição FormData (para upload de arquivos)
-export async function reqFormData(method: string, url: string, formData: FormData): Promise<any> {
+export async function reqFormData<T = unknown>(method: string, url: string, formData: FormData): Promise<T> {
   const headers: Record<string, string> = {
     'Accept': 'application/json',
   };
@@ -60,12 +177,8 @@ export async function reqFormData(method: string, url: string, formData: FormDat
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
-    const err = new Error(error.message || 'Erro na requisição') as any;
-    err.status = response.status;
-    err.data = error;
-    throw err;
+    throw await readError(response, 'Erro na requisição');
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }

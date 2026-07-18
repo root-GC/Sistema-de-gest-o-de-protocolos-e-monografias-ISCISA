@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { protocolService, type Protocol } from '../../services/protocolService'
+import { protocolService, type Protocol, type ProtocolOpinion } from '../../services/protocolService'
 import { topicService, type ApprovedTopic } from '../../services/topicService'
 import { TopicJustificationToggle } from '../../components/TopicJustification'
+import PdfPreviewModal from '../../components/PdfPreviewModal'
 import '../../styles/global.css'
 
 // ============================================================
@@ -9,14 +10,14 @@ import '../../styles/global.css'
 // ============================================================
 function getStatusStyle(status: string) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
-    protocol_submitted:          { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Submetido' },
+    protocol_submitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Submetido' },
     protocol_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
-    protocol_approved_supervisor:{ bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado (Supervisor)' },
-    protocol_rejected_supervisor:{ bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado (Supervisor)' },
-    protocol_in_review:          { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Em Revisão' },
-    protocol_approved_nucleo:    { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
-    protocol_rejected_nucleo:    { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
-    protocol_resubmitted:        { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Re-submetido' },
+    protocol_approved_supervisor: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado (Supervisor)' },
+    protocol_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Supervisor)' },
+    protocol_in_review: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Em Revisão' },
+    protocol_approved_nucleo: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado' },
+    protocol_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado' },
+    protocol_resubmitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Re-submetido' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }
@@ -32,6 +33,8 @@ function formatFileSize(bytes: number): string {
 // ============================================================
 export default function ProtocolPage() {
   const [protocols, setProtocols] = useState<Protocol[]>([])
+  const [opinionsByProtocol, setOpinionsByProtocol] = useState<Record<number, ProtocolOpinion[]>>({})
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string; filename: string } | null>(null)
   const [approvedTopics, setApprovedTopics] = useState<ApprovedTopic[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingTopics, setLoadingTopics] = useState(false)
@@ -42,7 +45,7 @@ export default function ProtocolPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  useEffect(() => { 
+  useEffect(() => {
     load()
     loadApprovedTopics()
   }, [])
@@ -52,6 +55,19 @@ export default function ProtocolPage() {
     try {
       const { protocols } = await protocolService.list()
       setProtocols(protocols)
+
+      const opinionEntries = await Promise.all(
+        protocols.map(async protocol => {
+          try {
+            const { opinions } = await protocolService.listOpinions(protocol.id)
+            return [protocol.id, opinions] as const
+          } catch {
+            return [protocol.id, []] as const
+          }
+        })
+      )
+
+      setOpinionsByProtocol(Object.fromEntries(opinionEntries))
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -83,7 +99,7 @@ export default function ProtocolPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || !selectedTopicId) return
-    
+
     if (topicHasProtocol) {
       setError('Este tema já possui um protocolo ativo.')
       return
@@ -110,6 +126,31 @@ export default function ProtocolPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function openFile(url: string | null | undefined, fallbackFilename?: string) {
+    if (!url) return
+
+    try {
+      await protocolService.openFile(url, fallbackFilename)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function downloadFile(url: string | null | undefined, fallbackFilename?: string) {
+    if (!url) return
+
+    try {
+      await protocolService.downloadFile(url, fallbackFilename)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  function previewPdf(url: string | null | undefined, title: string, filename: string) {
+    if (!url) return
+    setPdfPreview({ url, title, filename })
   }
 
   // ============================================================
@@ -237,6 +278,7 @@ export default function ProtocolPage() {
           {protocols.map(p => {
             const s = getStatusStyle(p.status)
             const activeDocs = p.documents?.filter(d => d.status === 'active') || []
+            const opinions = opinionsByProtocol[p.id] || []
 
             return (
               <div key={p.id} className="card" style={{
@@ -376,55 +418,144 @@ export default function ProtocolPage() {
                         >
                           <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--primary)' }}>description</span>
                           <div style={{ flex: 1 }}>
-                            <p style={{ fontWeight: 'var(--font-semibold)' }}>{doc.file_name}</p>
+                            <button
+                              type="button"
+                              onClick={() => downloadFile(doc.download_url, doc.file_name)}
+                              disabled={!doc.download_url}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                padding: 0,
+                                margin: 0,
+                                color: 'var(--primary)',
+                                textAlign: 'left',
+                                fontSize: 'var(--body-md)',
+                                fontWeight: 'var(--font-semibold)',
+                                cursor: doc.download_url ? 'pointer' : 'not-allowed',
+                                textDecoration: 'underline',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</span>
+                              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>open_in_new</span>
+                            </button>
                             <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
                               Versão {doc.version}
                             </p>
                           </div>
                           <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
-                            <a
-                              href={`${doc.download_url}?inline=1`}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => openFile(doc.download_url, doc.file_name)}
+                              disabled={!doc.download_url}
+                              className="btn"
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px',
                                 padding: '6px var(--space-2)',
                                 fontSize: 'var(--label-sm)',
-                                background: 'var(--primary)',
-                                color: 'var(--on-primary)',
                                 borderRadius: 'var(--radius-md)',
-                                textDecoration: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
+                                border: '1px solid var(--outline-variant)',
+                                cursor: doc.download_url ? 'pointer' : 'not-allowed',
                                 fontWeight: 'var(--font-medium)'
                               }}
                             >
                               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>visibility</span>
                               Ver
-                            </a>
+                            </button>
                             {doc.download_url && (
-                              <a
-                                href={doc.download_url}
+                              <button
+                                type="button"
+                                onClick={() => downloadFile(doc.download_url, doc.file_name)}
+                                className="btn btn-primary"
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '4px',
+                                  gap: '6px',
                                   padding: '6px var(--space-2)',
                                   fontSize: 'var(--label-sm)',
-                                  background: 'var(--surface-container)',
-                                  color: 'var(--on-surface)',
                                   borderRadius: 'var(--radius-md)',
-                                  textDecoration: 'none',
-                                  border: '1px solid var(--outline-variant)',
                                   cursor: 'pointer',
                                   fontWeight: 'var(--font-medium)'
                                 }}
                               >
                                 <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
                                 Baixar
-                              </a>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {opinions.length > 0 && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--space-1)'
+                  }}>
+                    <p style={{
+                      fontSize: 'var(--label-md)',
+                      fontWeight: 'var(--font-semibold)',
+                      color: 'var(--on-surface-variant)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      Pareceres e fichas
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                      {opinions.map(opinion => (
+                        <div
+                          key={opinion.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 'var(--space-2)',
+                            padding: '10px var(--space-3)',
+                            background: 'var(--surface-container-low)',
+                            borderRadius: 'var(--radius-lg)',
+                            border: '1px solid var(--outline-variant)',
+                            flexWrap: 'wrap'
+                          }}
+                        >
+                          <div>
+                            <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>
+                              {opinion.organ} • {opinion.decision === 'approved' ? 'Aprovado' : 'Reprovado'}
+                            </p>
+                            <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
+                              Versão {opinion.version}
+                            </p>
+                          </div>
+                          <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap' }}>
+                            {opinion.download_url && (
+                              <button type="button" onClick={() => previewPdf(opinion.download_url, `Parecer ${p.code}`, `parecer-${p.code}.pdf`)} className="btn btn-small">
+                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>visibility</span>
+                                Ver Parecer
+                              </button>
+                            )}
+                            {opinion.download_url && (
+                              <button type="button" onClick={() => downloadFile(opinion.download_url, `parecer-${p.code}.pdf`)} className="btn btn-small">
+                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
+                                Baixar Parecer
+                              </button>
+                            )}
+                            {opinion.evaluation_form_download_url && (
+                              <button type="button" onClick={() => previewPdf(opinion.evaluation_form_download_url, `Ficha de Avaliação ${p.code}`, `ficha-${p.code}.pdf`)} className="btn btn-small">
+                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>visibility</span>
+                                Ver Ficha
+                              </button>
+                            )}
+                            {opinion.evaluation_form_download_url && (
+                              <button type="button" onClick={() => downloadFile(opinion.evaluation_form_download_url, `ficha-${p.code}.pdf`)} className="btn btn-small">
+                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>assignment</span>
+                                Baixar Ficha
+                              </button>
                             )}
                           </div>
                         </div>
@@ -526,21 +657,21 @@ export default function ProtocolPage() {
               }}
             >
               <option value="">
-                {loadingTopics 
-                  ? 'A carregar temas...' 
-                  : approvedTopics.length === 0 
-                    ? 'Nenhum tema aprovado disponível' 
+                {loadingTopics
+                  ? 'A carregar temas...'
+                  : approvedTopics.length === 0
+                    ? 'Nenhum tema aprovado disponível'
                     : 'Selecione um tema'
                 }
               </option>
               {approvedTopics.map(topic => (
-                <option 
-                  key={topic.id} 
+                <option
+                  key={topic.id}
                   value={topic.id}
                   disabled={topic.has_protocol}
                 >
-                  {topic.title} 
-                  {topic.has_protocol ? ' (já tem protocolo)' : ''} 
+                  {topic.title}
+                  {topic.has_protocol ? ' (já tem protocolo)' : ''}
                 </option>
               ))}
             </select>
@@ -642,14 +773,14 @@ export default function ProtocolPage() {
                   transition: 'all 0.2s ease',
                   cursor: 'pointer'
                 }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = 'var(--primary)'
-                  e.currentTarget.style.background = 'rgba(0,105,51,0.02)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = 'var(--outline-variant)'
-                  e.currentTarget.style.background = 'var(--surface-container-lowest)'
-                }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = 'var(--primary)'
+                    e.currentTarget.style.background = 'rgba(0,105,51,0.02)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = 'var(--outline-variant)'
+                    e.currentTarget.style.background = 'var(--surface-container-lowest)'
+                  }}
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--primary)' }}>
                     {file ? 'check_circle' : 'upload'}
@@ -733,6 +864,15 @@ export default function ProtocolPage() {
             O teu protocolo está em curso ({current?.status_label}). Não podes submeter uma nova versão agora.
           </p>
         </div>
+      )}
+
+      {pdfPreview && (
+        <PdfPreviewModal
+          url={pdfPreview.url}
+          title={pdfPreview.title}
+          filename={pdfPreview.filename}
+          onClose={() => setPdfPreview(null)}
+        />
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

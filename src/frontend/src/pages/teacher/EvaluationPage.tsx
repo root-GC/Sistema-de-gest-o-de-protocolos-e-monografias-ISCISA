@@ -6,7 +6,7 @@ import {
   type TopicReviewComment,
 } from '../../services/topicService'
 import { protocolService, type Protocol } from '../../services/protocolService'
-import { evaluationService, type EvaluationForm, type FormCriterion } from '../../services/evaluationService'
+import { evaluationService, type EvaluationForm, type EvaluationOpinionResult, type FormCriterion } from '../../services/evaluationService'
 import { useAuth } from '../../context/AuthContext'
 import TopicJustification from '../../components/TopicJustification'
 import '../../styles/global.css'
@@ -57,7 +57,7 @@ export default function EvaluationPage() {
   const [myEvaluationSubmitted, setMyEvaluationSubmitted] = useState(false)
   const [allReviewersSubmitted, setAllReviewersSubmitted] = useState(false)
   const [protocolDecision, setProtocolDecision] = useState<string | null>(null)
-  const [opinionResult, setOpinionResult] = useState<{ document_url: string; decision: string; issued_at: string } | null>(null)
+  const [opinionResult, setOpinionResult] = useState<EvaluationOpinionResult | null>(null)
   const [finalDecision, setFinalDecision] = useState<'approved' | 'rejected' | ''>('')
   const [conclusionSummary, setConclusionSummary] = useState('')
 
@@ -193,6 +193,7 @@ export default function EvaluationPage() {
       setFinalDecision('')
       setConclusionSummary(fullForm.evaluation_form.conclusion_summary || '')
       setCriterionReviews({})
+      setOpinionResult(null)
 
       if (myEval?.criterion_reviews) {
         const reviews: Record<number, string> = {}
@@ -212,6 +213,23 @@ export default function EvaluationPage() {
         setSuccess(null)
       }
 
+      try {
+        const { opinions } = await protocolService.listOpinions(id)
+        const latestOpinion = opinions[0]
+        if (latestOpinion) {
+          setOpinionResult({
+            id: latestOpinion.id,
+            decision: latestOpinion.decision,
+            issued_at: latestOpinion.issued_at,
+            document_url: latestOpinion.document_url || undefined,
+            download_url: latestOpinion.download_url || undefined,
+            evaluation_form_download_url: latestOpinion.evaluation_form_download_url || undefined,
+          })
+        }
+      } catch {
+        setOpinionResult(null)
+      }
+
       setError(null)
     } catch (e) {
       setError((e as Error).message)
@@ -228,6 +246,26 @@ export default function EvaluationPage() {
       await evaluationService.saveCriterionReview(evaluationForm.id, formCriterionId, comment)
       setSuccess('Comentário guardado!')
       setTimeout(() => setSuccess(null), 2000)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function openFile(url: string | null | undefined, fallbackFilename?: string) {
+    if (!url) return
+
+    try {
+      await evaluationService.openFile(url, fallbackFilename)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function downloadFile(url: string | null | undefined, fallbackFilename?: string) {
+    if (!url) return
+
+    try {
+      await evaluationService.downloadFile(url, fallbackFilename)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -585,23 +623,33 @@ export default function EvaluationPage() {
           {/* Documento */}
           {protocol.latest_document && (
             <div className="evaluation-document-actions">
-              <a
-                href={protocol.latest_document.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => openFile(protocol.latest_document?.download_url, protocol.latest_document?.file_name)}
                 className="evaluation-document-button is-primary"
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>description</span>
                 Ver protocolo
-              </a>
+              </button>
               {protocol.latest_document.download_url && (
-                <a
-                  href={protocol.latest_document.download_url}
+                <button
+                  type="button"
+                  onClick={() => downloadFile(protocol.latest_document?.download_url, protocol.latest_document?.file_name)}
                   className="evaluation-document-button"
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>download</span>
                   Baixar
-                </a>
+                </button>
+              )}
+              {evaluationForm && (
+                <button
+                  type="button"
+                  onClick={() => downloadFile(`/api/v1/evaluation-forms/${evaluationForm.id}/download`, `ficha-${protocol.code}.pdf`)}
+                  className="evaluation-document-button"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>assignment</span>
+                  Ficha de Avaliação
+                </button>
               )}
             </div>
           )}
@@ -644,26 +692,34 @@ export default function EvaluationPage() {
                 </p>
               </div>
             </div>
-            {opinionResult?.document_url && (
+            {(opinionResult?.download_url || opinionResult?.document_url) && (
               <div className="evaluation-outcome-actions">
-                <a
-                  href={opinionResult.document_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => downloadFile(opinionResult.download_url || opinionResult.document_url, `parecer-${protocol.code}.pdf`)}
                   className="evaluation-outcome-button"
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>download</span>
                   Baixar Parecer (PDF)
-                </a>
-                <a
-                  href={opinionResult.document_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openFile(opinionResult.download_url || opinionResult.document_url, `parecer-${protocol.code}.pdf`)}
                   className="evaluation-outcome-button"
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span>
                   Abrir Parecer
-                </a>
+                </button>
+                {opinionResult.evaluation_form_download_url && (
+                  <button
+                    type="button"
+                    onClick={() => downloadFile(opinionResult.evaluation_form_download_url, `ficha-${protocol.code}.pdf`)}
+                    className="evaluation-outcome-button"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>assignment</span>
+                    Baixar Ficha
+                  </button>
+                )}
               </div>
             )}
           </section>

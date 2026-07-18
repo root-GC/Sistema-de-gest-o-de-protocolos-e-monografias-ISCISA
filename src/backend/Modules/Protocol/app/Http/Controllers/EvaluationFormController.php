@@ -13,14 +13,50 @@ use Modules\Protocol\app\Http\Resources\EvaluationFormResource;
 use Modules\Protocol\app\Models\EvaluationForm;
 use Modules\Protocol\app\Models\EvaluationFormCriterion;
 use Modules\Protocol\app\Models\Opinion;
+use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Services\DocumentGenerationService;
 use Modules\Protocol\app\Services\EvaluationService;
+use Modules\User\app\Models\User;
 
 class EvaluationFormController extends Controller
 {
     use AuthorizesRequests;
 
     public function __construct(private EvaluationService $evaluationService) {}
+
+    private function canAccessProtocolDocument(User $user, Protocol $protocol): bool
+    {
+        $user->loadMissing(['teacherProfile', 'secretaryProfile']);
+
+        if ($user->hasPermission('protocol.view.all') || (int) $protocol->student === (int) $user->id) {
+            return true;
+        }
+
+        $teacherProfile = $user->teacherProfile;
+
+        if ($teacherProfile && (int) $protocol->supervisor_id === (int) $teacherProfile->id) {
+            return true;
+        }
+
+        if ($teacherProfile && $user->hasPermission('protocol.evaluate')) {
+            return $protocol->reviewAssignments()
+                ->where(fn($query) => $query
+                    ->where('reviewer_one', $teacherProfile->id)
+                    ->orWhere('reviewer_two', $teacherProfile->id)
+                )
+                ->exists();
+        }
+
+        if ($user->hasPermission('protocol.assign')) {
+            $secretaryProfile = $user->secretaryProfile;
+
+            return ! $secretaryProfile
+                || ! $secretaryProfile->organ_id
+                || (int) $protocol->current_organ_id === (int) $secretaryProfile->organ_id;
+        }
+
+        return false;
+    }
 
     public function show(EvaluationForm $form)
     {
@@ -110,27 +146,68 @@ class EvaluationFormController extends Controller
                 'decision' => $opinion->decision,
                 'issued_at' => $opinion->issued_at,
                 'document_url' => Storage::disk('public')->url($path),
+                'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
+                'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
             ],
         ]);
     }
 
-    public function downloadOpinion(Opinion $opinion)
+    public function downloadOpinion(Request $request, Opinion $opinion, DocumentGenerationService $documentService)
     {
-        $user = request()->user();
+        $user = $request->user();
+        $opinion->loadMissing('protocol');
+        $protocol = $opinion->protocol;
 
-        $canView = $user->hasPermission('protocol.assign')
-            || $user->hasPermission('protocol.evaluate')
-            || (int) $opinion->protocol?->student === (int) $user->id;
-
-        if (! $canView) {
+        if (! $protocol || ! $this->canAccessProtocolDocument($user, $protocol)) {
             abort(403);
         }
 
         if (! $opinion->document_path || ! \Illuminate\Support\Facades\Storage::disk('public')->exists($opinion->document_path)) {
-            abort(404, 'Parecer não encontrado.');
+            $path = $documentService->generateOpinionPdf($opinion);
+            $opinion->update(['document_path' => $path]);
         }
 
-        return \Illuminate\Support\Facades\Storage::disk('public')->download($opinion->document_path);
+        $fileName = basename($opinion->document_path);
+        $inline = $request->query('inline') === '1';
+        $headers = [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment') . '; filename="' . $fileName . '"',
+        ];
+
+        if ($inline) {
+            return \Illuminate\Support\Facades\Storage::disk('public')->response($opinion->document_path, $fileName, $headers);
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('public')->download($opinion->document_path, $fileName, $headers);
+    }
+
+    public function downloadEvaluationForm(
+        Request $request,
+        EvaluationForm $form,
+        DocumentGenerationService $documentService
+    ) {
+        $user = $request->user();
+        $form->loadMissing('protocol');
+        $protocol = $form->protocol;
+
+        if (! $protocol || ! $this->canAccessProtocolDocument($user, $protocol)) {
+            abort(403);
+        }
+
+        $path = $documentService->generateEvaluationFormPdf($form);
+        $protocolCode = $protocol->code ?: $protocol->id;
+        $fileName = "ficha-avaliacao-{$protocolCode}-{$form->version}.pdf";
+        $inline = $request->query('inline') === '1';
+        $headers = [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment') . '; filename="' . $fileName . '"',
+        ];
+
+        if ($inline) {
+            return Storage::disk('public')->response($path, $fileName, $headers);
+        }
+
+        return Storage::disk('public')->download($path, $fileName, $headers);
     }
 
     public function getForReviewer(Request $request)
@@ -171,6 +248,10 @@ class EvaluationFormController extends Controller
 
         $protocol = \Modules\Protocol\app\Models\Protocol::query()->findOrFail($protocol);
 
+        if (! $this->canAccessProtocolDocument($user, $protocol)) {
+            abort(403);
+        }
+
         $opinions = Opinion::query()
             ->where('protocol_id', $protocol->id)
             ->with('issuedBy:id,name,email')
@@ -188,6 +269,10 @@ class EvaluationFormController extends Controller
                     'name' => $o->issuedBy->name,
                 ] : null,
                 'document_url' => $o->document_path ? Storage::disk('public')->url($o->document_path) : null,
+                'download_url' => url("api/v1/opinions/{$o->id}/download"),
+                'evaluation_form_download_url' => $o->evaluation_form_id
+                    ? url("api/v1/evaluation-forms/{$o->evaluation_form_id}/download")
+                    : null,
             ]);
 
         return response()->json([

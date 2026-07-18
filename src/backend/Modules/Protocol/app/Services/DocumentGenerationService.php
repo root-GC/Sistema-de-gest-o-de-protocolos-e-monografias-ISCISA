@@ -61,7 +61,10 @@ class DocumentGenerationService
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('protocol::pdf.ficha-avaliacao', $viewData);
 
-        $path = "evaluations/{$form->protocol_id}/ficha-{$form->version}.pdf";
+        $storageDir = "evaluations/{$form->protocol_id}";
+        \Illuminate\Support\Facades\Storage::disk('public')->makeDirectory($storageDir);
+
+        $path = "{$storageDir}/ficha-{$form->version}.pdf";
         \Illuminate\Support\Facades\Storage::disk('public')->put($path, $pdf->output());
 
         return $path;

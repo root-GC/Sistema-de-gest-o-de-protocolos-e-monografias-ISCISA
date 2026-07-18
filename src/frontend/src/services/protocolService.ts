@@ -1,5 +1,5 @@
 // src/services/protocolService.ts
-import { req, reqFormData } from './apiClient';
+import { downloadApiFile, openApiFile, req, reqFormData } from './apiClient';
 
 export interface Protocol {
   id: number;
@@ -50,6 +50,7 @@ export interface Document {
   download_url?: string;
   status: string;
   version: number;
+  submitted_at?: string;
 }
 
 export interface ReviewAssignment {
@@ -96,6 +97,22 @@ export interface AssignedProtocolReviewer {
   assigned_at?: string;
 }
 
+export interface ProtocolOpinion {
+  id: number;
+  version: string;
+  organ: string;
+  decision: string;
+  observations?: string | null;
+  issued_at: string;
+  issued_by?: {
+    id: number;
+    name: string;
+  } | null;
+  document_url?: string | null;
+  download_url?: string | null;
+  evaluation_form_download_url?: string | null;
+}
+
 export const protocolService = {
   submit: (topicId: number, protocolType: string, file: File) => {
     const formData = new FormData();
@@ -111,6 +128,13 @@ export const protocolService = {
   list: () => req('GET', '/api/v1/protocols') as Promise<{ protocols: Protocol[] }>,
 
   getById: (id: number) => req('GET', `/api/v1/protocols/${id}`) as Promise<{ protocol: Protocol }>,
+
+  listOpinions: (protocolId: number) =>
+    req('GET', `/api/v1/protocols/${protocolId}/opinions`) as Promise<{ opinions: ProtocolOpinion[] }>,
+
+  openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
+
+  downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
 
   // Supervisor
   listForSupervisor: () => 

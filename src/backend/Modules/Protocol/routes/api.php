@@ -73,6 +73,7 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('evaluation-forms.criteria.review');
     Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('evaluation-forms.submit');
     Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('evaluation-forms.decide');
+    Route::get('evaluation-forms/{form}/download', [EvaluationFormController::class, 'downloadEvaluationForm'])->name('evaluation-forms.download');
     Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('reviewer.evaluations.list');
     Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('secretary.evaluations.list');
 
