@@ -10,27 +10,31 @@ import '../../styles/global.css'
 function getTopicStatusStyle(status: string) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
     topic_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
-    topic_pending_nucleo:     { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',     dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
-    topic_assigned_for_review:{ bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Revisores atribuídos' },
-    topic_in_review:          { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',     dot: 'var(--tertiary)', label: 'Em revisão' },
-    topic_approved_nucleo:    { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
-    topic_rejected:           { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
+    topic_pending_nucleo: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
+    topic_assigned_for_review: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Revisores atribuídos' },
+    topic_in_review: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Em revisão' },
+    topic_approved_nucleo: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado' },
+    topic_rejected: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }
 
 function getProtocolStatusStyle(status: string) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
-    protocol_submitted:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Submetido' },
-    protocol_pending_supervisor:  { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
-    protocol_approved_supervisor: { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado (Supervisor)' },
-    protocol_rejected_supervisor: { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado (Supervisor)' },
-    protocol_in_review:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Em Revisão' },
-    protocol_pending_nucleo:      { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
-    protocol_in_review_nucleo:    { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (Núcleo)' },
-    protocol_approved_nucleo:     { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
-    protocol_rejected_nucleo:     { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
-    protocol_resubmitted:         { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Re-submetido' },
+    protocol_submitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Submetido' },
+    protocol_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
+    protocol_approved_supervisor: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado (Supervisor)' },
+    protocol_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Supervisor)' },
+    protocol_in_review: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Em Revisão' },
+    protocol_pending_nucleo: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
+    protocol_in_review_nucleo: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (Núcleo)' },
+    protocol_pending_comite_cientifico: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (Comité Científico)' },
+    protocol_in_review_comite_cientifico: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (Comité Científico)' },
+    protocol_pending_comite_bioetica: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (Comité de Bioética)' },
+    protocol_in_review_comite_bioetica: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (Comité de Bioética)' },
+    protocol_approved_nucleo: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado' },
+    protocol_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado' },
+    protocol_resubmitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Re-submetido' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }
@@ -310,6 +314,31 @@ function TopicsTab() {
 // ============================================================
 // TAB: PROTOCOLOS
 // ============================================================
+function getProtocolOrganService(status: string) {
+  if (status.startsWith('protocol_pending_nucleo') || status.startsWith('protocol_in_review_nucleo')) {
+    return {
+      getEligibleReviewers: protocolService.getEligibleReviewersNucleo,
+      getAssignedReviewers: protocolService.getAssignedReviewersNucleo,
+      assignReviewers: protocolService.assignReviewersNucleo,
+    }
+  }
+  if (status.startsWith('protocol_pending_comite_cientifico') || status.startsWith('protocol_in_review_comite_cientifico')) {
+    return {
+      getEligibleReviewers: protocolService.getEligibleReviewersCC,
+      getAssignedReviewers: protocolService.getAssignedReviewersCC,
+      assignReviewers: protocolService.assignReviewersCC,
+    }
+  }
+  if (status.startsWith('protocol_pending_comite_bioetica') || status.startsWith('protocol_in_review_comite_bioetica')) {
+    return {
+      getEligibleReviewers: protocolService.getEligibleReviewersBioetica,
+      getAssignedReviewers: protocolService.getAssignedReviewersBioetica,
+      assignReviewers: protocolService.assignReviewersBioetica,
+    }
+  }
+  return null
+}
+
 function ProtocolsTab() {
   const [protocols, setProtocols] = useState<Protocol[]>([])
   const [loading, setLoading] = useState(true)
@@ -333,17 +362,31 @@ function ProtocolsTab() {
     finally { setLoading(false) }
   }
 
+  function findProtocol(protocolId: number): Protocol | undefined {
+    return protocols.find(p => p.id === protocolId)
+  }
+
   async function loadReviewers(protocolId: number) {
+    const protocol = findProtocol(protocolId)
+    if (!protocol) return
+    const service = getProtocolOrganService(protocol.status)
+    if (!service) return
+
     try {
-      const { reviewers } = await protocolService.getEligibleReviewers(protocolId)
+      const { reviewers } = await service.getEligibleReviewers(protocolId)
       setReviewersByProtocol(prev => ({ ...prev, [protocolId]: reviewers }))
     } catch (e) { setError((e as Error).message) }
   }
 
   async function loadAssignedReviewers(protocolId: number) {
+    const protocol = findProtocol(protocolId)
+    if (!protocol) return
+    const service = getProtocolOrganService(protocol.status)
+    if (!service) return
+
     setLoadingAssignedProtocolId(protocolId)
     try {
-      const { reviewers } = await protocolService.getAssignedReviewers(protocolId)
+      const { reviewers } = await service.getAssignedReviewers(protocolId)
       setAssignedReviewersByProtocol(prev => ({ ...prev, [protocolId]: reviewers }))
     } catch (e) { setError((e as Error).message) }
     finally { setLoadingAssignedProtocolId(null) }
@@ -366,9 +409,15 @@ function ProtocolsTab() {
     const one = pickOne[protocolId]
     const two = pickTwo[protocolId]
     if (!one || !two || one === two) { setError('Escolhe dois revisores diferentes.'); return }
+
+    const protocol = findProtocol(protocolId)
+    if (!protocol) return
+    const service = getProtocolOrganService(protocol.status)
+    if (!service) return
+
     setAssigningId(protocolId)
     try {
-      await protocolService.assignReviewers(protocolId, Number(one), Number(two))
+      await service.assignReviewers(protocolId, Number(one), Number(two))
       setPickOne(p => { const n = { ...p }; delete n[protocolId]; return n })
       setPickTwo(p => { const n = { ...p }; delete n[protocolId]; return n })
       setReviewersByProtocol(p => { const n = { ...p }; delete n[protocolId]; return n })
@@ -381,7 +430,7 @@ function ProtocolsTab() {
 
   if (loading) return <Spinner text="A carregar protocolos..." />
 
-  const pending = protocols.filter(p => p.status === 'protocol_pending_nucleo')
+  const pending = protocols.filter(p => ['protocol_pending_nucleo', 'protocol_pending_comite_cientifico', 'protocol_pending_comite_bioetica'].includes(p.status))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -396,7 +445,7 @@ function ProtocolsTab() {
 
       {protocols.map(p => {
         const s = getProtocolStatusStyle(p.status)
-        const isPending = p.status === 'protocol_pending_nucleo'
+        const isPending = ['protocol_pending_nucleo', 'protocol_pending_comite_cientifico', 'protocol_pending_comite_bioetica'].includes(p.status)
         const revs = reviewersByProtocol[p.id]
         const s1 = pickOne[p.id]
         const s2 = pickTwo[p.id]

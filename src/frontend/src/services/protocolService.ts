@@ -177,6 +177,72 @@ export const protocolService = {
       protocol: Protocol;
     }>,
 
+  // === NÚCLEO ===
+  getEligibleReviewersNucleo: (protocolId: number) =>
+    req('GET', `/api/v1/nucleo/protocols/${protocolId}/eligible-reviewers`) as Promise<{
+      reviewers: EligibleReviewer[];
+    }>,
+
+  getAssignedReviewersNucleo: (protocolId: number) =>
+    req('GET', `/api/v1/nucleo/protocols/${protocolId}/reviewers`) as Promise<{
+      reviewers: AssignedProtocolReviewer[];
+      review_assignments: ReviewAssignment[];
+      total: number;
+    }>,
+
+  assignReviewersNucleo: (protocolId: number, reviewerOneId: number, reviewerTwoId: number) =>
+    req('POST', `/api/v1/nucleo/protocols/${protocolId}/assign-reviewers`, {
+      reviewer_one_id: reviewerOneId,
+      reviewer_two_id: reviewerTwoId,
+    }) as Promise<{
+      message: string;
+      protocol: Protocol;
+    }>,
+
+  // === COMITÉ CIENTÍFICO (CC) ===
+  getEligibleReviewersCC: (protocolId: number) =>
+    req('GET', `/api/v1/comite-cientifico/protocols/${protocolId}/eligible-reviewers`) as Promise<{
+      reviewers: EligibleReviewer[];
+    }>,
+
+  getAssignedReviewersCC: (protocolId: number) =>
+    req('GET', `/api/v1/comite-cientifico/protocols/${protocolId}/reviewers`) as Promise<{
+      reviewers: AssignedProtocolReviewer[];
+      review_assignments: ReviewAssignment[];
+      total: number;
+    }>,
+
+  assignReviewersCC: (protocolId: number, reviewerOneId: number, reviewerTwoId: number) =>
+    req('POST', `/api/v1/comite-cientifico/protocols/${protocolId}/assign-reviewers`, {
+      reviewer_one_id: reviewerOneId,
+      reviewer_two_id: reviewerTwoId,
+    }) as Promise<{
+      message: string;
+      protocol: Protocol;
+    }>,
+
+  // === COMITÉ DE BIOÉTICA ===
+  getEligibleReviewersBioetica: (protocolId: number) =>
+    req('GET', `/api/v1/comite-bioetica/protocols/${protocolId}/eligible-reviewers`) as Promise<{
+      reviewers: EligibleReviewer[];
+    }>,
+
+  getAssignedReviewersBioetica: (protocolId: number) =>
+    req('GET', `/api/v1/comite-bioetica/protocols/${protocolId}/reviewers`) as Promise<{
+      reviewers: AssignedProtocolReviewer[];
+      review_assignments: ReviewAssignment[];
+      total: number;
+    }>,
+
+  assignReviewersBioetica: (protocolId: number, reviewerOneId: number, reviewerTwoId: number) =>
+    req('POST', `/api/v1/comite-bioetica/protocols/${protocolId}/assign-reviewers`, {
+      reviewer_one_id: reviewerOneId,
+      reviewer_two_id: reviewerTwoId,
+    }) as Promise<{
+      message: string;
+      protocol: Protocol;
+    }>,
+
   // Reviewer
   listForReviewer: () =>
     req('GET', '/api/v1/reviewer/protocols') as Promise<{ protocols: Protocol[] }>,
