@@ -16,7 +16,9 @@ function getStatusStyle(status: string) {
     protocol_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Supervisor)' },
     protocol_in_review: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Em Revisão' },
     protocol_approved_nucleo: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado' },
-    protocol_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado' },
+    protocol_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Núcleo)' },
+    protocol_rejected_cc: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (CC)' },
+    protocol_rejected_bioetica: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Bioética)' },
     protocol_resubmitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Re-submetido' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
@@ -91,7 +93,12 @@ export default function ProtocolPage() {
   }
 
   const current = protocols[0]
-  const canSubmitNew = !current || current.status === 'protocol_rejected_supervisor'
+  const canSubmitNew = !current || [
+    'protocol_rejected_supervisor',
+    'protocol_rejected_nucleo',
+    'protocol_rejected_cc',
+    'protocol_rejected_bioetica',
+  ].includes(current.status)
 
   const selectedTopic = approvedTopics.find(t => t.id === Number(selectedTopicId))
   const topicHasProtocol = selectedTopic?.has_protocol || false

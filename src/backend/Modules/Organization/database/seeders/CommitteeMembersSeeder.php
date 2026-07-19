@@ -35,49 +35,49 @@ class CommitteeMembersSeeder extends Seeder
                 'name' => 'Docente Científico 1',
                 'email' => 'docente.cientifico1@iscisa.ac.mz',
                 'roles' => ['teacher'],
-                'profile' => ['type' => 'teacher', 'area' => 'Saúde Pública', 'department' => 'Núcleo Científico', 'degree' => 'doutoramento', 'organ_role' => 'member'],
+                'profile' => ['type' => 'teacher', 'area' => 'Saúde Pública', 'department' => 'Núcleo Científico', 'degree' => 'doutoramento', 'organ_role' => 'member', 'organ_type' => 'scientific_committee'],
             ],
             [
                 'name' => 'Docente Científico 2',
                 'email' => 'docente.cientifico2@iscisa.ac.mz',
                 'roles' => ['teacher'],
-                'profile' => ['type' => 'teacher', 'area' => 'Enfermagem', 'department' => 'Núcleo Científico', 'degree' => 'mestrado', 'organ_role' => 'member'],
+                'profile' => ['type' => 'teacher', 'area' => 'Enfermagem', 'department' => 'Núcleo Científico', 'degree' => 'mestrado', 'organ_role' => 'member', 'organ_type' => 'scientific_committee'],
             ],
             [
                 'name' => 'Revisor Científico 1',
                 'email' => 'revisor.cientifico1@iscisa.ac.mz',
                 'roles' => ['teacher', 'reviewer'],
-                'profile' => ['type' => 'teacher', 'area' => 'Saúde Pública', 'department' => 'Núcleo Científico', 'degree' => 'doutoramento', 'organ_role' => 'reviewer'],
+                'profile' => ['type' => 'teacher', 'area' => 'Saúde Pública', 'department' => 'Núcleo Científico', 'degree' => 'doutoramento', 'organ_role' => 'reviewer', 'organ_type' => 'scientific_committee'],
             ],
             [
                 'name' => 'Revisor Científico 2',
                 'email' => 'revisor.cientifico2@iscisa.ac.mz',
                 'roles' => ['teacher', 'reviewer'],
-                'profile' => ['type' => 'teacher', 'area' => 'Enfermagem', 'department' => 'Núcleo Científico', 'degree' => 'mestrado', 'organ_role' => 'reviewer'],
+                'profile' => ['type' => 'teacher', 'area' => 'Enfermagem', 'department' => 'Núcleo Científico', 'degree' => 'mestrado', 'organ_role' => 'reviewer', 'organ_type' => 'scientific_committee'],
             ],
             [
                 'name' => 'Docente de Bioética 1',
                 'email' => 'docente.bioetica1@iscisa.ac.mz',
                 'roles' => ['teacher'],
-                'profile' => ['type' => 'teacher', 'area' => 'Reabilitação', 'department' => 'Núcleo Científico', 'degree' => 'doutoramento', 'organ_role' => 'member'],
+                'profile' => ['type' => 'teacher', 'area' => 'Reabilitação', 'department' => 'Núcleo Científico', 'degree' => 'doutoramento', 'organ_role' => 'member', 'organ_type' => 'bioethics_committee'],
             ],
             [
                 'name' => 'Docente de Bioética 2',
                 'email' => 'docente.bioetica2@iscisa.ac.mz',
                 'roles' => ['teacher'],
-                'profile' => ['type' => 'teacher', 'area' => 'Farmácia e Ciências Laboratoriais', 'department' => 'Núcleo Científico', 'degree' => 'mestrado', 'organ_role' => 'member'],
+                'profile' => ['type' => 'teacher', 'area' => 'Farmácia e Ciências Laboratoriais', 'department' => 'Núcleo Científico', 'degree' => 'mestrado', 'organ_role' => 'member', 'organ_type' => 'bioethics_committee'],
             ],
             [
                 'name' => 'Revisor de Bioética 1',
                 'email' => 'revisor.bioetica1@iscisa.ac.mz',
                 'roles' => ['teacher', 'reviewer'],
-                'profile' => ['type' => 'teacher', 'area' => 'Reabilitação', 'department' => 'Núcleo Científico', 'degree' => 'doutoramento', 'organ_role' => 'reviewer'],
+                'profile' => ['type' => 'teacher', 'area' => 'Reabilitação', 'department' => 'Núcleo Científico', 'degree' => 'doutoramento', 'organ_role' => 'reviewer', 'organ_type' => 'bioethics_committee'],
             ],
             [
                 'name' => 'Revisor de Bioética 2',
                 'email' => 'revisor.bioetica2@iscisa.ac.mz',
                 'roles' => ['teacher', 'reviewer'],
-                'profile' => ['type' => 'teacher', 'area' => 'Farmácia e Ciências Laboratoriais', 'department' => 'Núcleo Científico', 'degree' => 'mestrado', 'organ_role' => 'reviewer'],
+                'profile' => ['type' => 'teacher', 'area' => 'Farmácia e Ciências Laboratoriais', 'department' => 'Núcleo Científico', 'degree' => 'mestrado', 'organ_role' => 'reviewer', 'organ_type' => 'bioethics_committee'],
             ],
         ];
 
@@ -152,16 +152,42 @@ class CommitteeMembersSeeder extends Seeder
                 ]
             );
 
+            $organType = $data['profile']['organ_type'] ?? 'nucleus';
+            $memberOrganId = $resolveOrganId($organType) ?: $nucleusOrganId;
+
             DB::table('organ_members')->updateOrInsert(
-                ['organ_id' => $nucleusOrganId, 'user_id' => $userId],
+                ['organ_id' => $memberOrganId, 'user_id' => $userId],
                 [
-                    'organ_id' => $nucleusOrganId,
+                    'organ_id' => $memberOrganId,
                     'user_id' => $userId,
                     'role' => $data['profile']['organ_role'],
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]
             );
+        }
+
+        // Adicionar revisores do Comité Científico como também revisores do Núcleo
+        // para que possam avaliar temas na sua área científica
+        $extraNucleusReviewers = [
+            'revisor.cientifico1@iscisa.ac.mz',
+            'revisor.cientifico2@iscisa.ac.mz',
+        ];
+
+        foreach ($extraNucleusReviewers as $email) {
+            $userId = DB::table('users')->where('email', $email)->value('id');
+            if ($userId) {
+                DB::table('organ_members')->updateOrInsert(
+                    ['organ_id' => $nucleusOrganId, 'user_id' => $userId],
+                    [
+                        'organ_id' => $nucleusOrganId,
+                        'user_id' => $userId,
+                        'role' => 'reviewer',
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
+            }
         }
     }
 }

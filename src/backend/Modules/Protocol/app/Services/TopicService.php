@@ -268,7 +268,10 @@ class TopicService
         }
 
         return Topic::query()
-            ->whereHas('scientificArea', fn($q) => $q->where('organ_id', $secretaryProfile->organ_id))
+            ->whereHas('scientificArea', fn($q) => $q
+                ->where('organ_id', $secretaryProfile->organ_id)
+                ->when($secretaryProfile->scientific_area_id, fn($q) => $q->where('id', $secretaryProfile->scientific_area_id))
+            )
             ->whereIn('status', [
                 Topic::STATUS_PENDING_NUCLEO,
                 Topic::STATUS_ASSIGNED,
@@ -309,11 +312,17 @@ class TopicService
 
         return $query
             ->when($assignedReviewerIds !== [], fn($q) => $q->whereNotIn('teacher_profiles.id', $assignedReviewerIds))
-            ->leftJoinSub($pendingTopicReviews, 'pending_topic_reviews', fn($join) => $join
-                ->on('pending_topic_reviews.reviewer_id', '=', 'teacher_profiles.id')
+            ->leftJoinSub(
+                $pendingTopicReviews,
+                'pending_topic_reviews',
+                fn($join) => $join
+                    ->on('pending_topic_reviews.reviewer_id', '=', 'teacher_profiles.id')
             )
-            ->leftJoinSub($pendingProtocolReviews, 'pending_protocol_reviews', fn($join) => $join
-                ->on('pending_protocol_reviews.reviewer_id', '=', 'teacher_profiles.id')
+            ->leftJoinSub(
+                $pendingProtocolReviews,
+                'pending_protocol_reviews',
+                fn($join) => $join
+                    ->on('pending_protocol_reviews.reviewer_id', '=', 'teacher_profiles.id')
             )
             ->select(
                 'teacher_profiles.id',
@@ -467,41 +476,41 @@ class TopicService
         return DB::transaction(function () use ($topic, $reviewer, $data) {
             $topic = Topic::lockForUpdate()->findOrFail($topic->id);
 
-             Log::info('=== SUBMIT EVALUATION ===');
+            Log::info('=== SUBMIT EVALUATION ===');
 
-        Log::info('Dados do Topic recebido', [
-            'id' => $topic->id,
-            'status' => $topic->status,
-            'title' => $topic->title ?? null,
-            'student_id' => $topic->student_id ?? null,
-            'supervisor_id' => $topic->supervisor_id ?? null,
-            'scientific_area_id' => $topic->scientific_area_id ?? null,
-            'created_at' => $topic->created_at,
-            'updated_at' => $topic->updated_at,
-        ]);
-
-
-        Log::info('Estados permitidos para avaliação', [
-            'STATUS_ASSIGNED' => Topic::STATUS_ASSIGNED,
-            'STATUS_IN_REVIEW' => Topic::STATUS_IN_REVIEW,
-            'current_status' => $topic->status,
-            'can_evaluate' => in_array(
-                $topic->status,
-                [
-                    Topic::STATUS_ASSIGNED,
-                    Topic::STATUS_IN_REVIEW
-                ],
-                true
-            )
-        ]);
+            Log::info('Dados do Topic recebido', [
+                'id' => $topic->id,
+                'status' => $topic->status,
+                'title' => $topic->title ?? null,
+                'student_id' => $topic->student_id ?? null,
+                'supervisor_id' => $topic->supervisor_id ?? null,
+                'scientific_area_id' => $topic->scientific_area_id ?? null,
+                'created_at' => $topic->created_at,
+                'updated_at' => $topic->updated_at,
+            ]);
 
 
-        Log::info('Dados enviados pelo avaliador', [
-            'reviewer_id' => $reviewer->id,
-            'reviewer_name' => $reviewer->name,
-            'decision' => $data['decision'] ?? null,
-            'comment_id' => $data['comment_id'] ?? null,
-        ]);
+            Log::info('Estados permitidos para avaliação', [
+                'STATUS_ASSIGNED' => Topic::STATUS_ASSIGNED,
+                'STATUS_IN_REVIEW' => Topic::STATUS_IN_REVIEW,
+                'current_status' => $topic->status,
+                'can_evaluate' => in_array(
+                    $topic->status,
+                    [
+                        Topic::STATUS_ASSIGNED,
+                        Topic::STATUS_IN_REVIEW
+                    ],
+                    true
+                )
+            ]);
+
+
+            Log::info('Dados enviados pelo avaliador', [
+                'reviewer_id' => $reviewer->id,
+                'reviewer_name' => $reviewer->name,
+                'decision' => $data['decision'] ?? null,
+                'comment_id' => $data['comment_id'] ?? null,
+            ]);
 
             $teacherProfile = $reviewer->teacherProfile;
 
@@ -703,7 +712,7 @@ class TopicService
 
         // Paginação (padrão 15 por página)
         $perPage = $filters['per_page'] ?? 15;
-        
+
         return $query->paginate($perPage);
     }
 
@@ -725,8 +734,12 @@ class TopicService
         }
 
         return DB::table('teacher_profiles')
+            ->distinct()
             ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
             ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
+            ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
+            ->where('organ_members.organ_id', $topicOrganId)
+            ->whereNull('organ_members.deleted_at')
             ->where('scientific_areas.organ_id', $topicOrganId)
             ->where('teacher_profiles.scientific_area_id', $topic->scientific_area_id)
             ->whereNull('teacher_profiles.deleted_at')
@@ -779,32 +792,32 @@ class TopicService
     }
 
     public function viewComments(User $user, Topic $topic): bool
-{
-    // Admin
-    if ($user->hasPermission('admin.access')) {
-        return true;
+    {
+        // Admin
+        if ($user->hasPermission('admin.access')) {
+            return true;
+        }
+
+        // Supervisor
+        $teacher = $user->teacherProfile;
+
+        if (
+            $teacher &&
+            $teacher->id === $topic->supervisor_id
+        ) {
+            return true;
+        }
+
+        // Avaliador
+        if ($this->viewForReviewer($user, $topic)) {
+            return true;
+        }
+
+        // Secretaria
+        if ($this->viewForSecretary($user, $topic)) {
+            return true;
+        }
+
+        return false;
     }
-
-    // Supervisor
-    $teacher = $user->teacherProfile;
-
-    if (
-        $teacher &&
-        $teacher->id === $topic->supervisor_id
-    ) {
-        return true;
-    }
-
-    // Avaliador
-    if ($this->viewForReviewer($user, $topic)) {
-        return true;
-    }
-
-    // Secretaria
-    if ($this->viewForSecretary($user, $topic)) {
-        return true;
-    }
-
-    return false;
-}
 }

@@ -9,7 +9,8 @@ use Modules\User\app\Models\User;
 class SecretaryProfile extends Model
 {
     use SoftDeletes;
-    protected $fillable = ['user_id', 'organ_id', 'office'];
-    public function user()  { return $this->belongsTo(User::class); }
-    public function organ() { return $this->belongsTo(Organ::class); }
+    protected $fillable = ['user_id', 'organ_id', 'scientific_area_id', 'office'];
+    public function user()          { return $this->belongsTo(User::class); }
+    public function organ()         { return $this->belongsTo(Organ::class); }
+    public function scientificArea(){ return $this->belongsTo(ScientificArea::class); }
 }

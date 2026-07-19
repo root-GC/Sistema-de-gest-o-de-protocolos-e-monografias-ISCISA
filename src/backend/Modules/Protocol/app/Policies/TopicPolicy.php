@@ -73,7 +73,16 @@ class TopicPolicy
         // Verifica se o núcleo da secretaria é o mesmo do tema
         $topicOrgan = $topic->scientificArea?->organ_id;
 
-        return $secretary->organ_id === $topicOrgan;
+        if ($secretary->organ_id !== $topicOrgan) {
+            return false;
+        }
+
+        // Se a secretaria tem uma área científica atribuída, só vê temas dessa área
+        if ($secretary->scientific_area_id && (int) $secretary->scientific_area_id !== (int) $topic->scientific_area_id) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

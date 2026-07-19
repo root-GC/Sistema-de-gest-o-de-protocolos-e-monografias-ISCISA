@@ -100,11 +100,30 @@ class OrganizationProfileSeeder extends Seeder
         // ── 4. secretary_profiles ─────────────────────────────────────────
 
         DB::table('secretary_profiles')->insert([
-            'user_id'    => $user('secretario@iscisa.ac.mz'),
-            'organ_id'   => $nucleoId,
-            'office'     => 'Secretaria do Núcleo Científico',
-            'created_at' => $now,
-            'updated_at' => $now,
+            'user_id'            => $user('secretario@iscisa.ac.mz'),
+            'organ_id'           => $nucleoId,
+            'scientific_area_id' => $area('Saúde Pública'),
+            'office'             => 'Secretaria do Núcleo Científico — Saúde Pública',
+            'created_at'         => $now,
+            'updated_at'         => $now,
+        ]);
+
+        DB::table('secretary_profiles')->insert([
+            'user_id'            => $user('secretario.enfermagem@iscisa.ac.mz'),
+            'organ_id'           => $nucleoId,
+            'scientific_area_id' => $area('Enfermagem'),
+            'office'             => 'Secretaria do Núcleo Científico — Enfermagem',
+            'created_at'         => $now,
+            'updated_at'         => $now,
+        ]);
+
+        DB::table('secretary_profiles')->insert([
+            'user_id'            => $user('secretario.reabilitacao@iscisa.ac.mz'),
+            'organ_id'           => $nucleoId,
+            'scientific_area_id' => $area('Reabilitação'),
+            'office'             => 'Secretaria do Núcleo Científico — Reabilitação',
+            'created_at'         => $now,
+            'updated_at'         => $now,
         ]);
 
         // ── 5. admin_profiles ─────────────────────────────────────────────
@@ -122,8 +141,12 @@ class OrganizationProfileSeeder extends Seeder
 
         $members = [
             // Núcleo
-            ['organ_id' => $nucleoId,   'user_id' => $user('coord@iscisa.ac.mz'),       'role' => 'coordinator'],
-            ['organ_id' => $nucleoId,   'user_id' => $user('secretario@iscisa.ac.mz'),  'role' => 'member'],
+            ['organ_id' => $nucleoId,   'user_id' => $user('coord@iscisa.ac.mz'),              'role' => 'coordinator'],
+            ['organ_id' => $nucleoId,   'user_id' => $user('secretario@iscisa.ac.mz'),         'role' => 'member'],
+            ['organ_id' => $nucleoId,   'user_id' => $user('secretario.enfermagem@iscisa.ac.mz'),  'role' => 'member'],
+            ['organ_id' => $nucleoId,   'user_id' => $user('secretario.reabilitacao@iscisa.ac.mz'), 'role' => 'member'],
+            ['organ_id' => $nucleoId,   'user_id' => $user('docente@iscisa.ac.mz'),            'role' => 'reviewer'],
+            ['organ_id' => $nucleoId,   'user_id' => $user('revisora@iscisa.ac.mz'),           'role' => 'reviewer'],
 
             // Comitê Científico
             ['organ_id' => $comiteId,   'user_id' => $user('coord@iscisa.ac.mz'),       'role' => 'president'],

@@ -85,7 +85,7 @@ class EvaluationService
                         'reviewer_id' => $reviewerId,
                     ],
                     [
-                        'protocol_review_assignment_id' => $assignment->id,
+                        'protocol_review_assignment_id' => $assignment?->id,
                         'status' => ReviewerEvaluation::STATUS_PENDING,
                     ]
                 );
@@ -244,7 +244,13 @@ class EvaluationService
             $flow = null;
 
             if ($decision === 'rejected') {
-                $protocolUpdates['status'] = Protocol::STATUS_REJECTED_FINAL;
+                $rejectedStatus = match ($form->organ) {
+                    Protocol::ORGAN_NUCLEO => Protocol::STATUS_REJECTED_NUCLEO,
+                    Protocol::ORGAN_COMITE_CIENTIFICO => Protocol::STATUS_REJECTED_CC,
+                    Protocol::ORGAN_COMITE_BIOETICA => Protocol::STATUS_REJECTED_BIOETICA,
+                    default => Protocol::STATUS_REJECTED_FINAL,
+                };
+                $protocolUpdates['status'] = $rejectedStatus;
             } else {
                 $organType = Protocol::organTypeFromFormOrgan($form->organ);
                 $flow = $organType ? Protocol::ORGAN_FLOW[$organType] ?? null : null;
@@ -380,9 +386,11 @@ class EvaluationService
         }
 
         return EvaluationForm::query()
-            ->whereHas('protocol', fn($q) => $q
-                ->whereIn('status', $statuses)
-                ->where('current_organ_id', $organ->id)
+            ->whereHas(
+                'protocol',
+                fn($q) => $q
+                    ->whereIn('status', $statuses)
+                    ->where('current_organ_id', $organ->id)
             )
             ->where('organ', $formOrgan)
             ->with([

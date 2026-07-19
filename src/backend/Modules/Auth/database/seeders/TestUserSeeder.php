@@ -27,6 +27,8 @@ class TestUserSeeder extends Seeder
             ['name' => 'Sofia Estudante',     'email' => 'estudante@iscisa.ac.mz',            'roles' => ['student']],
             ['name' => 'Secretário Científico', 'email' => 'secretario.cientifico@iscisa.ac.mz', 'roles' => ['secretary']],
             ['name' => 'Secretário de Bioética', 'email' => 'secretario.bioetica@iscisa.ac.mz',   'roles' => ['secretary']],
+            ['name' => 'Secretário de Enfermagem',     'email' => 'secretario.enfermagem@iscisa.ac.mz',      'roles' => ['secretary']],
+            ['name' => 'Secretário de Reabilitação',   'email' => 'secretario.reabilitacao@iscisa.ac.mz',    'roles' => ['secretary']],
             ['name' => 'Docente Científico 1', 'email' => 'docente.cientifico1@iscisa.ac.mz',   'roles' => ['teacher']],
             ['name' => 'Docente Científico 2', 'email' => 'docente.cientifico2@iscisa.ac.mz',   'roles' => ['teacher']],
             ['name' => 'Revisor Científico 1', 'email' => 'revisor.cientifico1@iscisa.ac.mz',   'roles' => ['teacher', 'reviewer']],

@@ -48,7 +48,14 @@ class ProtocolService
             ->latest('submitted_at')
             ->first();
 
-        if ($existing && ! in_array($existing->status, [Protocol::STATUS_REJECTED_SUPERVISOR], true)) {
+        $resubmittableStatuses = [
+            Protocol::STATUS_REJECTED_SUPERVISOR,
+            Protocol::STATUS_REJECTED_NUCLEO,
+            Protocol::STATUS_REJECTED_CC,
+            Protocol::STATUS_REJECTED_BIOETICA,
+        ];
+
+        if ($existing && ! in_array($existing->status, $resubmittableStatuses, true)) {
             throw new HttpResponseException(response()->json([
                 'message' => 'Ja existe um protocolo ativo para este tema.',
                 'existing_protocol' => $existing,
@@ -268,6 +275,10 @@ class ProtocolService
         return Protocol::query()
             ->whereIn('status', $statuses)
             ->where('current_organ_id', $organ->id)
+            ->when(
+                $organ->type === 'nucleus' && $secretaryProfile->scientific_area_id,
+                fn($q) => $q->whereHas('topic', fn($q) => $q->where('scientific_area_id', $secretaryProfile->scientific_area_id))
+            )
             ->with([
                 'topic:id,title,status,scientific_area_id,supervisor_id',
                 'topic.scientificArea:id,name,organ_id',
@@ -299,13 +310,16 @@ class ProtocolService
                 Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
                 Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
             ])
-            ->whereHas('reviewAssignments', fn($q) => $q
-                ->where('status', 'pending')
-                ->whereColumn('protocol_review_assignments.organ_id', 'protocols.current_organ_id')
-                ->where(fn($q) => $q
-                    ->where('reviewer_one', $teacherProfile->id)
-                    ->orWhere('reviewer_two', $teacherProfile->id)
-                )
+            ->whereHas(
+                'reviewAssignments',
+                fn($q) => $q
+                    ->where('status', 'pending')
+                    ->whereColumn('protocol_review_assignments.organ_id', 'protocols.current_organ_id')
+                    ->where(
+                        fn($q) => $q
+                            ->where('reviewer_one', $teacherProfile->id)
+                            ->orWhere('reviewer_two', $teacherProfile->id)
+                    )
             )
             ->with([
                 'topic:id,title,status,scientific_area_id',
@@ -314,9 +328,10 @@ class ProtocolService
                 'latestDocument',
                 'reviewAssignments' => fn($q) => $q
                     ->where('status', 'pending')
-                    ->where(fn($q) => $q
-                        ->where('reviewer_one', $teacherProfile->id)
-                        ->orWhere('reviewer_two', $teacherProfile->id)
+                    ->where(
+                        fn($q) => $q
+                            ->where('reviewer_one', $teacherProfile->id)
+                            ->orWhere('reviewer_two', $teacherProfile->id)
                     ),
             ])
             ->latest('submitted_at')
@@ -325,41 +340,279 @@ class ProtocolService
 
     public function getEligibleReviewers(Protocol $protocol): Collection
     {
-        $protocol->loadMissing('topic.scientificArea:id,organ_id');
+        return $this->getEligibleReviewersForNucleo($protocol);
+    }
 
-        $topicOrganId = $protocol->topic?->scientificArea?->organ_id;
+    public function getEligibleReviewersForNucleo(Protocol $protocol): Collection
+    {
+        $protocol->loadMissing('topic.scientificArea');
+
         $topicScientificAreaId = $protocol->topic?->scientific_area_id;
+        $currentOrganId = $protocol->current_organ_id;
         $supervisorId = $protocol->supervisor_id ?: $protocol->topic?->supervisor_id;
 
-        if (! $topicOrganId || ! $topicScientificAreaId) {
+        if (! $topicScientificAreaId || ! $currentOrganId) {
             return collect();
         }
 
-        $assignedReviewerIds = $protocol->reviewAssignments()
-            ->pluck('reviewer_one')
-            ->merge($protocol->reviewAssignments()->pluck('reviewer_two'))
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
+        $assignedReviewerIds = $this->getAllAssignedReviewerIds($protocol, $currentOrganId);
 
         return DB::table('teacher_profiles')
-            ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+            ->distinct()
             ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
-            ->where('scientific_areas.organ_id', $topicOrganId)
+            ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
+            ->where('organ_members.organ_id', $currentOrganId)
+            ->whereNull('organ_members.deleted_at')
             ->where('teacher_profiles.scientific_area_id', $topicScientificAreaId)
             ->whereNull('teacher_profiles.deleted_at')
             ->whereNull('users.deleted_at')
             ->when($supervisorId, fn($q) => $q->where('teacher_profiles.id', '!=', $supervisorId))
             ->when($assignedReviewerIds !== [], fn($q) => $q->whereNotIn('teacher_profiles.id', $assignedReviewerIds))
-            ->select(
-                'teacher_profiles.id',
-                'users.name',
-                'users.email',
-                'scientific_areas.name as scientific_area_name'
-            )
+            ->select('teacher_profiles.id', 'users.name', 'users.email')
+            ->orderBy('users.name')
+            ->get()
+            ->map(function ($item) use ($protocol) {
+                $area = $protocol->topic?->scientificArea;
+                $item->scientific_area_name = $area?->name;
+                return $item;
+            });
+    }
+
+    public function getEligibleReviewersForCC(Protocol $protocol): Collection
+    {
+        return $this->getEligibleReviewersForOrgan($protocol, 'scientific_committee');
+    }
+
+    public function getEligibleReviewersForBioetica(Protocol $protocol): Collection
+    {
+        return $this->getEligibleReviewersForOrgan($protocol, 'bioethics_committee');
+    }
+
+    private function getEligibleReviewersForOrgan(Protocol $protocol, string $organType): Collection
+    {
+        $protocol->loadMissing('topic');
+
+        $organ = \Modules\User\app\Models\Organ::query()
+            ->where('type', $organType)
+            ->first();
+
+        if (! $organ) {
+            return collect();
+        }
+
+        $supervisorId = $protocol->supervisor_id ?: $protocol->topic?->supervisor_id;
+        $assignedReviewerIds = $this->getAllAssignedReviewerIds($protocol, $organ->id);
+
+        return DB::table('teacher_profiles')
+            ->distinct()
+            ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
+            ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
+            ->where('organ_members.organ_id', $organ->id)
+            ->whereNull('organ_members.deleted_at')
+            ->whereNull('teacher_profiles.deleted_at')
+            ->whereNull('users.deleted_at')
+            ->when($supervisorId, fn($q) => $q->where('teacher_profiles.id', '!=', $supervisorId))
+            ->when($assignedReviewerIds !== [], fn($q) => $q->whereNotIn('teacher_profiles.id', $assignedReviewerIds))
+            ->select('teacher_profiles.id', 'users.name', 'users.email')
             ->orderBy('users.name')
             ->get();
+    }
+
+    public function getAssignedReviewersForOrgan(Protocol $protocol, int $organId): Collection
+    {
+        $assignments = $protocol->reviewAssignments()
+            ->where('organ_id', $organId)
+            ->with([
+                'organ:id,name,type',
+                'reviewerOne.user:id,name,email',
+                'reviewerTwo.user:id,name,email',
+            ])
+            ->orderBy('assigned_at')
+            ->get();
+
+        return $assignments
+            ->flatMap(function ($assignment) {
+                return collect([
+                    $assignment->reviewerOne ? [
+                        'id' => $assignment->reviewerOne->id,
+                        'name' => $assignment->reviewerOne->user?->name,
+                        'email' => $assignment->reviewerOne->user?->email,
+                        'slot' => 'reviewer_one',
+                        'assignment_id' => $assignment->id,
+                        'organ_id' => $assignment->organ_id,
+                        'organ' => $assignment->organ ? [
+                            'id' => $assignment->organ->id,
+                            'name' => $assignment->organ->name,
+                            'type' => $assignment->organ->type,
+                        ] : null,
+                        'status' => $assignment->status,
+                        'review_order' => $assignment->review_order,
+                        'assigned_at' => $assignment->assigned_at,
+                    ] : null,
+                    $assignment->reviewerTwo ? [
+                        'id' => $assignment->reviewerTwo->id,
+                        'name' => $assignment->reviewerTwo->user?->name,
+                        'email' => $assignment->reviewerTwo->user?->email,
+                        'slot' => 'reviewer_two',
+                        'assignment_id' => $assignment->id,
+                        'organ_id' => $assignment->organ_id,
+                        'organ' => $assignment->organ ? [
+                            'id' => $assignment->organ->id,
+                            'name' => $assignment->organ->name,
+                            'type' => $assignment->organ->type,
+                        ] : null,
+                        'status' => $assignment->status,
+                        'review_order' => $assignment->review_order,
+                        'assigned_at' => $assignment->assigned_at,
+                    ] : null,
+                ])->filter();
+            })
+            ->values();
+    }
+
+    public function assignReviewersToOrgan(Protocol $protocol, array $reviewerIds, User $secretary, string $expectedOrganType): Protocol
+    {
+        return DB::transaction(function () use ($protocol, $reviewerIds, $secretary, $expectedOrganType) {
+            $protocol = Protocol::lockForUpdate()->findOrFail($protocol->id);
+            $secretaryProfile = $secretary->secretaryProfile;
+
+            if (! $secretaryProfile) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Utilizador nao e uma secretaria.'], 403)
+                );
+            }
+
+            $organ = $secretaryProfile->organ;
+            if (! $organ || $organ->type !== $expectedOrganType) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Secretaria nao tem permissao para atribuir revisores neste orgao.'], 403)
+                );
+            }
+
+            $assignableStatuses = [
+                Protocol::STATUS_PENDING_NUCLEO,
+                Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
+                Protocol::STATUS_PENDING_COMITE_BIOETICA,
+            ];
+
+            if (! in_array($protocol->status, $assignableStatuses, true)) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'O protocolo nao esta em estado de atribuicao de revisores.'], 422)
+                );
+            }
+
+            if ((int) $protocol->current_organ_id !== (int) $organ->id) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Secretaria nao tem permissao para atribuir revisores a este protocolo.'], 403)
+                );
+            }
+
+            $protocol->loadMissing('topic');
+            $supervisorId = $protocol->supervisor_id ?: $protocol->topic?->supervisor_id;
+
+            foreach ($reviewerIds as $reviewerId) {
+                if ((int) $reviewerId === (int) $supervisorId) {
+                    throw new HttpResponseException(
+                        response()->json(['message' => 'O supervisor do tema nao pode ser atribuido como revisor.'], 422)
+                    );
+                }
+
+                $exists = DB::table('teacher_profiles')
+                    ->where('id', $reviewerId)
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                if (! $exists) {
+                    throw new HttpResponseException(
+                        response()->json(['message' => "Revisor {$reviewerId} nao encontrado."], 422)
+                    );
+                }
+            }
+
+            if (count($reviewerIds) !== count(array_unique($reviewerIds))) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Os revisores devem ser diferentes.'], 422)
+                );
+            }
+
+            $assignedExisting = $protocol->reviewAssignments()
+                ->where('organ_id', $organ->id)
+                ->where(
+                    fn($query) => $query
+                        ->whereIn('reviewer_one', $reviewerIds)
+                        ->orWhereIn('reviewer_two', $reviewerIds)
+                )
+                ->exists();
+
+            if ($assignedExisting) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Um dos revisores ja foi atribuido a este protocolo neste orgao.'], 409)
+                );
+            }
+
+            ProtocolReviewAssignment::create([
+                'protocol_id' => $protocol->id,
+                'organ_id' => $secretaryProfile->organ_id,
+                'reviewer_one' => $reviewerIds[0] ?? null,
+                'reviewer_two' => $reviewerIds[1] ?? null,
+                'review_order' => false,
+                'status' => 'pending',
+                'assigned_at' => now(),
+            ]);
+
+            $inReviewStatusMap = [
+                Protocol::ORGAN_TYPE_NUCLEUS => Protocol::STATUS_IN_REVIEW_NUCLEO,
+                Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
+                Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE => Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
+            ];
+
+            $newStatus = $inReviewStatusMap[$organ->type] ?? null;
+            $formOrgan = Protocol::formOrganFromOrganType($organ->type);
+
+            if (! $newStatus || ! $formOrgan) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Tipo de orgao nao suporta atribuicao de revisores.'], 422)
+                );
+            }
+
+            $protocol->update(['status' => $newStatus]);
+
+            app(EvaluationService::class)->createForProtocol(
+                $protocol,
+                $reviewerIds,
+                $secretary,
+                $formOrgan
+            );
+
+            return $protocol->load([
+                'topic:id,title,status,scientific_area_id,supervisor_id',
+                'topic.scientificArea:id,name,organ_id',
+                'topic.supervisor.user:id,name,email',
+                'supervisor.user:id,name,email',
+                'student:id,name,email',
+                'reviewAssignments' => fn($q) => $q
+                    ->where('organ_id', $organ->id)
+                    ->with([
+                        'reviewerOne.user:id,name,email',
+                        'reviewerTwo.user:id,name,email',
+                    ]),
+            ]);
+        });
+    }
+
+    private function getAllAssignedReviewerIds(Protocol $protocol, ?int $organId = null): array
+    {
+        $assignments = $protocol->reviewAssignments()
+            ->when($organId, fn($q) => $q->where('organ_id', $organId))
+            ->get();
+
+        return $assignments
+            ->pluck('reviewer_one')
+            ->merge($assignments->pluck('reviewer_two'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
     }
 
     public function assignReviewers(Protocol $protocol, array $reviewerIds, User $secretary): Protocol
@@ -424,9 +677,10 @@ class ProtocolService
             }
 
             $assignedExisting = $protocol->reviewAssignments()
-                ->where(fn($query) => $query
-                    ->whereIn('reviewer_one', $reviewerIds)
-                    ->orWhereIn('reviewer_two', $reviewerIds)
+                ->where(
+                    fn($query) => $query
+                        ->whereIn('reviewer_one', $reviewerIds)
+                        ->orWhereIn('reviewer_two', $reviewerIds)
                 )
                 ->exists();
 

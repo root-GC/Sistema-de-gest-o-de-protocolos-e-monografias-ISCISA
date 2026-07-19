@@ -23,6 +23,8 @@ function getProtocolStatusStyle(status: string) {
     protocol_in_review:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)' },
     protocol_approved_nucleo:     { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)' },
     protocol_rejected_nucleo:     { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)' },
+    protocol_rejected_cc:         { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)' },
+    protocol_rejected_bioetica:   { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)' },
     protocol_resubmitted:         { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)' }

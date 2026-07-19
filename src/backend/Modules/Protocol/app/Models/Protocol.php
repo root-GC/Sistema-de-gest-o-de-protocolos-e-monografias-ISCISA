@@ -20,6 +20,9 @@ class Protocol extends Model
     public const STATUS_IN_REVIEW_COMITE_CIENTIFICO = 'protocol_in_review_comite_cientifico';
     public const STATUS_PENDING_COMITE_BIOETICA = 'protocol_pending_comite_bioetica';
     public const STATUS_IN_REVIEW_COMITE_BIOETICA = 'protocol_in_review_comite_bioetica';
+    public const STATUS_REJECTED_NUCLEO = 'protocol_rejected_nucleo';
+    public const STATUS_REJECTED_CC = 'protocol_rejected_cc';
+    public const STATUS_REJECTED_BIOETICA = 'protocol_rejected_bioetica';
     public const STATUS_APPROVED_FINAL = 'protocol_approved_final';
     public const STATUS_REJECTED_FINAL = 'protocol_rejected_final';
 
@@ -102,8 +105,11 @@ class Protocol extends Model
             self::STATUS_IN_REVIEW_COMITE_CIENTIFICO => 'Em avaliacao pelo Comite Cientifico',
             self::STATUS_PENDING_COMITE_BIOETICA => 'Encaminhado ao Comite de Bioetica',
             self::STATUS_IN_REVIEW_COMITE_BIOETICA => 'Em avaliacao pelo Comite de Bioetica',
+            self::STATUS_REJECTED_NUCLEO => 'Rejeitado pelo Núcleo Científico',
+            self::STATUS_REJECTED_CC => 'Rejeitado pelo Comité Científico',
+            self::STATUS_REJECTED_BIOETICA => 'Rejeitado pelo Comité de Bioética',
             self::STATUS_APPROVED_FINAL => 'Aprovado',
-            self::STATUS_REJECTED_FINAL => 'Rejeitado',
+            self::STATUS_REJECTED_FINAL => 'Rejeitado (final)',
             default => $this->status,
         };
     }

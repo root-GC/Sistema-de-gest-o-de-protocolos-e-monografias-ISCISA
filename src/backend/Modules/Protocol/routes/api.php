@@ -5,6 +5,7 @@ use Modules\Protocol\app\Http\Controllers\TopicController;
 use Modules\Protocol\app\Http\Controllers\EvaluationFormController;
 use Modules\Protocol\app\Http\Controllers\OnlyOfficeController;
 use Modules\Protocol\app\Http\Controllers\SupervisorController;
+use Modules\Protocol\app\Http\Controllers\ProtocolApiController;
 
 
 Route::prefix('api')->middleware(['api'])->group(function () {
@@ -58,9 +59,21 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
 
     // Secretary operations: list protocols for nucleus, get eligible reviewers, assign reviewers
     Route::get('secretary/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForSecretary')->name('secretary.protocols.list');
-    Route::get('protocols/{protocol}/eligible-reviewers', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getEligibleReviewers')->name('protocol.eligible-reviewers');
-    Route::get('protocols/{protocol}/reviewers', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getAssignedReviewers')->name('protocol.reviewers.index');
-    Route::post('protocols/{protocol}/assign-reviewers', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@assignReviewers')->name('protocol.assign-reviewers');
+
+    // === NÚCLEO ===
+    Route::get('nucleo/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersNucleo'])->name('nucleo.protocols.eligible-reviewers');
+    Route::get('nucleo/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersNucleo'])->name('nucleo.protocols.reviewers');
+    Route::post('nucleo/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersNucleo'])->name('nucleo.protocols.assign-reviewers');
+
+    // === COMITÉ CIENTÍFICO (CC) ===
+    Route::get('comite-cientifico/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersCC'])->name('cc.protocols.eligible-reviewers');
+    Route::get('comite-cientifico/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersCC'])->name('cc.protocols.reviewers');
+    Route::post('comite-cientifico/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersCC'])->name('cc.protocols.assign-reviewers');
+
+    // === COMITÉ DE BIOÉTICA ===
+    Route::get('comite-bioetica/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersBioetica'])->name('bioetica.protocols.eligible-reviewers');
+    Route::get('comite-bioetica/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersBioetica'])->name('bioetica.protocols.reviewers');
+    Route::post('comite-bioetica/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersBioetica'])->name('bioetica.protocols.assign-reviewers');
 
     // Reviewer operations: list assigned protocols for evaluation
     Route::get('reviewer/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForReviewer')->name('reviewer.protocols.list');

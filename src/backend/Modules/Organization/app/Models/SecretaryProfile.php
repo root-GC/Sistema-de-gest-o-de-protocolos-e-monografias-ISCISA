@@ -14,6 +14,7 @@ class SecretaryProfile extends Model
     protected $fillable = [
         'user_id',
         'organ_id',
+        'scientific_area_id',
         'office',
     ];
 
@@ -25,5 +26,10 @@ class SecretaryProfile extends Model
     public function organ(): BelongsTo
     {
         return $this->belongsTo(Organ::class);
+    }
+
+    public function scientificArea(): BelongsTo
+    {
+        return $this->belongsTo(ScientificArea::class);
     }
 }

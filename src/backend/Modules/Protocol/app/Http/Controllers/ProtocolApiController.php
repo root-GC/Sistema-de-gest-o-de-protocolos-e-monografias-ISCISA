@@ -325,6 +325,266 @@ class ProtocolApiController extends Controller
         ]);
     }
 
+    // ============================================================
+    // NÚCLEO
+    // ============================================================
+
+    public function getEligibleReviewersNucleo(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) abort(403);
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'nucleus') {
+            return response()->json(['message' => 'Apenas secretarias do Nucleo Cientifico podem listar revisores.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+        $reviewers = $this->protocolService()->getEligibleReviewersForNucleo($protocol);
+
+        return response()->json(['reviewers' => $reviewers->values()]);
+    }
+
+    public function getAssignedReviewersNucleo(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) {
+            return response()->json(['message' => 'Utilizador nao tem permissao.'], 403);
+        }
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'nucleus') {
+            return response()->json(['message' => 'Apenas secretarias do Nucleo Cientifico.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+        $reviewers = $this->protocolService()->getAssignedReviewersForOrgan($protocol, $secretaryProfile->organ_id);
+
+        $assignments = $protocol->reviewAssignments()
+            ->where('organ_id', $secretaryProfile->organ_id)
+            ->with(['organ:id,name,type', 'reviewerOne.user:id,name,email', 'reviewerTwo.user:id,name,email'])
+            ->orderBy('assigned_at')
+            ->get();
+
+        $reviewAssignments = $assignments->map(fn($a) => [
+            'id' => $a->id,
+            'organ_id' => $a->organ_id,
+            'organ' => $a->organ ? ['id' => $a->organ->id, 'name' => $a->organ->name, 'type' => $a->organ->type] : null,
+            'reviewer_one' => $a->reviewerOne ? ['id' => $a->reviewerOne->id, 'name' => $a->reviewerOne->user?->name, 'email' => $a->reviewerOne->user?->email] : null,
+            'reviewer_two' => $a->reviewerTwo ? ['id' => $a->reviewerTwo->id, 'name' => $a->reviewerTwo->user?->name, 'email' => $a->reviewerTwo->user?->email] : null,
+            'review_order' => $a->review_order,
+            'status' => $a->status,
+            'assigned_at' => $a->assigned_at,
+        ])->values();
+
+        return response()->json([
+            'reviewers' => $reviewers,
+            'review_assignments' => $reviewAssignments,
+            'total' => $reviewers->count(),
+        ]);
+    }
+
+    public function assignReviewersNucleo(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) abort(403);
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'nucleus') {
+            return response()->json(['message' => 'Apenas secretarias do Nucleo Cientifico podem atribuir revisores.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+
+        $validated = $request->validate([
+            'reviewer_one_id' => 'required|integer|exists:teacher_profiles,id',
+            'reviewer_two_id' => 'required|integer|exists:teacher_profiles,id|different:reviewer_one_id',
+        ]);
+
+        $reviewerIds = [(int) $validated['reviewer_one_id'], (int) $validated['reviewer_two_id']];
+
+        $result = $this->protocolService()->assignReviewersToOrgan($protocol, $reviewerIds, $user, 'nucleus');
+
+        return response()->json([
+            'message' => 'Revisores atribuidos com sucesso ao protocolo no Nucleo Cientifico.',
+            'protocol' => $result->toArray(),
+        ]);
+    }
+
+    // ============================================================
+    // COMITÉ CIENTÍFICO (CC)
+    // ============================================================
+
+    public function getEligibleReviewersCC(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) abort(403);
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'scientific_committee') {
+            return response()->json(['message' => 'Apenas secretarias do Comite Cientifico podem listar revisores.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+        $reviewers = $this->protocolService()->getEligibleReviewersForCC($protocol);
+
+        return response()->json(['reviewers' => $reviewers->values()]);
+    }
+
+    public function getAssignedReviewersCC(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) {
+            return response()->json(['message' => 'Utilizador nao tem permissao.'], 403);
+        }
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'scientific_committee') {
+            return response()->json(['message' => 'Apenas secretarias do Comite Cientifico.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+
+        $reviewers = $this->protocolService()->getAssignedReviewersForOrgan($protocol, $secretaryProfile->organ_id);
+
+        $assignments = $protocol->reviewAssignments()
+            ->where('organ_id', $secretaryProfile->organ_id)
+            ->with(['organ:id,name,type', 'reviewerOne.user:id,name,email', 'reviewerTwo.user:id,name,email'])
+            ->orderBy('assigned_at')
+            ->get();
+
+        $reviewAssignments = $assignments->map(fn($a) => [
+            'id' => $a->id,
+            'organ_id' => $a->organ_id,
+            'organ' => $a->organ ? ['id' => $a->organ->id, 'name' => $a->organ->name, 'type' => $a->organ->type] : null,
+            'reviewer_one' => $a->reviewerOne ? ['id' => $a->reviewerOne->id, 'name' => $a->reviewerOne->user?->name, 'email' => $a->reviewerOne->user?->email] : null,
+            'reviewer_two' => $a->reviewerTwo ? ['id' => $a->reviewerTwo->id, 'name' => $a->reviewerTwo->user?->name, 'email' => $a->reviewerTwo->user?->email] : null,
+            'review_order' => $a->review_order,
+            'status' => $a->status,
+            'assigned_at' => $a->assigned_at,
+        ])->values();
+
+        return response()->json([
+            'reviewers' => $reviewers,
+            'review_assignments' => $reviewAssignments,
+            'total' => $reviewers->count(),
+        ]);
+    }
+
+    public function assignReviewersCC(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) abort(403);
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'scientific_committee') {
+            return response()->json(['message' => 'Apenas secretarias do Comite Cientifico podem atribuir revisores.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+
+        $validated = $request->validate([
+            'reviewer_one_id' => 'required|integer|exists:teacher_profiles,id',
+            'reviewer_two_id' => 'required|integer|exists:teacher_profiles,id|different:reviewer_one_id',
+        ]);
+
+        $reviewerIds = [(int) $validated['reviewer_one_id'], (int) $validated['reviewer_two_id']];
+
+        $result = $this->protocolService()->assignReviewersToOrgan($protocol, $reviewerIds, $user, 'scientific_committee');
+
+        return response()->json([
+            'message' => 'Revisores atribuidos com sucesso ao protocolo no Comite Cientifico.',
+            'protocol' => $result->toArray(),
+        ]);
+    }
+
+    // ============================================================
+    // COMITÉ DE BIOÉTICA
+    // ============================================================
+
+    public function getEligibleReviewersBioetica(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) abort(403);
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'bioethics_committee') {
+            return response()->json(['message' => 'Apenas secretarias do Comite de Bioetica podem listar revisores.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+        $reviewers = $this->protocolService()->getEligibleReviewersForBioetica($protocol);
+
+        return response()->json(['reviewers' => $reviewers->values()]);
+    }
+
+    public function getAssignedReviewersBioetica(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) {
+            return response()->json(['message' => 'Utilizador nao tem permissao.'], 403);
+        }
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'bioethics_committee') {
+            return response()->json(['message' => 'Apenas secretarias do Comite de Bioetica.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+
+        $reviewers = $this->protocolService()->getAssignedReviewersForOrgan($protocol, $secretaryProfile->organ_id);
+
+        $assignments = $protocol->reviewAssignments()
+            ->where('organ_id', $secretaryProfile->organ_id)
+            ->with(['organ:id,name,type', 'reviewerOne.user:id,name,email', 'reviewerTwo.user:id,name,email'])
+            ->orderBy('assigned_at')
+            ->get();
+
+        $reviewAssignments = $assignments->map(fn($a) => [
+            'id' => $a->id,
+            'organ_id' => $a->organ_id,
+            'organ' => $a->organ ? ['id' => $a->organ->id, 'name' => $a->organ->name, 'type' => $a->organ->type] : null,
+            'reviewer_one' => $a->reviewerOne ? ['id' => $a->reviewerOne->id, 'name' => $a->reviewerOne->user?->name, 'email' => $a->reviewerOne->user?->email] : null,
+            'reviewer_two' => $a->reviewerTwo ? ['id' => $a->reviewerTwo->id, 'name' => $a->reviewerTwo->user?->name, 'email' => $a->reviewerTwo->user?->email] : null,
+            'review_order' => $a->review_order,
+            'status' => $a->status,
+            'assigned_at' => $a->assigned_at,
+        ])->values();
+
+        return response()->json([
+            'reviewers' => $reviewers,
+            'review_assignments' => $reviewAssignments,
+            'total' => $reviewers->count(),
+        ]);
+    }
+
+    public function assignReviewersBioetica(Request $request, string $protocol)
+    {
+        $user = $request->user();
+        if (! $user->hasPermission('protocol.assign')) abort(403);
+
+        $secretaryProfile = $user->secretaryProfile;
+        if (! $secretaryProfile || $secretaryProfile->organ?->type !== 'bioethics_committee') {
+            return response()->json(['message' => 'Apenas secretarias do Comite de Bioetica podem atribuir revisores.'], 403);
+        }
+
+        $protocol = Protocol::query()->findOrFail($protocol);
+
+        $validated = $request->validate([
+            'reviewer_one_id' => 'required|integer|exists:teacher_profiles,id',
+            'reviewer_two_id' => 'required|integer|exists:teacher_profiles,id|different:reviewer_one_id',
+        ]);
+
+        $reviewerIds = [(int) $validated['reviewer_one_id'], (int) $validated['reviewer_two_id']];
+
+        $result = $this->protocolService()->assignReviewersToOrgan($protocol, $reviewerIds, $user, 'bioethics_committee');
+
+        return response()->json([
+            'message' => 'Revisores atribuidos com sucesso ao protocolo no Comite de Bioetica.',
+            'protocol' => $result->toArray(),
+        ]);
+    }
+
     public function getForReviewer(Request $request)
     {
         $user = $request->user()->load('teacherProfile');
