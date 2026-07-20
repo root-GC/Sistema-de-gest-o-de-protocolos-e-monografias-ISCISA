@@ -20,18 +20,25 @@ class DashboardController extends Controller
 
         $authorized = $this->filterAuthorizedWidgets($requestedWidgets, $user);
 
-        $widgetsData = [];
+        $widgets = [];
+
         foreach ($authorized as $widgetId) {
-            $widgetsData[$widgetId] = $this->fetchWidgetData($widgetId, $user);
+            $widgets[$widgetId] = match ($widgetId) {
+                'profile' => $this->payloadBuilder->build($user),
+
+                'permissions' => [
+                    'roles' => $user->roles->pluck('name'),
+                    'permissions' => $user->getPermissions()->pluck('code'),
+                ],
+
+                default => [],
+            };
         }
 
         return response()->json([
-            'widgets' => $widgetsData,
-            'user' => $this->payloadBuilder->build($user),
+            'widgets' => $widgets,
             'meta' => [
                 'timestamp' => now()->toIso8601String(),
-                'widgets_requested' => count($requestedWidgets),
-                'widgets_authorized' => count($authorized),
             ],
         ]);
     }
@@ -41,41 +48,22 @@ class DashboardController extends Controller
         $config = config('dashboard', []);
 
         return array_values(array_filter($requested, function (string $widgetId) use ($user, $config) {
+
             $widgetConfig = $config[$widgetId] ?? null;
 
-            if ($widgetConfig === null) {
+            if (!$widgetConfig) {
                 return false;
             }
 
-            $permissions = $widgetConfig['permissions'] ?? null;
-
-            if ($permissions === null) {
-                return false;
-            }
+            $permissions = $widgetConfig['permissions'] ?? [];
 
             if (empty($permissions)) {
                 return true;
             }
 
-            $any = $widgetConfig['any_permission'] ?? false;
-
-            if ($any) {
-                return $user->hasAnyPermission($permissions);
-            }
-
-            return $user->hasAllPermissions($permissions);
+            return ($widgetConfig['any_permission'] ?? false)
+                ? $user->hasAnyPermission($permissions)
+                : $user->hasAllPermissions($permissions);
         }));
-    }
-
-    private function fetchWidgetData(string $widgetId, User $user): array
-    {
-        return match ($widgetId) {
-            'myProtocols' => [
-                'total' => $user->roles->contains('name', 'student')
-                    ? $user->protocols()->count()
-                    : 0,
-            ],
-            default => [],
-        };
     }
 }

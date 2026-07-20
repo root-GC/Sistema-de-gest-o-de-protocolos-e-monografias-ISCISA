@@ -14,7 +14,13 @@ export function ProtectedRoute({ permission, roles: allowedRoles }: ProtectedRou
   const { can, hasAnyRole } = usePermission();
   const location = useLocation();
 
-  
+  console.log({
+  user,
+  permission,
+  roles: allowedRoles,
+  canPermission: permission ? can(permission) : null,
+  hasRole: allowedRoles ? hasAnyRole(allowedRoles) : null
+});
 
   if (loading) return null;
 

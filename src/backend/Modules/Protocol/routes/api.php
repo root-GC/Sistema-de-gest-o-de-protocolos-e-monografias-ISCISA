@@ -6,7 +6,7 @@ use Modules\Protocol\app\Http\Controllers\EvaluationFormController;
 use Modules\Protocol\app\Http\Controllers\OnlyOfficeController;
 use Modules\Protocol\app\Http\Controllers\SupervisorController;
 use Modules\Protocol\app\Http\Controllers\ProtocolApiController;
-
+use Modules\Protocol\app\Http\Controllers\DashboardController;
 
 Route::prefix('api')->middleware(['api'])->group(function () {
   
@@ -15,12 +15,15 @@ Route::prefix('api')->middleware(['api'])->group(function () {
     );
     Route::post('/protocolo/onlyoffice/callback',
     [OnlyOfficeController::class, 'callback']
+    
 );
 });
 
 
-
-
+Route::prefix('api')->middleware(['api'])->group(function () {
+ Route::middleware('auth:sanctum')
+    ->get('/dashboard/my-protocols', [DashboardController::class, 'myProtocols']);
+});
 
 
 Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () {
@@ -30,6 +33,8 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         '/topics/my-approved',
         [TopicController::class, 'getMyApprovedTopics']
     );
+
+   
 
     Route::post('topics', [TopicController::class, 'store'])->name('topic.store');
     Route::get('topics', [TopicController::class, 'index'])->name('topic.index');
