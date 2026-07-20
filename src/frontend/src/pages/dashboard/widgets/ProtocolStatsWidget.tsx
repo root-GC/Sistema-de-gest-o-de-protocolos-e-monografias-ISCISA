@@ -1,8 +1,8 @@
 // pages/dashboard/widgets/ProtocolStatsWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
-export function ProtocolStatsWidget({ data, isLoading }: WidgetProps) {
+export function ProtocolStatsWidget({ data }: WidgetProps) {
   const stats = data?.stats || {};
 
   return (

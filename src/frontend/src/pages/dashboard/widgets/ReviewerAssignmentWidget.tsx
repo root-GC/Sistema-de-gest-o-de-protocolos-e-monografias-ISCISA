@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/ReviewerAssignmentWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface ProtocolForAssignment {
@@ -21,7 +21,7 @@ interface Reviewer {
   specialization: string;
 }
 
-export function ReviewerAssignmentWidget({ data, isLoading }: WidgetProps) {
+export function ReviewerAssignmentWidget({ data }: WidgetProps) {
   const protocols: ProtocolForAssignment[] = data?.protocols || [];
   const availableReviewers: Reviewer[] = data?.available_reviewers || [];
 

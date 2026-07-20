@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/SupervisionWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Student {
@@ -11,7 +11,7 @@ interface Student {
   phase: 'topic' | 'protocol' | 'review' | 'defense' | 'completed';
 }
 
-export function SupervisionWidget({ data, isLoading }: WidgetProps) {
+export function SupervisionWidget({ data }: WidgetProps) {
   const students: Student[] = data?.students || [];
   const stats = data?.stats || {};
 

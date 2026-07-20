@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/WorkloadWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface WorkloadData {
@@ -12,7 +12,7 @@ interface WorkloadData {
   load_percentage: number;
 }
 
-export function WorkloadWidget({ data, isLoading }: WidgetProps) {
+export function WorkloadWidget({ data }: WidgetProps) {
   const workloads: WorkloadData[] = data?.workloads || [];
   const isOverloaded = data?.is_overloaded || false;
 

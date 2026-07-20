@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/NotificationWidget.tsx
-import React from 'react';
+// /
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Notification {
@@ -11,7 +11,7 @@ interface Notification {
   read: boolean;
 }
 
-export function NotificationWidget({ data, isLoading }: WidgetProps) {
+export function NotificationWidget({ data }: WidgetProps) {
   const notifications: Notification[] = data?.notifications || [];
 
   return (

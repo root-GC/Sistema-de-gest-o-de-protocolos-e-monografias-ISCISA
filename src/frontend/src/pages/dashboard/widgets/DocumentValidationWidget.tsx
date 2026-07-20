@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/DocumentValidationWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface DocumentValidation {
@@ -12,7 +12,7 @@ interface DocumentValidation {
   type: string;
 }
 
-export function DocumentValidationWidget({ data, isLoading }: WidgetProps) {
+export function DocumentValidationWidget({ data }: WidgetProps) {
   const documents: DocumentValidation[] = data?.documents || [];
   const stats = data?.stats || {};
 

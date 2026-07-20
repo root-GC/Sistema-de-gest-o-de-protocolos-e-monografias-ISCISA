@@ -1,9 +1,9 @@
 // pages/dashboard/widgets/AdminPanelWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 import { useAuth } from '../../../context/AuthContext';
 
-export function AdminPanelWidget({ data, isLoading }: WidgetProps) {
+export function AdminPanelWidget({ data }: WidgetProps) {
   const { hasPermission } = useAuth();
   const stats = data?.stats || {};
 

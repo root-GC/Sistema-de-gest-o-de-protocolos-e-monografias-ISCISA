@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/PendingReviewsWidget.tsx
-import React from 'react';
+// import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WidgetProps } from '../../../types/dashboard';
 
@@ -14,7 +14,7 @@ interface Review {
   organ: string;
 }
 
-export function PendingReviewsWidget({ data, isLoading }: WidgetProps) {
+export function PendingReviewsWidget({ data }: WidgetProps) {
   const navigate = useNavigate();
   const reviews: Review[] = data?.reviews || [];
 

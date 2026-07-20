@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/DefenseScheduleWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Defense {
@@ -14,7 +14,7 @@ interface Defense {
   is_jury_member?: boolean;
 }
 
-export function DefenseScheduleWidget({ data, isLoading }: WidgetProps) {
+export function DefenseScheduleWidget({ data }: WidgetProps) {
   const defenses: Defense[] = data?.defenses || [];
   const isJuryView = data?.is_jury_view || false;
 

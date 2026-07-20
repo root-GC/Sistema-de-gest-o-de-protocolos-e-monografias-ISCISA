@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/MyProtocolsWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Protocol {
@@ -13,7 +13,7 @@ interface Protocol {
   deadline?: string;
 }
 
-export function MyProtocolsWidget({ data, isLoading }: WidgetProps) {
+export function MyProtocolsWidget({ data }: WidgetProps) {
   const protocols: Protocol[] = data?.protocols || [];
   const stats = data?.stats || {};
 

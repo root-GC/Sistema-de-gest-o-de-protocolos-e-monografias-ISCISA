@@ -1,5 +1,5 @@
 // pages/dashboard/DashboardPage.tsx
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import type { Role, Profile } from '../../context/AuthContext';
 import { DASHBOARD_WIDGETS } from './widgets';

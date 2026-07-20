@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/PendingTriageWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Triage {
@@ -13,7 +13,7 @@ interface Triage {
   documents_validated: number;
 }
 
-export function PendingTriageWidget({ data, isLoading }: WidgetProps) {
+export function PendingTriageWidget({ data }: WidgetProps) {
   const triages: Triage[] = data?.triages || [];
   const stats = data?.stats || {};
 

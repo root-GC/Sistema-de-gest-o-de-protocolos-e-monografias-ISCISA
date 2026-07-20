@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/EvaluationWidget.tsx
-import React from 'react';
+// import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WidgetProps } from '../../../types/dashboard';
 
@@ -13,7 +13,7 @@ interface Evaluation {
   score?: number;
 }
 
-export function EvaluationWidget({ data, isLoading }: WidgetProps) {
+export function EvaluationWidget({ data }: WidgetProps) {
   const navigate = useNavigate();
   const evaluations: Evaluation[] = data?.evaluations || [];
   const stats = data?.stats || {};

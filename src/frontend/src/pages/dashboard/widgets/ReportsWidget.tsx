@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/ReportsWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Report {
@@ -10,7 +10,7 @@ interface Report {
   type: string;
 }
 
-export function ReportsWidget({ data, isLoading }: WidgetProps) {
+export function ReportsWidget({ data }: WidgetProps) {
   const reports: Report[] = data?.reports || [];
 
   return (

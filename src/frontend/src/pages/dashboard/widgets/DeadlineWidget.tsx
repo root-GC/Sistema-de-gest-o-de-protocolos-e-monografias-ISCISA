@@ -1,5 +1,5 @@
 // pages/dashboard/widgets/DeadlineWidget.tsx
-import React from 'react';
+// import React from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 interface Deadline {
@@ -11,7 +11,7 @@ interface Deadline {
   is_overdue: boolean;
 }
 
-export function DeadlineWidget({ data, isLoading }: WidgetProps) {
+export function DeadlineWidget({ data }: WidgetProps) {
   const deadlines: Deadline[] = data?.deadlines || [];
 
   const typeIcons: Record<string, string> = {
