@@ -1,4 +1,4 @@
-import type { Role, UserPayload } from '../context/AuthContext'
+import type { UserPayload } from '../context/AuthContext'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
