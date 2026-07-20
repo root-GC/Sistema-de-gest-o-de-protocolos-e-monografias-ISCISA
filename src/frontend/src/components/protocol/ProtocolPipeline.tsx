@@ -5,7 +5,7 @@ import './ProtocolPipeline.css';
 
 interface ProtocolPipelineProps {
   protocol:
-    | Pick<Protocol, 'status' | 'version' | 'nc_version' | 'cc_version' | 'cb_version'>
+    | Pick<Protocol, 'status' | 'version'>
     | {
         status: string;
         version?: string | null;
