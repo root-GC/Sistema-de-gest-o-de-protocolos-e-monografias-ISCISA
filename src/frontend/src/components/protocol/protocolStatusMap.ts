@@ -123,7 +123,7 @@ export function buildPipeline(protocol: PipelineInput): OrganStage[] {
   const nucleoDetail = getNucleoDetail(status, nucleoState);
   const ccDetail = getCcDetail(status, ccState);
   const cbDetail = getCbDetail(status, cbState);
-  const finalDetail = getFinalDetail(status, finalState);
+  const finalDetail = getFinalDetail(finalState);
 
   return [
     {
@@ -193,7 +193,7 @@ function getCbDetail(status: string, state: StageState): string {
   return '—';
 }
 
-function getFinalDetail(status: string, state: StageState): string {
+function getFinalDetail(state: StageState): string {
   if (state === 'approved') return 'Protocolo aprovado para campo';
   if (state === 'rejected') return 'Processo encerrado';
   if (state === 'not_started') return 'Pendente conclusão do fluxo';
