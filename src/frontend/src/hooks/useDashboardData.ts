@@ -1,6 +1,7 @@
 // hooks/useDashboardData.ts
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { mockDashboardData } from '../mocks/dashboardData';
 
 interface WidgetState {
   data: any;
@@ -12,89 +13,59 @@ interface DashboardData {
   [widgetId: string]: WidgetState;
 }
 
-export function useDashboardData(widgetIds: string[], endpoints: Record<string, string>) {
+// Flag para alternar entre mock e API real
+const USE_MOCK_DATA = true; // Mude para false quando tiver backend
+
+export function useDashboardData(
+  widgetIds: string[],
+  endpoints: Record<string, string>
+) {
   const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
 
   useEffect(() => {
+    // Mantém o parâmetro disponível para a implementação da API real.
+    void endpoints;
+
     if (!user || widgetIds.length === 0) {
       setIsLoading(false);
       return;
     }
 
-    const fetchAllWidgetData = async () => {
-      setIsLoading(true);
-      setError(null);
-      
-      // Inicializa todos os widgets como loading
-      const initialData: DashboardData = {};
+    // Simula carregamento com delay para parecer realista
+    const timer = setTimeout(() => {
+      const widgetData: DashboardData = {};
+
       widgetIds.forEach(id => {
-        initialData[id] = {
-          data: null,
-          isLoading: true,
-          error: null
-        };
-      });
-      setDashboardData(initialData);
-
-      try {
-        const token = localStorage.getItem('sgpmc_token');
-        
-        const response = await fetch('/api/dashboard', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            widgets: widgetIds.filter(id => endpoints[id])
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('Falha ao carregar dados do dashboard');
-        }
-
-        const data = await response.json();
-        
-        // Organiza dados por widget
-        const widgetData: DashboardData = {};
-        widgetIds.forEach(id => {
+        if (USE_MOCK_DATA) {
+          // Usa dados mock
           widgetData[id] = {
-            data: data.widgets?.[id] || null,
+            data: (mockDashboardData as any)[id] || null,
             isLoading: false,
             error: null
           };
-        });
-
-        setDashboardData(widgetData);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar dados';
-        setError(errorMessage);
-        
-        // Em caso de erro, marca todos os widgets como erro
-        const errorData: DashboardData = {};
-        widgetIds.forEach(id => {
-          errorData[id] = {
+        } else {
+          // Aqui vai a chamada real à API (seu código original)
+          widgetData[id] = {
             data: null,
-            isLoading: false,
-            error: errorMessage
+            isLoading: true,
+            error: null
           };
-        });
-        setDashboardData(errorData);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+        }
+      });
 
-    fetchAllWidgetData();
-  }, [user, widgetIds.join(',')]);
+      setDashboardData(widgetData);
+      setIsLoading(false);
+    }, 1500); // 1.5 segundos de loading simulado
 
-  return { 
-    dashboardData, 
+    return () => clearTimeout(timer);
+  }, [user, widgetIds]);
+
+  return {
+    dashboardData,
     isLoading,
-    error 
+    error
   };
 }

@@ -1,48 +1,35 @@
 // src/pages/TopicPage.tsx
 import { useEffect, useState } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import { 
-  topicService, 
-  scientificAreaService, 
-  courseService,
+  topicService,
   type Topic, 
   type SimilarTopicsWarning,
-  type ScientificArea,
-  type Course
 } from '../../services/topicService'
 import { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 export default function TopicPage() {
+  const { user, activeProfile } = useAuth()
+  
   const [topics, setTopics] = useState<Topic[]>([])
   const [title, setTitle] = useState('')
   const [justification, setJustification] = useState('')
-  const [scientificAreaId, setScientificAreaId] = useState('')
-  const [courseId, setCourseId] = useState('')
+  const [documentFile, setDocumentFile] = useState<File | null>(null)
   const [warning, setWarning] = useState<SimilarTopicsWarning | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Estados para os selects
-  const [scientificAreas, setScientificAreas] = useState<ScientificArea[]>([])
-  const [courses, setCourses] = useState<Course[]>([])
-  const [loadingAreas, setLoadingAreas] = useState(false)
-  const [loadingCourses, setLoadingCourses] = useState(false)
+  // Dados do perfil do estudante
+  const studentProfile = (activeProfile as any)?.student || (user as any)?.profiles?.student
+  const studentCourse = studentProfile?.course
+  const studentNumber = studentProfile?.student_number
+  const studentScientificArea = studentProfile?.scientific_area
 
   useEffect(() => { 
     loadTopics()
-    loadScientificAreas()
   }, [])
-
-  // Carregar cursos quando a área científica mudar
-  useEffect(() => {
-    if (scientificAreaId) {
-      loadCourses(Number(scientificAreaId))
-    } else {
-      setCourses([])
-      setCourseId('')
-    }
-  }, [scientificAreaId])
 
   async function loadTopics() {
     setLoading(true)
@@ -56,53 +43,60 @@ export default function TopicPage() {
     }
   }
 
-  async function loadScientificAreas() {
-    setLoadingAreas(true)
-    try {
-      const areas = await scientificAreaService.list()
-      setScientificAreas(areas)
-    } catch (e) {
-      console.error('Erro ao carregar áreas científicas:', e)
-      setScientificAreas([])
-    } finally {
-      setLoadingAreas(false)
-    }
-  }
-
-  async function loadCourses(areaId: number) {
-    setLoadingCourses(true)
-    try {
-      const coursesList = await courseService.list({ scientific_area_id: areaId })
-      setCourses(coursesList)
-    } catch (e) {
-      console.error('Erro ao carregar cursos:', e)
-      setCourses([])
-    } finally {
-      setLoadingCourses(false)
-    }
-  }
-
   const hasBlockingTopic = topics.some(t =>
     ['topic_pending_supervisor', 'topic_pending_nucleo', 'topic_approved_nucleo'].includes(t.status)
   )
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validar tipo de arquivo - apenas .docx
+      const validTypes = [
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ]
+      
+      if (!validTypes.includes(file.type)) {
+        setError('Formato de arquivo não suportado. Use apenas .docx')
+        return
+      }
+      
+      // Validar tamanho (máximo 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        setError('O arquivo deve ter no máximo 10MB')
+        return
+      }
+      
+      setDocumentFile(file)
+      setError(null)
+    }
+  }
+
+  function removeFile() {
+    setDocumentFile(null)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitting(true)
     setError(null)
     setWarning(null)
+    
     try {
       const res = await topicService.submit({
         title,
-        justification: justification.trim() || null,
-        scientific_area_id: Number(scientificAreaId),
-        course_id: Number(courseId),
+        scientific_area_id: studentScientificArea?.id ? Number(studentScientificArea.id) : 0,
+        course_id: studentCourse?.id ? Number(studentCourse.id) : 0,
+        justification: justification.trim() || null
       })
-      if (res.similar_topics_warning.has_similar) setWarning(res.similar_topics_warning)
+      
+      if (res.similar_topics_warning?.has_similar) {
+        setWarning(res.similar_topics_warning)
+      }
+      
       setTitle('')
       setJustification('')
-      setScientificAreaId('')
-      setCourseId('')
+      setDocumentFile(null)
+      
       await loadTopics()
     } catch (e) {
       setError((e as Error).message)
@@ -141,62 +135,52 @@ export default function TopicPage() {
     }
   }
 
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  }
+
   if (loading) {
     return (
       <div style={{
         display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-3)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '60vh',
         fontFamily: 'var(--font-family)',
-        color: 'var(--on-background)'
+        color: 'var(--on-surface-variant)',
+        fontSize: 'var(--body-lg)',
+        gap: 'var(--space-2)'
       }}>
-        <h1 style={{
-          fontSize: 'var(--headline-lg)',
-          fontWeight: 'var(--font-semibold)',
-          color: 'var(--on-surface)',
-          marginBottom: 'var(--space-1)'
-        }}>
-          O meu tema
-        </h1>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 'var(--space-6)',
-          color: 'var(--on-surface-variant)',
-          fontSize: 'var(--body-lg)'
-        }}>
-          <span style={{
-            width: '24px',
-            height: '24px',
-            border: '3px solid var(--outline-variant)',
-            borderTopColor: 'var(--primary)',
-            borderRadius: 'var(--radius-full)',
-            animation: 'spin 0.8s linear infinite',
-            marginRight: 'var(--space-2)'
-          }} />
-          A carregar...
-        </div>
+        <span style={{
+          width: '24px', height: '24px',
+          border: '3px solid var(--outline-variant)',
+          borderTopColor: 'var(--primary)',
+          borderRadius: 'var(--radius-full)',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+        A carregar...
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
 
   return (
     <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 'var(--space-4)',
+      width: '100%',
       fontFamily: 'var(--font-family)',
-      color: 'var(--on-background)',
-      maxWidth: '100%'
+      color: 'var(--on-background)'
     }}>
+
       {/* Cabeçalho */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         flexWrap: 'wrap',
-        gap: 'var(--space-2)'
+        gap: 'var(--space-2)',
+        marginBottom: 'var(--space-4)'
       }}>
         <div>
           <h1 style={{
@@ -208,11 +192,7 @@ export default function TopicPage() {
           }}>
             O meu tema
           </h1>
-          <p style={{
-            fontSize: 'var(--body-md)',
-            color: 'var(--on-surface-variant)',
-            fontFamily: 'var(--font-family)'
-          }}>
+          <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
             Submeta e acompanhe o seu tema de investigação científica.
           </p>
         </div>
@@ -232,16 +212,94 @@ export default function TopicPage() {
         </span>
       </div>
 
-      {/* Mensagem de erro global */}
+      {/* Card do Perfil do Estudante */}
+      {studentProfile && (
+        <div style={{
+          background: 'linear-gradient(135deg, var(--primary-container), var(--surface-container-low))',
+          borderRadius: 'var(--radius-xl)',
+          padding: 'var(--space-3) var(--space-4)',
+          border: '1px solid var(--surface-container-high)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-4)',
+          flexWrap: 'wrap',
+          marginBottom: 'var(--space-4)'
+        }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            background: 'var(--primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <span className="material-symbols-outlined" style={{ color: 'var(--on-primary)', fontSize: '24px' }}>
+              school
+            </span>
+          </div>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <p style={{
+              fontSize: 'var(--label-md)',
+              color: 'var(--on-primary-container)',
+              fontWeight: 'var(--font-medium)',
+              marginBottom: '2px'
+            }}>
+              Dados do Estudante
+            </p>
+            <p style={{
+              fontSize: 'var(--body-md)',
+              color: 'var(--on-surface)',
+              fontWeight: 'var(--font-semibold)',
+              margin: 0
+            }}>
+              {user?.name}
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: 'var(--space-3)',
+              marginTop: '4px',
+              flexWrap: 'wrap',
+              fontSize: 'var(--body-md)',
+              color: 'var(--on-surface-variant)'
+            }}>
+              {studentNumber && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>badge</span>
+                  {studentNumber}
+                </span>
+              )}
+              {studentCourse && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>book</span>
+                  {studentCourse.name}
+                </span>
+              )}
+              {studentScientificArea && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>science</span>
+                  {studentScientificArea.name}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mensagem de erro */}
       {error && (
-        <div className="badge badge-error" role="alert" style={{
+        <div role="alert" style={{
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--space-1)',
-          padding: 'var(--space-1) var(--space-2)',
+          padding: 'var(--space-2) var(--space-3)',
+          background: 'var(--error-container)',
+          color: 'var(--on-error-container)',
+          borderRadius: 'var(--radius-lg)',
           fontSize: 'var(--body-md)',
           fontWeight: 'var(--font-medium)',
-          borderRadius: 'var(--radius-md)'
+          marginBottom: 'var(--space-4)'
         }}>
           <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
           {error}
@@ -249,11 +307,12 @@ export default function TopicPage() {
       )}
 
       {/* Lista de temas */}
-      {topics.length > 0 ? (
+      {topics.length > 0 && (
         <div style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 'var(--space-2)'
+          gap: 'var(--space-3)',
+          marginBottom: 'var(--space-5)'
         }}>
           {topics.map((t: Topic) => {
             const badge = getStatusBadge(t.status)
@@ -267,7 +326,7 @@ export default function TopicPage() {
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 'var(--space-2)',
-                  padding: 'var(--space-2) var(--space-3)',
+                  padding: 'var(--space-3) var(--space-4)',
                   transition: 'box-shadow 0.2s',
                   border: isApproved ? '1px solid var(--primary)' : '1px solid var(--outline-variant)',
                   background: isApproved ? 'color-mix(in srgb, var(--surface) 95%, var(--primary-container))' : 'var(--surface)'
@@ -281,10 +340,16 @@ export default function TopicPage() {
                   gap: 'var(--space-2)'
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginBottom: '4px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--space-2)',
+                      marginBottom: '6px',
+                      flexWrap: 'wrap'
+                    }}>
                       <h3 style={{
                         fontSize: 'var(--body-lg)',
-                        fontWeight: 'var(--font-semibold)',
+                        fontWeight: 'var(--font-bold)',
                         color: 'var(--on-surface)',
                         fontFamily: 'var(--font-family)',
                         overflow: 'hidden',
@@ -332,6 +397,21 @@ export default function TopicPage() {
                           {t.course.name}
                         </span>
                       )}
+                      {(t as any).document_path && (
+                        <span style={{
+                          fontSize: 'var(--label-sm)',
+                          color: 'var(--primary)',
+                          background: 'var(--primary-container)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-full)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>description</span>
+                          Documento anexado
+                        </span>
+                      )}
                     </div>
                     <span style={{
                       display: 'inline-flex',
@@ -347,7 +427,8 @@ export default function TopicPage() {
                         : `var(${badge.dot.includes('primary') ? 'primary-container' : badge.dot.includes('error') ? 'error-container' : badge.dot.includes('tertiary') ? 'tertiary-container' : 'surface-container'})`,
                       color: isApproved 
                         ? 'var(--on-primary-container)' 
-                        : `var(${badge.dot.includes('primary') ? 'on-primary-container' : badge.dot.includes('error') ? 'on-error-container' : badge.dot.includes('tertiary') ? 'on-tertiary-container' : 'on-surface-variant'})`
+                        : `var(${badge.dot.includes('primary') ? 'on-primary-container' : badge.dot.includes('error') ? 'on-error-container' : badge.dot.includes('tertiary') ? 'on-tertiary-container' : 'on-surface-variant'})`,
+                      whiteSpace: 'nowrap'
                     }}>
                       <span style={{
                         width: '6px',
@@ -362,7 +443,6 @@ export default function TopicPage() {
 
                 <TopicJustificationToggle justification={t.justification} showEmpty compact />
 
-                {/* Nota de protocolo - apenas para temas aprovados */}
                 {isApproved && (
                   <div style={{
                     display: 'flex',
@@ -388,16 +468,24 @@ export default function TopicPage() {
             )
           })}
         </div>
-      ) : (
+      )}
+
+      {/* Estado vazio */}
+      {topics.length === 0 && !hasBlockingTopic && (
         <div style={{
           textAlign: 'center',
           padding: 'var(--space-5) var(--space-3)',
           color: 'var(--on-surface-variant)',
           background: 'var(--surface-container-low)',
           borderRadius: 'var(--radius-xl)',
-          border: '1px dashed var(--outline-variant)'
+          border: '1px dashed var(--outline-variant)',
+          marginBottom: 'var(--space-4)'
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>
+          <span className="material-symbols-outlined" style={{
+            fontSize: '48px',
+            marginBottom: 'var(--space-2)',
+            display: 'block'
+          }}>
             lightbulb
           </span>
           <p style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-medium)' }}>
@@ -409,20 +497,25 @@ export default function TopicPage() {
         </div>
       )}
 
-      {/* Aviso de tema bloqueante - apenas para temas pendentes, não aprovados */}
+      {/* Aviso de tema bloqueante */}
       {hasBlockingTopic && !topics.some(t => t.status === 'topic_approved_nucleo') && (
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
           gap: 'var(--space-2)',
-          padding: 'var(--space-2) var(--space-3)',
+          padding: 'var(--space-3) var(--space-4)',
           background: 'var(--surface-container)',
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--outline-variant)',
           color: 'var(--on-surface-variant)',
-          fontSize: 'var(--body-md)'
+          fontSize: 'var(--body-md)',
+          marginBottom: 'var(--space-4)'
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--tertiary)', flexShrink: 0 }}>
+          <span className="material-symbols-outlined" style={{
+            fontSize: '24px',
+            color: 'var(--tertiary)',
+            flexShrink: 0
+          }}>
             info
           </span>
           <p>
@@ -431,7 +524,7 @@ export default function TopicPage() {
         </div>
       )}
 
-      {/* Formulário de submissão - escondido se tiver tema bloqueante */}
+      {/* Formulário de submissão */}
       {!hasBlockingTopic && (
         <form
           onSubmit={handleSubmit}
@@ -447,7 +540,6 @@ export default function TopicPage() {
             fontSize: 'var(--title-md)',
             fontWeight: 'var(--font-semibold)',
             color: 'var(--on-surface)',
-            fontFamily: 'var(--font-family)',
             marginBottom: 'var(--space-1)'
           }}>
             Submeter novo tema
@@ -460,41 +552,53 @@ export default function TopicPage() {
               style={{
                 fontSize: 'var(--label-md)',
                 fontWeight: 'var(--font-medium)',
-                color: 'var(--on-surface-variant)',
-                fontFamily: 'var(--font-family)'
+                color: 'var(--on-surface-variant)'
               }}
             >
               Título do tema
             </label>
-            <input
-              id="title"
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Ex: Impacto da malária na saúde infantil em Maputo"
-              required
-              style={{
-                width: '100%',
-                padding: '12px var(--space-2)',
-                background: 'var(--surface-container-lowest)',
-                border: '1px solid var(--outline-variant)',
-                borderRadius: 'var(--radius-lg)',
-                fontSize: 'var(--body-md)',
-                fontFamily: 'var(--font-family)',
-                color: 'var(--on-surface)',
-                outline: 'none',
-                transition: 'all 0.2s ease',
-                boxSizing: 'border-box'
-              }}
-              onFocus={e => {
-                e.target.style.borderColor = 'var(--primary)'
-                e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
-              }}
-              onBlur={e => {
-                e.target.style.borderColor = 'var(--outline-variant)'
-                e.target.style.boxShadow = 'none'
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <span className="material-symbols-outlined" style={{
+                position: 'absolute',
+                left: '14px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--outline)',
+                fontSize: '20px',
+                pointerEvents: 'none'
+              }}>
+                edit
+              </span>
+              <input
+                id="title"
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Ex: Impacto da malária na saúde infantil em Maputo"
+                required
+                style={{
+                  width: '100%',
+                  padding: '14px 16px 14px 44px',
+                  background: 'var(--surface-container-lowest)',
+                  border: '1px solid var(--outline-variant)',
+                  borderRadius: 'var(--radius-lg)',
+                  fontSize: 'var(--body-md)',
+                  fontFamily: 'var(--font-family)',
+                  color: 'var(--on-surface)',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={e => {
+                  e.target.style.borderColor = 'var(--primary)'
+                  e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
+                }}
+                onBlur={e => {
+                  e.target.style.borderColor = 'var(--outline-variant)'
+                  e.target.style.boxShadow = 'none'
+                }}
+              />
+            </div>
           </div>
 
           {/* Campo: Justificação */}
@@ -504,8 +608,7 @@ export default function TopicPage() {
               style={{
                 fontSize: 'var(--label-md)',
                 fontWeight: 'var(--font-medium)',
-                color: 'var(--on-surface-variant)',
-                fontFamily: 'var(--font-family)'
+                color: 'var(--on-surface-variant)'
               }}
             >
               Justificação do tema
@@ -514,12 +617,12 @@ export default function TopicPage() {
               id="justification"
               value={justification}
               onChange={e => setJustification(e.target.value)}
-              placeholder="Explique brevemente a relevância do tema proposto."
-              rows={4}
+              placeholder="Explique brevemente a relevância do tema proposto, objetivos e contribuição esperada para a área científica."
+              rows={5}
               maxLength={5000}
               style={{
                 width: '100%',
-                padding: '12px var(--space-2)',
+                padding: '14px 16px',
                 background: 'var(--surface-container-lowest)',
                 border: '1px solid var(--outline-variant)',
                 borderRadius: 'var(--radius-lg)',
@@ -530,7 +633,8 @@ export default function TopicPage() {
                 transition: 'all 0.2s ease',
                 boxSizing: 'border-box',
                 resize: 'vertical',
-                minHeight: '96px'
+                minHeight: '120px',
+                lineHeight: 1.6
               }}
               onFocus={e => {
                 e.target.style.borderColor = 'var(--primary)'
@@ -541,130 +645,229 @@ export default function TopicPage() {
                 e.target.style.boxShadow = 'none'
               }}
             />
+            <span style={{
+              fontSize: 'var(--label-md)',
+              color: 'var(--outline)',
+              textAlign: 'right'
+            }}>
+              {justification.length}/5000 caracteres
+            </span>
           </div>
 
-          {/* Grid: Área Científica + Curso */}
+          {/* Grid: Curso + Área Científica (somente leitura) */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             gap: 'var(--space-3)'
           }}>
-            {/* Campo: Área Científica (Select) */}
+            {/* Curso */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-              <label
-                htmlFor="scientificArea"
-                style={{
-                  fontSize: 'var(--label-md)',
-                  fontWeight: 'var(--font-medium)',
-                  color: 'var(--on-surface-variant)',
-                  fontFamily: 'var(--font-family)'
-                }}
-              >
-                Área científica
-              </label>
-              <select
-                id="scientificArea"
-                value={scientificAreaId}
-                onChange={e => setScientificAreaId(e.target.value)}
-                required
-                disabled={loadingAreas}
-                style={{
-                  width: '100%',
-                  padding: '12px var(--space-2)',
-                  background: 'var(--surface-container-lowest)',
-                  border: '1px solid var(--outline-variant)',
-                  borderRadius: 'var(--radius-lg)',
-                  fontSize: 'var(--body-md)',
-                  fontFamily: 'var(--font-family)',
-                  color: 'var(--on-surface)',
-                  outline: 'none',
-                  transition: 'all 0.2s ease',
-                  boxSizing: 'border-box',
-                  cursor: 'pointer',
-                  appearance: 'auto'
-                }}
-                onFocus={e => {
-                  e.target.style.borderColor = 'var(--primary)'
-                  e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = 'var(--outline-variant)'
-                  e.target.style.boxShadow = 'none'
-                }}
-              >
-                <option value="">
-                  {loadingAreas ? 'A carregar...' : 'Selecione uma área'}
-                </option>
-                {scientificAreas.map((area: ScientificArea) => (
-                  <option key={area.id} value={area.id}>
-                    {area.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Campo: Curso (Select) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-              <label
-                htmlFor="course"
-                style={{
-                  fontSize: 'var(--label-md)',
-                  fontWeight: 'var(--font-medium)',
-                  color: 'var(--on-surface-variant)',
-                  fontFamily: 'var(--font-family)'
-                }}
-              >
+              <label style={{
+                fontSize: 'var(--label-md)',
+                fontWeight: 'var(--font-medium)',
+                color: 'var(--on-surface-variant)'
+              }}>
                 Curso
               </label>
-              <select
-                id="course"
-                value={courseId}
-                onChange={e => setCourseId(e.target.value)}
-                required
-                disabled={!scientificAreaId || loadingCourses}
-                style={{
-                  width: '100%',
-                  padding: '12px var(--space-2)',
-                  background: 'var(--surface-container-lowest)',
-                  border: '1px solid var(--outline-variant)',
-                  borderRadius: 'var(--radius-lg)',
-                  fontSize: 'var(--body-md)',
-                  fontFamily: 'var(--font-family)',
-                  color: 'var(--on-surface)',
-                  outline: 'none',
-                  transition: 'all 0.2s ease',
-                  boxSizing: 'border-box',
-                  cursor: !scientificAreaId ? 'not-allowed' : 'pointer',
-                  opacity: !scientificAreaId ? 0.6 : 1,
-                  appearance: 'auto'
-                }}
-                onFocus={e => {
-                  e.target.style.borderColor = 'var(--primary)'
-                  e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = 'var(--outline-variant)'
-                  e.target.style.boxShadow = 'none'
-                }}
-              >
-                <option value="">
-                  {!scientificAreaId 
-                    ? 'Selecione uma área primeiro' 
-                    : loadingCourses 
-                      ? 'A carregar...' 
-                      : 'Selecione um curso'
-                  }
-                </option>
-                {courses.map((course: Course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.name} {course.code ? `(${course.code})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+                padding: '14px 16px',
+                background: 'var(--surface-container)',
+                border: '1px solid var(--outline-variant)',
+                borderRadius: 'var(--radius-lg)',
+                fontSize: 'var(--body-md)',
+                fontFamily: 'var(--font-family)',
+                color: 'var(--on-surface)'
+              }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--primary)', fontSize: '20px' }}>
+                  school
+                </span>
+                <span style={{ fontWeight: 'var(--font-medium)' }}>
+                  {studentCourse?.name || 'Não definido'}
+                </span>
+              </div>
+            </div>
+
+            {/* Área Científica */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+              <label style={{
+                fontSize: 'var(--label-md)',
+                fontWeight: 'var(--font-medium)',
+                color: 'var(--on-surface-variant)'
+              }}>
+                Área Científica
+              </label>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+                padding: '14px 16px',
+                background: 'var(--surface-container)',
+                border: '1px solid var(--outline-variant)',
+                borderRadius: 'var(--radius-lg)',
+                fontSize: 'var(--body-md)',
+                fontFamily: 'var(--font-family)',
+                color: 'var(--on-surface)'
+              }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--primary)', fontSize: '20px' }}>
+                  science
+                </span>
+                <span style={{ fontWeight: 'var(--font-medium)' }}>
+                  {studentScientificArea?.name || 'Não definida'}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Botão */}
+          {/* Campo: Upload de Documento */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <label style={{
+              fontSize: 'var(--label-md)',
+              fontWeight: 'var(--font-medium)',
+              color: 'var(--on-surface-variant)'
+            }}>
+              Documento do tema (.docx)
+            </label>
+            <p style={{
+              fontSize: 'var(--body-md)',
+              color: 'var(--on-surface-variant)',
+              margin: '0 0 8px 0'
+            }}>
+              Anexe o documento com a descrição detalhada do tema (apenas .docx, máx. 10MB)
+            </p>
+
+            <div style={{ position: 'relative' }}>
+              <input
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={handleFileChange}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  opacity: 0,
+                  cursor: 'pointer',
+                  width: '100%',
+                  height: '100%',
+                  zIndex: 1
+                }}
+              />
+              {!documentFile ? (
+                <div style={{
+                  border: '2px dashed var(--outline-variant)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 'var(--space-4)',
+                  textAlign: 'center',
+                  background: 'var(--surface-container-lowest)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = 'var(--primary)'
+                  e.currentTarget.style.background = 'rgba(0,105,51,0.02)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'var(--outline-variant)'
+                  e.currentTarget.style.background = 'var(--surface-container-lowest)'
+                }}
+                >
+                  <span className="material-symbols-outlined" style={{
+                    fontSize: '48px',
+                    color: 'var(--outline)',
+                    marginBottom: 'var(--space-2)',
+                    display: 'block'
+                  }}>
+                    cloud_upload
+                  </span>
+                  <p style={{
+                    fontSize: 'var(--body-md)',
+                    color: 'var(--on-surface-variant)',
+                    fontWeight: 'var(--font-medium)'
+                  }}>
+                    Clique para selecionar ou arraste o arquivo
+                  </p>
+                  <p style={{
+                    fontSize: 'var(--label-md)',
+                    color: 'var(--outline)',
+                    marginTop: '4px'
+                  }}>
+                    Formato aceite: .docx
+                  </p>
+                </div>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px var(--space-3)',
+                  background: 'var(--surface-container-lowest)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--outline-variant)',
+                  gap: 'var(--space-3)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flex: 1, minWidth: 0 }}>
+                    <span className="material-symbols-outlined" style={{
+                      fontSize: '24px',
+                      color: 'var(--primary)',
+                      flexShrink: 0
+                    }}>
+                      check_circle
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{
+                        fontSize: 'var(--body-md)',
+                        fontWeight: 'var(--font-semibold)',
+                        color: 'var(--on-surface)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        margin: 0
+                      }}>
+                        {documentFile.name}
+                      </p>
+                      <p style={{
+                        fontSize: 'var(--label-sm)',
+                        color: 'var(--on-surface-variant)',
+                        margin: '2px 0 0 0'
+                      }}>
+                        {formatFileSize(documentFile.size)}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    style={{
+                      background: 'var(--error-container)',
+                      color: 'var(--on-error-container)',
+                      border: 'none',
+                      borderRadius: 'var(--radius-full)',
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'var(--error)'
+                      e.currentTarget.style.color = 'var(--on-error)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'var(--error-container)'
+                      e.currentTarget.style.color = 'var(--on-error-container)'
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>close</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Botão Submeter */}
           <button
             type="submit"
             className="btn btn-primary"
@@ -677,7 +880,6 @@ export default function TopicPage() {
               padding: '14px var(--space-3)',
               fontSize: 'var(--body-lg)',
               fontWeight: 'var(--font-semibold)',
-              fontFamily: 'var(--font-family)',
               borderRadius: 'var(--radius-lg)',
               border: 'none',
               cursor: submitting ? 'not-allowed' : 'pointer',
@@ -686,22 +888,11 @@ export default function TopicPage() {
               boxShadow: 'var(--elevation-1)',
               marginTop: 'var(--space-1)'
             }}
-            onMouseEnter={e => {
-              if (!submitting) {
-                e.currentTarget.style.boxShadow = 'var(--elevation-2)'
-                e.currentTarget.style.transform = 'scale(0.98)'
-              }
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.boxShadow = 'var(--elevation-1)'
-              e.currentTarget.style.transform = 'scale(1)'
-            }}
           >
             {submitting ? (
               <>
                 <span style={{
-                  width: '18px',
-                  height: '18px',
+                  width: '18px', height: '18px',
                   border: '2px solid var(--on-primary)',
                   borderTopColor: 'transparent',
                   borderRadius: 'var(--radius-full)',
@@ -727,13 +918,14 @@ export default function TopicPage() {
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--space-2)',
-            padding: 'var(--space-3)',
+            padding: 'var(--space-3) var(--space-4)',
             background: 'var(--tertiary-fixed)',
             color: 'var(--on-tertiary-fixed)',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--tertiary-container)',
             fontSize: 'var(--body-md)',
-            fontFamily: 'var(--font-family)'
+            fontFamily: 'var(--font-family)',
+            marginTop: 'var(--space-4)'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
@@ -771,12 +963,7 @@ export default function TopicPage() {
         </div>
       )}
 
-      {/* Animação do spinner */}
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }

@@ -1,3 +1,4 @@
+# O que já tenho e espero do backend:
 // src/services/topicService.ts
 import { req } from './apiClient';
 
@@ -114,7 +115,7 @@ export const topicService = {
     if (payload.justification) formData.append('justification', payload.justification);
     if (payload.document) formData.append('document', payload.document);
     
-    return req('POST', '/api/v1/topics', formData) as Promise<{
+    return req('POST', '/api/v1/topics', formData, true) as Promise<{
       message: string;
       topic: Topic;
       similar_topics_warning: SimilarTopicsWarning;
@@ -414,3 +415,25 @@ export const topicService = {
       evaluation: TopicReviewEvaluation;
     }>,
 };
+
+
+
+
+
+
+# Resumo:
+#	Método	Endpoint	Quem usa	O que retorna
+1	POST	/api/v1/topics	Estudante	{ message, topic, similar_topics_warning }
+2	GET	/api/v1/topics	Estudante	{ topics: Topic[] }
+3	GET	/api/v1/topics/my-approved	Estudante	{ success, data: ApprovedTopic[] }
+4	GET	/api/v1/supervisor/topics	Supervisor	{ topics: Topic[], total }
+5	PATCH	/api/v1/topics/{id}/supervisor-approve	Supervisor	{ message }
+6	PATCH	/api/v1/topics/{id}/supervisor-reject	Supervisor	{ message }
+7	GET	/api/v1/secretary/topics	Secretário	{ topics: Topic[], total }
+8	GET	/api/v1/topics/{id}/eligible-reviewers	Secretário	{ reviewers: [{id,name}], total }
+9	GET	/api/v1/topics/{id}/reviewers	Secretário	{ reviewers: AssignedReviewer[], total }
+10	POST	/api/v1/topics/{id}/assign-reviewers	Secretário	{ message }
+11	GET	/api/v1/reviewer/topics	Revisor	{ topics: Topic[] }
+12	GET	/api/v1/topics/{id}/comments	Revisor	{ success, comments }
+13	POST	/api/v1/topics/{id}/comments	Revisor	{ message, comment }
+14	POST	/api/v1/topics/{id}/evaluations	Revisor	{ message, evaluation }

@@ -17,6 +17,7 @@ import { ReportsWidget } from './widgets/ReportsWidget';
 import { AdminPanelWidget } from './widgets/AdminPanelWidget';
 import { NotificationWidget } from './widgets/NotificationWidget';
 import { DeadlineWidget } from './widgets/DeadlineWidget';
+import { ProtocolWorkflowWidget } from './widgets/ProtocolWorkflowWidget';
 
 export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   // ========================
@@ -31,39 +32,50 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     size: 'large',
     component: MyProtocolsWidget,
     permissions: ['protocol.view'],
-    endpoint: '/api/dashboard/my-protocols'
+    endpoint: '/api/my-protocols'
+  },
+  {
+    id: 'protocolWorkflow',
+    title: 'Fluxo do Protocolo',
+    description: 'Acompanhamento visual das etapas e evolução do protocolo',
+    category: 'workflow',
+    order: 2,
+    size: 'full',
+    component: ProtocolWorkflowWidget,
+    permissions: ['protocol.view'],
+    endpoint: '/api/protocol-workflow'
   },
   {
     id: 'pendingTriage',
     title: 'Triagens Pendentes',
     description: 'Documentos aguardando validação administrativa',
     category: 'workflow',
-    order: 2,
+    order: 3,
     size: 'medium',
     component: PendingTriageWidget,
     permissions: ['protocol.triage'],
-    endpoint: '/api/dashboard/pending-triage'
+    endpoint: '/api/pending-triage'
   },
   {
     id: 'documentValidation',
     title: 'Validação Documental',
     description: 'Documentos para validar ou rejeitar',
     category: 'workflow',
-    order: 3,
+    order: 4,
     size: 'medium',
     component: DocumentValidationWidget,
     permissions: ['document.validate'],
-    endpoint: '/api/dashboard/document-validation'
+    endpoint: '/api/document-validation'
   },
   {
     id: 'quickActions',
     title: 'Ações Rápidas',
     description: 'Atalhos para operações frequentes',
     category: 'workflow',
-    order: 4,
+    order: 5,
     size: 'small',
     component: QuickActionsWidget,
-    permissions: [], // Widget público baseado em permissões internas
+    permissions: [],
     anyPermission: true
   },
 
@@ -79,7 +91,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     size: 'large',
     component: PendingReviewsWidget,
     permissions: ['protocol.evaluate'],
-    endpoint: '/api/dashboard/pending-reviews'
+    endpoint: '/api/pending-reviews'
   },
   {
     id: 'reviewerAssignment',
@@ -90,7 +102,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     size: 'large',
     component: ReviewerAssignmentWidget,
     permissions: ['protocol.assign', 'reviewer.assign'],
-    endpoint: '/api/dashboard/reviewer-assignment'
+    endpoint: '/api/reviewer-assignment'
   },
   {
     id: 'workloadView',
@@ -102,7 +114,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     component: WorkloadWidget,
     permissions: ['workload.view', 'workload.view.all'],
     anyPermission: true,
-    endpoint: '/api/dashboard/workload'
+    endpoint: '/api/workload'
   },
 
   // ========================
@@ -117,7 +129,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     size: 'medium',
     component: EvaluationWidget,
     permissions: ['evaluation.create'],
-    endpoint: '/api/dashboard/pending-evaluations'
+    endpoint: '/api/pending-evaluations'
   },
   {
     id: 'evaluationResults',
@@ -129,7 +141,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     component: EvaluationWidget,
     permissions: ['evaluation.view', 'evaluation.view.own', 'evaluation.view.all'],
     anyPermission: true,
-    endpoint: '/api/dashboard/evaluation-results'
+    endpoint: '/api/evaluation-results'
   },
 
   // ========================
@@ -144,7 +156,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     size: 'large',
     component: DefenseScheduleWidget,
     permissions: ['defense.view'],
-    endpoint: '/api/dashboard/defense-schedule'
+    endpoint: '/api/defense-schedule'
   },
   {
     id: 'juryParticipation',
@@ -155,7 +167,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     size: 'medium',
     component: DefenseScheduleWidget,
     permissions: ['defense.jury.participate'],
-    endpoint: '/api/dashboard/jury-participation'
+    endpoint: '/api/jury-participation'
   },
 
   // ========================
@@ -170,7 +182,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     size: 'large',
     component: SupervisionWidget,
     permissions: ['supervision.view'],
-    endpoint: '/api/dashboard/supervision-students'
+    endpoint: '/api/supervision-students'
   },
 
   // ========================
@@ -198,7 +210,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     component: ReportsWidget,
     permissions: ['reports.view', 'reports.view.all'],
     anyPermission: true,
-    endpoint: '/api/dashboard/reports'
+    endpoint: '/api/reports'
   },
 
   // ========================
@@ -214,7 +226,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     component: AdminPanelWidget,
     permissions: ['admin.users', 'admin.organs', 'admin.settings', 'admin.reports'],
     anyPermission: true,
-    endpoint: '/api/dashboard/admin-summary'
+    endpoint: '/api/admin-summary'
   },
 
   // ========================
@@ -228,8 +240,8 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     order: 1,
     size: 'small',
     component: NotificationWidget,
-    permissions: [], // Widget público
-    endpoint: '/api/dashboard/notifications'
+    permissions: [],
+    endpoint: '/api/notifications'
   },
   {
     id: 'deadlines',
@@ -239,7 +251,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     order: 2,
     size: 'small',
     component: DeadlineWidget,
-    permissions: [], // Widget público
-    endpoint: '/api/dashboard/deadlines'
+    permissions: [],
+    endpoint: '/api/deadlines'
   }
 ];
