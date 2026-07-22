@@ -18,6 +18,7 @@ class TopicReviewCommentResource extends JsonResource
             'content' => $this->content,
             'status' => $this->status,
             'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
             'user' => $this->whenLoaded('user', fn() => [
                 'id' => $this->user->id,
                 'name' => $this->user->name,

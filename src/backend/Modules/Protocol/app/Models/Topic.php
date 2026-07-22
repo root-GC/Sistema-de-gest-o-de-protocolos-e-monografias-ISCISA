@@ -34,6 +34,8 @@ class Topic extends Model
         'status',
         'supervisor_status',
         'justification',
+        'document_path',
+        'document_name',
         'supervisor_comment',
         'supervisor_decision_at',
         'submitted_at',
@@ -119,5 +121,10 @@ class Topic extends Model
             'id',
             'reviewer_id'
         );
+    }
+
+    public function protocols()
+    {
+        return $this->hasMany(Protocol::class);
     }
 }

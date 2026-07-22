@@ -26,48 +26,17 @@ class TopicController extends Controller
     public function __construct(private TopicService $topicService) {}
 
 //O user busca seus proprios temas aprovados pelo nucleo, para poder submeter o protocolo
- public function getMyApprovedTopics(Request $request)
-{
-    $user = $request->user();
+    public function getMyApprovedTopics(Request $request)
+    {
+        $user = $request->user();
 
-    Log::info('Buscar temas aprovados do estudante', [
-        'user_id' => $user?->id,
-        'user_name' => $user?->name,
-    ]);
+        $data = $this->topicService->getMyApprovedTopics($user);
 
-
-    $allTopics = Topic::where('student_id', $user->id)->get();
-
-    Log::info('Temas encontrados pelo student_id', [
-        'count' => $allTopics->count(),
-        'topics' => $allTopics->map(function ($topic) {
-            return [
-                'id' => $topic->id,
-                'student_id' => $topic->student_id,
-                'status' => $topic->status,
-                'title' => $topic->title ?? null,
-            ];
-        }),
-    ]);
-
-
-    $approvedTopics = Topic::where('student_id', $user->id)
-        ->where('status', Topic::STATUS_APPROVED_NUCLEO)
-        ->get();
-
-
-    Log::info('Temas aprovados encontrados', [
-        'expected_status' => Topic::STATUS_APPROVED_NUCLEO,
-        'count' => $approvedTopics->count(),
-        'topics' => $approvedTopics->pluck('id'),
-    ]);
-
-
-    return response()->json([
-        'success' => true,
-        'data' => TopicReviewerResource::collection($approvedTopics)
-    ]);
-}
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+        ]);
+    }
 
 /**
  * getComments: Lista comentários de um tema.
@@ -164,7 +133,11 @@ public function getComments(Request $request, Topic $topic)
 
         $this->authorize('create', Topic::class);
 
-        $result = $this->topicService->submit($request->validated(), $user);
+        $result = $this->topicService->submit(
+            $request->validated(),
+            $user,
+            $request->file('document')
+        );
 
         return response()->json([
             'message' => 'Tema submetido com sucesso. Agora está aguardando aprovação do supervisor.',

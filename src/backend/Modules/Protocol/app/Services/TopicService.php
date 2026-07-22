@@ -3,8 +3,11 @@
 namespace Modules\Protocol\app\Services;
 
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Events\TopicReviewersAssigned;
 use Modules\Protocol\app\Models\EvaluationForm;
 use Modules\Protocol\app\Models\Protocol;
@@ -15,12 +18,11 @@ use Modules\Protocol\app\Models\TopicReviewAssignment;
 use Modules\Protocol\app\Models\TopicReviewEvaluation;
 use Modules\User\app\Models\StudentProfile;
 use Modules\User\app\Models\User;
-use Illuminate\Support\Facades\Log;
 
 
 class TopicService
 {
-    public function submit(array $data, User $user): array
+    public function submit(array $data, User $user, ?UploadedFile $document = null): array
     {
         $studentProfile = StudentProfile::query()
             ->with('supervisor.user')
@@ -42,7 +44,6 @@ class TopicService
             ->first();
 
         if ($existing && ! in_array($existing->status, Topic::rejectedStatuses(), true)) {
-            // Mensagem e payload conforme o status actual
             if ($existing->status === Topic::STATUS_PENDING_SUPERVISOR || $existing->status === 'topic_pending') {
                 $message = 'Você já tem um tema aguardando aprovação do supervisor — aguarde a decisão antes de submeter outro.';
             } elseif ($existing->status === Topic::STATUS_PENDING_NUCLEO || $existing->status === 'topic_approved') {
@@ -53,7 +54,6 @@ class TopicService
                 $message = 'Já existe um tema associado à sua conta que impede nova submissão.';
             }
 
-            // Devolve 409 Conflict com o tema existente para o frontend tomar decisão
             throw new HttpResponseException(
                 response()->json([
                     'message' => $message,
@@ -66,7 +66,6 @@ class TopicService
             );
         }
 
-        // Se chegou aqui, permite submissão (mantém comportamento actual)
         $similarTopics = $this->findSimilarApprovedTopics($data['title']);
 
         $topic = Topic::create([
@@ -80,6 +79,19 @@ class TopicService
             'supervisor_status' => Topic::SUPERVISOR_STATUS_PENDING,
             'submitted_at' => now(),
         ]);
+
+        if ($document) {
+            $path = $document->storeAs(
+                'topics/' . $topic->id,
+                'topic-document-' . $topic->id . '.docx',
+                'public'
+            );
+
+            $topic->update([
+                'document_path' => $path,
+                'document_name' => $document->getClientOriginalName(),
+            ]);
+        }
 
         $topic->load([
             'scientificArea:id,name',
@@ -109,6 +121,40 @@ class TopicService
         }
 
         return $query->where('student_id', $user->id)->get();
+    }
+
+    public function getMyApprovedTopics(User $user): array
+    {
+        $topics = Topic::query()
+            ->where('student_id', $user->id)
+            ->where('status', Topic::STATUS_APPROVED_NUCLEO)
+            ->with(['scientificArea:id,name', 'course:id,name,code'])
+            ->latest('submitted_at')
+            ->get();
+
+        $protocolTopicIds = Protocol::query()
+            ->whereIn('topic_id', $topics->pluck('id'))
+            ->pluck('topic_id')
+            ->toArray();
+
+        return $topics->map(fn(Topic $topic) => [
+            'id' => $topic->id,
+            'title' => $topic->title,
+            'justification' => $topic->justification,
+            'status' => $topic->status,
+            'status_label' => $topic->status_label,
+            'submitted_at' => $topic->submitted_at,
+            'has_protocol' => in_array($topic->id, $protocolTopicIds),
+            'scientific_area' => $topic->scientificArea ? [
+                'id' => (int) $topic->scientificArea->id,
+                'name' => $topic->scientificArea->name,
+            ] : null,
+            'course' => $topic->course ? [
+                'id' => (int) $topic->course->id,
+                'name' => $topic->course->name,
+                'code' => $topic->course->code,
+            ] : null,
+        ])->all();
     }
 
     public function listForSupervisor(User $supervisor)

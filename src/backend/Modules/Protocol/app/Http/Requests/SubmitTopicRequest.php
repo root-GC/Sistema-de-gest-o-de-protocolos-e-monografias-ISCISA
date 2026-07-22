@@ -25,6 +25,13 @@ class SubmitTopicRequest extends FormRequest
                     fn($query) => $query->where('scientific_area_id', $this->integer('scientific_area_id'))
                 ),
             ],
+            'document' => [
+                'nullable',
+                'file',
+                'mimes:docx',
+                'mimetypes:application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'max:10240',
+            ],
         ];
     }
 
@@ -38,6 +45,9 @@ class SubmitTopicRequest extends FormRequest
             'scientific_area_id.exists' => 'A area cientifica informada e invalida.',
             'course_id.required' => 'O curso e obrigatorio.',
             'course_id.exists' => 'O curso informado e invalido para a area cientifica selecionada.',
+            'document.mimes' => 'O documento deve ser um ficheiro .docx.',
+            'document.mimetypes' => 'O documento deve ser um ficheiro .docx.',
+            'document.max' => 'O documento nao pode exceder 10MB.',
         ];
     }
 }

@@ -19,6 +19,8 @@ class TopicSecretaryResource extends JsonResource
             'justification' => $this->justification,
             'status' => $this->status,
             'status_label' => $this->status_label,
+            'document_path' => $this->document_path,
+            'document_name' => $this->document_name,
             'submitted_at' => $this->submitted_at,
             'scientific_area' => $this->whenLoaded('scientificArea', fn () => [
                 'id' => $this->scientificArea->id,

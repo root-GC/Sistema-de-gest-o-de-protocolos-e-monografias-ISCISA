@@ -15,6 +15,8 @@ class TopicSupervisorResource extends JsonResource
             'justification' => $this->justification,
             'status' => $this->status,
             'status_label' => $this->status_label,
+            'document_path' => $this->document_path,
+            'document_name' => $this->document_name,
             'supervisor_status' => $this->supervisor_status,
             'supervisor_comment' => $this->supervisor_comment,
             'supervisor_decision_at' => $this->supervisor_decision_at,

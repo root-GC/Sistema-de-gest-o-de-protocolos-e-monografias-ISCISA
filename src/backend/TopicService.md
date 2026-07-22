@@ -197,6 +197,7 @@ export const topicService = {
 
   // Alias para compatibilidade
   getForSupervisor: () =>
+  
     req('GET', '/api/v1/supervisor/topics') as Promise<{ topics: Topic[]; total: number }>,
 
   // ---------------------------------------------------------------------------
