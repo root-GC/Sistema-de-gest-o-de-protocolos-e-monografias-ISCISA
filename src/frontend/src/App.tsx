@@ -42,6 +42,12 @@ const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtoc
 // Admin
 const AdminUsersPage         = lazy(() => import('./pages/system-admin/AdminUsersPage'))
 const AdminOrgansPage        = lazy(() => import('./pages/system-admin/AdminOrgansPage'))
+const SystemStatusPage       = lazy(() => import('./pages/system-admin/SystemStatusPage')) // 🆕
+
+//Admin general
+const GeneralAdminDashboard = lazy(() => import('./pages/general-admin/GeneralAdminDashboard'))
+const ManagePersonnelPage  = lazy(() => import('./pages/general-admin/ManagePersonnelPage'))
+const CoursesManagementPage = lazy(() => import('./pages/general-admin/CoursesManagementPage'))
 
 // Páginas públicas
 const RegisterPage       = lazy(() => import('./pages/RegisterPage'))
@@ -73,6 +79,9 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 
+
+
+
                 {/* Dashboard */}
                 <Route path="/dashboard" element={<DashboardPage />} />
 
@@ -91,14 +100,9 @@ export default function App() {
 
                 {/* ── Supervisor ──────────────────────────────── */}
                 <Route element={<ProtectedRoute permission="supervision.view" />}>
-                  {/* Lista de supervisionandos */}
                   <Route path="/supervision"         element={<SupervisionPage />} />
                   <Route path="/supervision/list"    element={<SupervisionPage />} />
-                  
-                  {/* Validar submissões (Temas, Protocolos, Monografias) */}
                   <Route path="/supervision/pending" element={<ValidationPage />} />
-                  
-                  {/* Revisão individual de submissão */}
                   <Route path="/supervision/review/:type/:id" element={<SubmissionReviewPage />} />
                 </Route>
 
@@ -146,6 +150,18 @@ export default function App() {
                 <Route element={<ProtectedRoute permission="admin.organs" />}>
                   <Route path="/admin/organs" element={<AdminOrgansPage />} />
                 </Route>
+                {/* 🆕 Estado do Sistema */}
+                <Route element={<ProtectedRoute permission="admin.settings" />}>
+                  <Route path="/admin/system-status" element={<SystemStatusPage />} />
+                </Route>
+
+                {/* ── General Admin / Direção Científica ────────────── */}
+                <Route element={<ProtectedRoute permission="admin.organs" />}>
+                  <Route path="/general-admin" element={<GeneralAdminDashboard />} />
+                  <Route path="/general-admin/personnel" element={<ManagePersonnelPage />} />
+                   <Route path="/general-admin/courses" element={<CoursesManagementPage />} />
+                </Route>
+
 
               </Route>
             </Route>

@@ -44,19 +44,19 @@ export const menuRegistry = [
     roles: ['student'],
   },
 
-// ── Supervisor ────────────────────────────────────────────────────
-{
-  id: 'supervision',
-  label: 'Os meus supervisionandos',
-  icon: 'ti-users',
-  route: '/supervision',
-  permission: 'supervision.view',
-  roles: ['supervisor'],
-  children: [
-    { label: 'Lista', route: '/supervision/list', permission: 'supervision.view' },
-    { label: 'Validar submissão', route: '/supervision/pending', permission: 'supervision.approve' },
-  ],
-},
+  // ── Supervisor ────────────────────────────────────────────────────
+  {
+    id: 'supervision',
+    label: 'Os meus supervisionandos',
+    icon: 'ti-users',
+    route: '/supervision',
+    permission: 'supervision.view',
+    roles: ['supervisor'],
+    children: [
+      { label: 'Lista', route: '/supervision/list', permission: 'supervision.view' },
+      { label: 'Validar submissão', route: '/supervision/pending', permission: 'supervision.approve' },
+    ],
+  },
 
   // ── Teacher / Reviewer ────────────────────────────────────────────
   {
@@ -133,21 +133,68 @@ export const menuRegistry = [
     roles: ['secretary'],
   },
 
-  // ── Admin ─────────────────────────────────────────────────────────
+  // ── General Admin / Direção Científica ────────────────────────────
   {
-    id: 'admin_users',
-    label: 'Utilizadores',
-    icon: 'ti-users-group',
-    route: '/admin/users',
-    permission: 'admin.users',
-    roles: ['admin'],
-  },
-  {
-    id: 'admin_organs',
-    label: 'Órgãos e áreas',
+    id: 'general_admin',
+    label: 'Direção Científica',
     icon: 'ti-building',
-    route: '/admin/organs',
+    route: '/general-admin',
     permission: 'admin.organs',
     roles: ['admin'],
+    children: [
+      {
+        id: 'general_admin_dashboard',
+        label: 'Painel',
+        route: '/general-admin',
+        permission: 'admin.organs',
+      },
+      {
+        id: 'general_admin_personnel',
+        label: 'Gestão de Pessoal',
+        route: '/general-admin/personnel',
+        permission: 'admin.organs',
+      },
+      {
+        id: 'general_admin_courses',
+        label: 'Cursos e Áreas',
+        route: '/general-admin/courses',
+        permission: 'admin.organs',
+      },
+    ],
+  },
+
+  // ── Admin (Sistema) ───────────────────────────────────────────────
+  {
+    id: 'admin',
+    label: 'Administração',
+    icon: 'ti-settings',
+    permission: 'admin.users',
+    roles: ['admin'],
+    children: [
+      {
+        id: 'admin_users',
+        label: 'Utilizadores',
+        icon: 'ti-users-group',
+        route: '/admin/users',
+        permission: 'admin.users',
+        roles: ['admin'],
+      },
+      {
+        id: 'admin_organs',
+        label: 'Órgãos e áreas',
+        icon: 'ti-building',
+        route: '/admin/organs',
+        permission: 'admin.organs',
+        roles: ['admin'],
+      },
+      {
+        id: 'admin_system_status',
+        label: 'Estado do Sistema',
+        icon: 'ti-trending-up',
+        route: '/admin/system-status',
+        permission: 'admin.settings',
+        roles: ['admin'],
+      },
+    ],
   },
 ]

@@ -36,6 +36,8 @@ export default function AdminOrgansPage() {
   const [formDescription, setFormDescription] = useState('')
   const [formOrganId, setFormOrganId] = useState<number | null>(null)
   const [formCode, setFormCode] = useState('')
+  const [formAreaDescription, setFormAreaDescription] = useState('')
+  const [formCourseDescription, setFormCourseDescription] = useState('')
 
   useEffect(() => {
     loadData()
@@ -69,6 +71,8 @@ export default function AdminOrgansPage() {
     setFormDescription('')
     setFormOrganId(null)
     setFormCode('')
+    setFormAreaDescription('')
+    setFormCourseDescription('')
     setShowForm(true)
   }
 
@@ -84,6 +88,7 @@ export default function AdminOrgansPage() {
     setEditingId(area.id)
     setFormName(area.name)
     setFormOrganId(area.organ_id)
+    setFormAreaDescription(area.description || '')
     setShowForm(true)
   }
 
@@ -92,6 +97,7 @@ export default function AdminOrgansPage() {
     setFormName(course.name)
     setFormCode(course.code)
     setFormOrganId(course.scientific_area_id)
+    setFormCourseDescription(course.description || '')
     setShowForm(true)
   }
 
@@ -109,18 +115,18 @@ export default function AdminOrgansPage() {
         }
       } else if (activeTab === 'areas') {
         if (editingId) {
-          await adminService.updateScientificArea(editingId, { name: formName, organ_id: formOrganId! })
+          await adminService.updateScientificArea(editingId, { name: formName, organ_id: formOrganId!, description: formAreaDescription || undefined })
           setSuccessMessage('Área atualizada!')
         } else {
-          await adminService.createScientificArea({ name: formName, organ_id: formOrganId! })
+          await adminService.createScientificArea({ name: formName, organ_id: formOrganId!, description: formAreaDescription || undefined })
           setSuccessMessage('Área criada!')
         }
       } else if (activeTab === 'courses') {
         if (editingId) {
-          await adminService.updateCourse(editingId, { name: formName, code: formCode, scientific_area_id: formOrganId! })
+          await adminService.updateCourse(editingId, { name: formName, code: formCode, scientific_area_id: formOrganId!, description: formCourseDescription || undefined })
           setSuccessMessage('Curso atualizado!')
         } else {
-          await adminService.createCourse({ name: formName, code: formCode, scientific_area_id: formOrganId! })
+          await adminService.createCourse({ name: formName, code: formCode, scientific_area_id: formOrganId!, description: formCourseDescription || undefined })
           setSuccessMessage('Curso criado!')
         }
       }
@@ -194,7 +200,7 @@ export default function AdminOrgansPage() {
       {/* Modal Form */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-3)' }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-4)', width: '100%', maxWidth: '500px' }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-4)', width: '100%', maxWidth: '500px', maxHeight: '80vh', overflow: 'auto' }}>
             <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)' }}>
               {editingId ? 'Editar' : 'Criar'} {activeTab === 'organs' ? 'Órgão' : activeTab === 'areas' ? 'Área Científica' : 'Curso'}
             </h2>
@@ -210,6 +216,7 @@ export default function AdminOrgansPage() {
                 <>
                   <FormSelect label="Órgão" value={String(formOrganId || '')} onChange={v => setFormOrganId(Number(v))} options={organs.map(o => ({ value: String(o.id), label: o.name }))} required />
                   <FormField label="Nome" value={formName} onChange={setFormName} required />
+                  <FormField label="Descrição" value={formAreaDescription} onChange={setFormAreaDescription} />
                 </>
               )}
               {activeTab === 'courses' && (
@@ -217,6 +224,7 @@ export default function AdminOrgansPage() {
                   <FormSelect label="Área Científica" value={String(formOrganId || '')} onChange={v => setFormOrganId(Number(v))} options={areas.map(a => ({ value: String(a.id), label: a.name }))} required />
                   <FormField label="Nome" value={formName} onChange={setFormName} required />
                   <FormField label="Código" value={formCode} onChange={setFormCode} required />
+                  <FormField label="Descrição" value={formCourseDescription} onChange={setFormCourseDescription} />
                 </>
               )}
               <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
@@ -244,7 +252,19 @@ export default function AdminOrgansPage() {
                     {ORGAN_TYPE_LABELS[item.type] || item.type}
                   </span>
                 )}
-                {item.description && <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '4px 0 0' }}>{item.description}</p>}
+                {item.description && (
+                  <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '4px 0 0' }}>{item.description}</p>
+                )}
+                {activeTab === 'areas' && (item as ScientificArea).organ && (
+                  <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
+                    Órgão: {(item as ScientificArea).organ?.name}
+                  </p>
+                )}
+                {activeTab === 'courses' && (item as Course).scientific_area && (
+                  <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
+                    Área: {(item as Course).scientific_area?.name}
+                  </p>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
                 <IconButton icon="edit" onClick={() => activeTab === 'organs' ? openEditOrgan(item) : activeTab === 'areas' ? openEditArea(item) : openEditCourse(item)} />
