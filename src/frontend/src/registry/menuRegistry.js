@@ -44,19 +44,19 @@ export const menuRegistry = [
     roles: ['student'],
   },
 
-  // ── Supervisor ────────────────────────────────────────────────────
-  {
-    id: 'supervision',
-    label: 'Os meus tutorandos',
-    icon: 'ti-users',
-    route: '/supervision',
-    permission: 'supervision.view',
-    roles: ['supervisor'],
-    children: [
-      { label: 'Lista',           route: '/supervision/list',    permission: 'supervision.view'    },
-      { label: 'Validar submissão', route: '/supervision/pending', permission: 'supervision.approve' },
-    ],
-  },
+// ── Supervisor ────────────────────────────────────────────────────
+{
+  id: 'supervision',
+  label: 'Os meus supervisionandos',
+  icon: 'ti-users',
+  route: '/supervision',
+  permission: 'supervision.view',
+  roles: ['supervisor'],
+  children: [
+    { label: 'Lista', route: '/supervision/list', permission: 'supervision.view' },
+    { label: 'Validar submissão', route: '/supervision/pending', permission: 'supervision.approve' },
+  ],
+},
 
   // ── Teacher / Reviewer ────────────────────────────────────────────
   {

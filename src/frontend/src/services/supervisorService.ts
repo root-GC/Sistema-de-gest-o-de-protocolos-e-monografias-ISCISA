@@ -1,6 +1,8 @@
+// src/services/supervisorService.ts
 import { req } from './apiClient'
 
-export type SuperviseePhase = 'topic' | 'protocol' | 'none'
+// 🆕 Adicionado 'monograph'
+export type SuperviseePhase = 'topic' | 'protocol' | 'monograph' | 'none'
 
 export interface SuperviseeStudent {
   id: number | null
@@ -45,7 +47,7 @@ export interface SuperviseeProtocol {
 }
 
 export interface SuperviseeSubmission {
-  type: 'topic' | 'protocol'
+  type: 'topic' | 'protocol' | 'monograph'  // 🆕 Adicionado 'monograph'
   id: number
   title?: string
   code?: string

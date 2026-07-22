@@ -1,16 +1,14 @@
+// App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './guards/ProtectedRoute.tsx'
 import { AppLayout } from './components/layout/AppLayout.tsx'
 import { lazy, Suspense } from 'react'
-import TestOnlyOfficePage from './pages/TestOnlyOfficePage'
-import SupervisorProtocolsPage from './pages/supervisor/SupervisorProtocolsPage'
 
 // Páginas públicas
 import LoginPage from './pages/LoginPage.tsx'
-import SupervisorProtocolDetailPage from './pages/supervisor/SupervisorProtocolDetailPage.tsx'
 
-//Páginas protegidas — lazy load
+// Páginas protegidas — lazy load
 const DashboardPage          = lazy(() => import('./pages/dashboard/DashboardPage'))
 const Page403                = lazy(() => import('./pages/shared/Page403'))
 
@@ -22,7 +20,11 @@ const MonographPage          = lazy(() => import('./pages/student/MonographPage'
 
 // Teacher / Supervisor
 const SupervisionPage        = lazy(() => import('./pages/teacher/SupervisionPage'))
+const ValidationPage         = lazy(() => import('./pages/teacher/ValidationPage'))
+const SubmissionReviewPage   = lazy(() => import('./pages/teacher/SubmissionReviewPage'))
 const WorkloadPage           = lazy(() => import('./pages/teacher/WorkloadPage'))
+const SupervisorProtocolsPage = lazy(() => import('./pages/supervisor/SupervisorProtocolsPage'))
+const SupervisorProtocolDetailPage = lazy(() => import('./pages/supervisor/SupervisorProtocolDetailPage'))
 
 // Reviewer
 const ReviewsPage            = lazy(() => import('./pages/teacher/ReviewsPage'))
@@ -41,11 +43,12 @@ const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtoc
 const AdminUsersPage         = lazy(() => import('./pages/admin/AdminUsersPage'))
 const AdminOrgansPage        = lazy(() => import('./pages/admin/AdminOrgansPage'))
 
-// Páginas públicas (lazy load)
+// Páginas públicas
 const RegisterPage       = lazy(() => import('./pages/RegisterPage'))
 const VerifyOtpPage      = lazy(() => import('./pages/VerifyOtpPage'))
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
+
 const Loader = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
     <span style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>A carregar...</span>
@@ -58,22 +61,9 @@ export default function App() {
       <AuthProvider>
         <Suspense fallback={<Loader />}>
           <Routes>
-
-
-          // Dentro das rotas:
-          <Route path="/supervisor" element={<SupervisorProtocolsPage />} />
-          <Route path="/supervisor/protocols/:protocolId" element={<SupervisorProtocolDetailPage />} />
-
-            {/* Teste ONLYOFFICE */}
-            <Route
-              path="/teste-office"
-              element={<TestOnlyOfficePage />}
-            />
-
             {/* ── Públicas ─────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/403"   element={<Page403 />} />
-
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/verify-otp" element={<VerifyOtpPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -82,8 +72,8 @@ export default function App() {
             {/* ── Protegidas — qualquer utilizador autenticado ── */}
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
-
-                {/* Dashboard (toda a gente) */}
+                
+                {/* Dashboard */}
                 <Route path="/dashboard" element={<DashboardPage />} />
 
                 {/* ── Student ─────────────────────────────────── */}
@@ -101,12 +91,24 @@ export default function App() {
 
                 {/* ── Supervisor ──────────────────────────────── */}
                 <Route element={<ProtectedRoute permission="supervision.view" />}>
+                  {/* Lista de supervisionandos */}
                   <Route path="/supervision"         element={<SupervisionPage />} />
                   <Route path="/supervision/list"    element={<SupervisionPage />} />
-                  <Route path="/supervision/pending" element={<SupervisionPage />} />
+                  
+                  {/* Validar submissões (Temas, Protocolos, Monografias) */}
+                  <Route path="/supervision/pending" element={<ValidationPage />} />
+                  
+                  {/* Revisão individual de submissão */}
+                  <Route path="/supervision/review/:type/:id" element={<SubmissionReviewPage />} />
                 </Route>
-                {/* ── Teacher / Reviewer ──────────────────────── */}
 
+                {/* Rotas do Supervisor (protocolos) */}
+                <Route element={<ProtectedRoute roles={['supervisor']} />}>
+                  <Route path="/supervisor" element={<SupervisorProtocolsPage />} />
+                  <Route path="/supervisor/protocols/:protocolId" element={<SupervisorProtocolDetailPage />} />
+                </Route>
+
+                {/* ── Teacher / Reviewer ──────────────────────── */}
                 <Route element={<ProtectedRoute permission="workload.view" />}>
                   <Route path="/workload" element={<WorkloadPage />} />
                 </Route>

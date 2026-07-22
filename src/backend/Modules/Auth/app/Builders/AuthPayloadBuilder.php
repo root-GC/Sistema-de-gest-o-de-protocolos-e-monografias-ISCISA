@@ -38,6 +38,7 @@ class AuthPayloadBuilder
             'roles.permissions',
             'teacherProfile.scientificArea',
             'studentProfile.course',
+            'studentProfile.course.scientificArea',  // ← Carrega via curso
             'coordinatorProfile.course',
             'coordinatorProfile.scientificArea',
             'secretaryProfile.organ',
@@ -89,13 +90,23 @@ class AuthPayloadBuilder
         }
 
         // ── student_profiles ────────────────────────────────────────────
-        if (in_array('student', $roles) && $sp = $user->studentProfile) {
+     if (in_array('student', $roles) && $sp = $user->studentProfile) {
             $profiles['student'] = [
-                'id'             => $sp->id,
-                'student_number' => $sp->student_number,
-                'supervisor_id'  => $sp->supervisor_id,
-                'course'         => $sp->course
-                    ? ['id' => $sp->course->id, 'name' => $sp->course->name]
+                'id'              => $sp->id,
+                'student_number'  => $sp->student_number,
+                'supervisor_id'   => $sp->supervisor_id,
+                'course'          => $sp->course
+                    ? [
+                        'id'   => $sp->course->id, 
+                        'name' => $sp->course->name,
+                        'code' => $sp->course->code
+                    ]
+                    : null,
+                'scientific_area' => $sp->course?->scientificArea  // ← VIA CURSO
+                    ? [
+                        'id'   => $sp->course->scientificArea->id, 
+                        'name' => $sp->course->scientificArea->name
+                    ]
                     : null,
             ];
         }

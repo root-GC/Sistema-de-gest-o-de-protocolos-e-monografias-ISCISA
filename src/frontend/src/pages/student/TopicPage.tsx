@@ -10,7 +10,7 @@ import { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
 export default function TopicPage() {
-  const { user, activeProfile } = useAuth()
+  const { user, profiles } = useAuth()
   
   const [topics, setTopics] = useState<Topic[]>([])
   const [title, setTitle] = useState('')
@@ -22,10 +22,28 @@ export default function TopicPage() {
   const [error, setError] = useState<string | null>(null)
 
   // Dados do perfil do estudante
-  const studentProfile = (activeProfile as any)?.student || (user as any)?.profiles?.student
+  const studentProfile = profiles?.student
   const studentCourse = studentProfile?.course
   const studentNumber = studentProfile?.student_number
   const studentScientificArea = studentProfile?.scientific_area
+
+  // Status que bloqueiam nova submissão (não são rejeitados)
+  const blockingStatuses = [
+    'topic_pending_supervisor',
+    'topic_pending_nucleo',
+    'topic_assigned_for_review',
+    'topic_in_review',
+    'topic_approved_nucleo',
+    'topic_pending',
+    'topic_approved',
+  ]
+
+  // Status rejeitados (permitem nova submissão)
+  const rejectedStatuses = [
+    'topic_rejected',
+    'topic_rejected_supervisor',
+    'topic_rejected_nucleo',
+  ]
 
   useEffect(() => { 
     loadTopics()
@@ -43,14 +61,13 @@ export default function TopicPage() {
     }
   }
 
-  const hasBlockingTopic = topics.some(t =>
-    ['topic_pending_supervisor', 'topic_pending_nucleo', 'topic_approved_nucleo'].includes(t.status)
-  )
+  const hasBlockingTopic = topics.some(t => blockingStatuses.includes(t.status))
+  const rejectedTopic = topics.find(t => rejectedStatuses.includes(t.status))
+  const canSubmit = !hasBlockingTopic
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
-      // Validar tipo de arquivo - apenas .docx
       const validTypes = [
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       ]
@@ -60,7 +77,6 @@ export default function TopicPage() {
         return
       }
       
-      // Validar tamanho (máximo 10MB)
       if (file.size > 10 * 1024 * 1024) {
         setError('O arquivo deve ter no máximo 10MB')
         return
@@ -82,11 +98,18 @@ export default function TopicPage() {
     setWarning(null)
     
     try {
+      if (!studentScientificArea?.id || !studentCourse?.id) {
+        setError('Dados do perfil incompletos. Recarregue a página.')
+        setSubmitting(false)
+        return
+      }
+
       const res = await topicService.submit({
         title,
-        scientific_area_id: studentScientificArea?.id ? Number(studentScientificArea.id) : 0,
-        course_id: studentCourse?.id ? Number(studentCourse.id) : 0,
-        justification: justification.trim() || null
+        scientific_area_id: studentScientificArea.id,
+        course_id: studentCourse.id,
+        justification: justification.trim() || null,
+        document: documentFile || undefined
       })
       
       if (res.similar_topics_warning?.has_similar) {
@@ -106,32 +129,93 @@ export default function TopicPage() {
   }
 
   function getStatusBadge(status: string) {
-    const map: Record<string, { className: string; label: string; dot: string }> = {
+    const map: Record<string, { label: string; dot: string; background: string; color: string; icon: string }> = {
+      // ⏳ AGUARDANDO (Amarelo/Dourado)
       topic_pending_supervisor: {
-        className: 'badge badge-warning',
-        label: 'Pendente (Supervisor)',
-        dot: 'var(--tertiary)'
+        label: 'Aguardando Supervisor',
+        dot: 'var(--tertiary)',
+        background: 'var(--tertiary-container)',
+        color: 'var(--on-tertiary-container)',
+        icon: 'hourglass_top'
       },
       topic_pending_nucleo: {
-        className: 'badge badge-warning',
-        label: 'Pendente (Núcleo)',
-        dot: 'var(--tertiary)'
+        label: 'Aguardando Núcleo',
+        dot: 'var(--tertiary)',
+        background: 'var(--tertiary-container)',
+        color: 'var(--on-tertiary-container)',
+        icon: 'hourglass_top'
       },
+      topic_assigned_for_review: {
+        label: 'Revisores Atribuídos',
+        dot: 'var(--tertiary)',
+        background: 'var(--tertiary-container)',
+        color: 'var(--on-tertiary-container)',
+        icon: 'assignment_ind'
+      },
+      topic_in_review: {
+        label: 'Em Revisão',
+        dot: 'var(--tertiary)',
+        background: 'var(--tertiary-container)',
+        color: 'var(--on-tertiary-container)',
+        icon: 'rate_review'
+      },
+      topic_pending: {
+        label: 'Aguardando Supervisor',
+        dot: 'var(--tertiary)',
+        background: 'var(--tertiary-container)',
+        color: 'var(--on-tertiary-container)',
+        icon: 'hourglass_top'
+      },
+      topic_approved: {
+        label: 'Aprovado pelo Supervisor',
+        dot: 'var(--tertiary)',
+        background: 'var(--tertiary-container)',
+        color: 'var(--on-tertiary-container)',
+        icon: 'hourglass_top'
+      },
+
+      // ✅ APROVADO (Verde)
       topic_approved_nucleo: {
-        className: 'badge badge-success',
-        label: 'Aprovado',
-        dot: 'var(--primary)'
+        label: 'Aprovado pelo Núcleo',
+        dot: 'var(--primary)',
+        background: 'var(--primary-container)',
+        color: 'var(--on-primary-container)',
+        icon: 'verified'
       },
+
+      // ❌ REJEITADO (Vermelho)
       topic_rejected: {
-        className: 'badge badge-error',
         label: 'Rejeitado',
-        dot: 'var(--error)'
+        dot: 'var(--error)',
+        background: 'var(--error-container)',
+        color: 'var(--on-error-container)',
+        icon: 'cancel'
+      },
+      topic_rejected_supervisor: {
+        label: 'Rejeitado pelo Supervisor',
+        dot: 'var(--error)',
+        background: 'var(--error-container)',
+        color: 'var(--on-error-container)',
+        icon: 'cancel'
+      },
+      topic_rejected_nucleo: {
+        label: 'Rejeitado pelo Núcleo',
+        dot: 'var(--error)',
+        background: 'var(--error-container)',
+        color: 'var(--on-error-container)',
+        icon: 'cancel'
       },
     }
-    return map[status] || {
-      className: 'badge',
-      label: status,
-      dot: 'var(--outline)'
+
+    const found = map[status]
+    if (found) return found
+
+    return {
+      label: status.replace(/_/g, ' ').replace(/topic_/g, ''),
+      dot: 'var(--outline)',
+      background: 'var(--surface-container)',
+      color: 'var(--on-surface-variant)',
+      icon: 'help'
     }
   }
 
@@ -212,78 +296,30 @@ export default function TopicPage() {
         </span>
       </div>
 
-      {/* Card do Perfil do Estudante */}
+      {/* Informações do Estudante */}
       {studentProfile && (
         <div style={{
-          background: 'linear-gradient(135deg, var(--primary-container), var(--surface-container-low))',
-          borderRadius: 'var(--radius-xl)',
-          padding: 'var(--space-3) var(--space-4)',
-          border: '1px solid var(--surface-container-high)',
           display: 'flex',
           alignItems: 'center',
-          gap: 'var(--space-4)',
-          flexWrap: 'wrap',
-          marginBottom: 'var(--space-4)'
+          gap: 'var(--space-3)',
+          padding: 'var(--space-2) var(--space-3)',
+          marginBottom: 'var(--space-4)',
+          background: 'var(--surface-container-low)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--outline-variant)',
+          fontSize: 'var(--body-md)',
+          color: 'var(--on-surface-variant)',
+          flexWrap: 'wrap'
         }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '50%',
-            background: 'var(--primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <span className="material-symbols-outlined" style={{ color: 'var(--on-primary)', fontSize: '24px' }}>
-              school
+          <span style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>
+            {user?.name}
+          </span>
+          {studentNumber && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>badge</span>
+              {studentNumber}
             </span>
-          </div>
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <p style={{
-              fontSize: 'var(--label-md)',
-              color: 'var(--on-primary-container)',
-              fontWeight: 'var(--font-medium)',
-              marginBottom: '2px'
-            }}>
-              Dados do Estudante
-            </p>
-            <p style={{
-              fontSize: 'var(--body-md)',
-              color: 'var(--on-surface)',
-              fontWeight: 'var(--font-semibold)',
-              margin: 0
-            }}>
-              {user?.name}
-            </p>
-            <div style={{
-              display: 'flex',
-              gap: 'var(--space-3)',
-              marginTop: '4px',
-              flexWrap: 'wrap',
-              fontSize: 'var(--body-md)',
-              color: 'var(--on-surface-variant)'
-            }}>
-              {studentNumber && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>badge</span>
-                  {studentNumber}
-                </span>
-              )}
-              {studentCourse && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>book</span>
-                  {studentCourse.name}
-                </span>
-              )}
-              {studentScientificArea && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>science</span>
-                  {studentScientificArea.name}
-                </span>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -306,6 +342,39 @@ export default function TopicPage() {
         </div>
       )}
 
+      {/* Aviso de tema rejeitado */}
+      {rejectedTopic && !hasBlockingTopic && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 'var(--space-2)',
+          padding: 'var(--space-3) var(--space-4)',
+          background: 'var(--error-container)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--error)',
+          color: 'var(--on-error-container)',
+          fontSize: 'var(--body-md)',
+          marginBottom: 'var(--space-4)'
+        }}>
+          <span className="material-symbols-outlined" style={{
+            fontSize: '24px',
+            color: 'var(--error)',
+            flexShrink: 0
+          }}>
+            cancel
+          </span>
+          <div>
+            <p style={{ fontWeight: 'var(--font-semibold)', marginBottom: '4px' }}>
+              {getStatusBadge(rejectedTopic.status).label}
+            </p>
+            <p>
+              O seu tema "{rejectedTopic.title}" foi rejeitado. 
+              Pode submeter um novo tema abaixo.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Lista de temas */}
       {topics.length > 0 && (
         <div style={{
@@ -317,6 +386,8 @@ export default function TopicPage() {
           {topics.map((t: Topic) => {
             const badge = getStatusBadge(t.status)
             const isApproved = t.status === 'topic_approved_nucleo'
+            const isRejected = rejectedStatuses.includes(t.status)
+            const isPending = !isApproved && !isRejected
             
             return (
               <div
@@ -328,8 +399,16 @@ export default function TopicPage() {
                   gap: 'var(--space-2)',
                   padding: 'var(--space-3) var(--space-4)',
                   transition: 'box-shadow 0.2s',
-                  border: isApproved ? '1px solid var(--primary)' : '1px solid var(--outline-variant)',
-                  background: isApproved ? 'color-mix(in srgb, var(--surface) 95%, var(--primary-container))' : 'var(--surface)'
+                  border: isApproved 
+                    ? '1px solid var(--primary)' 
+                    : isRejected 
+                      ? '1px solid var(--error)' 
+                      : '1px solid var(--tertiary)',
+                  background: isApproved 
+                    ? 'color-mix(in srgb, var(--surface) 95%, var(--primary-container))' 
+                    : isRejected 
+                      ? 'color-mix(in srgb, var(--surface) 95%, var(--error-container))' 
+                      : 'color-mix(in srgb, var(--surface) 95%, var(--tertiary-container))'
                 }}
               >
                 <div style={{ 
@@ -359,16 +438,16 @@ export default function TopicPage() {
                       }}>
                         {t.title}
                       </h3>
-                      {isApproved && (
-                        <span className="material-symbols-outlined" style={{ 
-                          fontSize: '20px', 
-                          color: 'var(--primary)',
-                          flexShrink: 0
-                        }} title="Tema aprovado">
-                          verified
-                        </span>
-                      )}
+                      <span className="material-symbols-outlined" style={{ 
+                        fontSize: '20px', 
+                        color: badge.dot,
+                        flexShrink: 0
+                      }} title={badge.label}>
+                        {badge.icon}
+                      </span>
                     </div>
+                    
+                    {/* Tags de Curso e Área Científica */}
                     <div style={{ 
                       display: 'flex', 
                       gap: '8px', 
@@ -397,7 +476,7 @@ export default function TopicPage() {
                           {t.course.name}
                         </span>
                       )}
-                      {(t as any).document_path && (
+                      {t.document_path && (
                         <span style={{
                           fontSize: 'var(--label-sm)',
                           color: 'var(--primary)',
@@ -413,36 +492,52 @@ export default function TopicPage() {
                         </span>
                       )}
                     </div>
+
+                    {/* Badge de Status */}
                     <span style={{
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '6px',
-                      padding: '2px 10px',
+                      padding: '4px 12px',
                       borderRadius: 'var(--radius-full)',
                       fontSize: 'var(--label-md)',
                       fontWeight: 'var(--font-medium)',
                       marginTop: '8px',
-                      background: isApproved 
-                        ? 'var(--primary-container)' 
-                        : `var(${badge.dot.includes('primary') ? 'primary-container' : badge.dot.includes('error') ? 'error-container' : badge.dot.includes('tertiary') ? 'tertiary-container' : 'surface-container'})`,
-                      color: isApproved 
-                        ? 'var(--on-primary-container)' 
-                        : `var(${badge.dot.includes('primary') ? 'on-primary-container' : badge.dot.includes('error') ? 'on-error-container' : badge.dot.includes('tertiary') ? 'on-tertiary-container' : 'on-surface-variant'})`,
-                      whiteSpace: 'nowrap'
+                      background: badge.background,
+                      color: badge.color,
+                      whiteSpace: 'nowrap',
+                      border: `1px solid ${badge.dot}`
                     }}>
                       <span style={{
-                        width: '6px',
-                        height: '6px',
+                        width: '8px',
+                        height: '8px',
                         borderRadius: 'var(--radius-full)',
-                        background: badge.dot
+                        background: badge.dot,
+                        flexShrink: 0
                       }} />
                       {t.status_label || badge.label}
                     </span>
+
+                    {/* Data de submissão */}
+                    <div style={{
+                      fontSize: 'var(--label-sm)',
+                      color: 'var(--on-surface-variant)',
+                      marginTop: '6px'
+                    }}>
+                      Submetido em: {new Date(t.submitted_at).toLocaleDateString('pt-PT', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
                   </div>
                 </div>
 
                 <TopicJustificationToggle justification={t.justification} showEmpty compact />
 
+                {/* Mensagem para aprovado */}
                 {isApproved && (
                   <div style={{
                     display: 'flex',
@@ -464,6 +559,52 @@ export default function TopicPage() {
                     </span>
                   </div>
                 )}
+
+                {/* Mensagem para rejeitado */}
+                {isRejected && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: 'var(--space-2) var(--space-3)',
+                    background: 'var(--error-container)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--error)',
+                    fontSize: 'var(--body-sm)',
+                    color: 'var(--on-error-container)',
+                    fontFamily: 'var(--font-family)'
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--error)' }}>
+                      info
+                    </span>
+                    <span>
+                      Este tema foi rejeitado. Pode submeter um novo tema.
+                    </span>
+                  </div>
+                )}
+
+                {/* Mensagem para pendente */}
+                {isPending && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: 'var(--space-2) var(--space-3)',
+                    background: 'var(--tertiary-container)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--tertiary)',
+                    fontSize: 'var(--body-sm)',
+                    color: 'var(--on-tertiary-container)',
+                    fontFamily: 'var(--font-family)'
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--tertiary)' }}>
+                      hourglass_top
+                    </span>
+                    <span>
+                      Aguarde a decisão.
+                    </span>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -471,7 +612,7 @@ export default function TopicPage() {
       )}
 
       {/* Estado vazio */}
-      {topics.length === 0 && !hasBlockingTopic && (
+      {topics.length === 0 && canSubmit && (
         <div style={{
           textAlign: 'center',
           padding: 'var(--space-5) var(--space-3)',
@@ -498,16 +639,16 @@ export default function TopicPage() {
       )}
 
       {/* Aviso de tema bloqueante */}
-      {hasBlockingTopic && !topics.some(t => t.status === 'topic_approved_nucleo') && (
+      {hasBlockingTopic && (
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
           gap: 'var(--space-2)',
           padding: 'var(--space-3) var(--space-4)',
-          background: 'var(--surface-container)',
+          background: 'var(--tertiary-container)',
           borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--outline-variant)',
-          color: 'var(--on-surface-variant)',
+          border: '1px solid var(--tertiary)',
+          color: 'var(--on-tertiary-container)',
           fontSize: 'var(--body-md)',
           marginBottom: 'var(--space-4)'
         }}>
@@ -516,16 +657,16 @@ export default function TopicPage() {
             color: 'var(--tertiary)',
             flexShrink: 0
           }}>
-            info
+            hourglass_top
           </span>
           <p>
-            Já tens um tema em curso. Não podes submeter um novo tema neste momento.
+            Já tens um tema em curso. Aguarda a decisão antes de submeter um novo tema.
           </p>
         </div>
       )}
 
       {/* Formulário de submissão */}
-      {!hasBlockingTopic && (
+      {canSubmit && (
         <form
           onSubmit={handleSubmit}
           className="card"
@@ -542,119 +683,10 @@ export default function TopicPage() {
             color: 'var(--on-surface)',
             marginBottom: 'var(--space-1)'
           }}>
-            Submeter novo tema
+            {rejectedTopic ? 'Submeter novo tema' : 'Submeter tema'}
           </h2>
 
-          {/* Campo: Título */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-            <label
-              htmlFor="title"
-              style={{
-                fontSize: 'var(--label-md)',
-                fontWeight: 'var(--font-medium)',
-                color: 'var(--on-surface-variant)'
-              }}
-            >
-              Título do tema
-            </label>
-            <div style={{ position: 'relative' }}>
-              <span className="material-symbols-outlined" style={{
-                position: 'absolute',
-                left: '14px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--outline)',
-                fontSize: '20px',
-                pointerEvents: 'none'
-              }}>
-                edit
-              </span>
-              <input
-                id="title"
-                type="text"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="Ex: Impacto da malária na saúde infantil em Maputo"
-                required
-                style={{
-                  width: '100%',
-                  padding: '14px 16px 14px 44px',
-                  background: 'var(--surface-container-lowest)',
-                  border: '1px solid var(--outline-variant)',
-                  borderRadius: 'var(--radius-lg)',
-                  fontSize: 'var(--body-md)',
-                  fontFamily: 'var(--font-family)',
-                  color: 'var(--on-surface)',
-                  outline: 'none',
-                  transition: 'all 0.2s ease',
-                  boxSizing: 'border-box'
-                }}
-                onFocus={e => {
-                  e.target.style.borderColor = 'var(--primary)'
-                  e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = 'var(--outline-variant)'
-                  e.target.style.boxShadow = 'none'
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Campo: Justificação */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-            <label
-              htmlFor="justification"
-              style={{
-                fontSize: 'var(--label-md)',
-                fontWeight: 'var(--font-medium)',
-                color: 'var(--on-surface-variant)'
-              }}
-            >
-              Justificação do tema
-            </label>
-            <textarea
-              id="justification"
-              value={justification}
-              onChange={e => setJustification(e.target.value)}
-              placeholder="Explique brevemente a relevância do tema proposto, objetivos e contribuição esperada para a área científica."
-              rows={5}
-              maxLength={5000}
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                background: 'var(--surface-container-lowest)',
-                border: '1px solid var(--outline-variant)',
-                borderRadius: 'var(--radius-lg)',
-                fontSize: 'var(--body-md)',
-                fontFamily: 'var(--font-family)',
-                color: 'var(--on-surface)',
-                outline: 'none',
-                transition: 'all 0.2s ease',
-                boxSizing: 'border-box',
-                resize: 'vertical',
-                minHeight: '120px',
-                lineHeight: 1.6
-              }}
-              onFocus={e => {
-                e.target.style.borderColor = 'var(--primary)'
-                e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
-              }}
-              onBlur={e => {
-                e.target.style.borderColor = 'var(--outline-variant)'
-                e.target.style.boxShadow = 'none'
-              }}
-            />
-            <span style={{
-              fontSize: 'var(--label-md)',
-              color: 'var(--outline)',
-              textAlign: 'right'
-            }}>
-              {justification.length}/5000 caracteres
-            </span>
-          </div>
-
-          {/* Grid: Curso + Área Científica (somente leitura) */}
+          {/* Grid: Curso + Área Científica (SOMENTE LEITURA) */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
@@ -719,6 +751,109 @@ export default function TopicPage() {
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Campo: Título */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <label htmlFor="title" style={{
+              fontSize: 'var(--label-md)',
+              fontWeight: 'var(--font-medium)',
+              color: 'var(--on-surface-variant)'
+            }}>
+              Título do tema
+            </label>
+            <div style={{ position: 'relative' }}>
+              <span className="material-symbols-outlined" style={{
+                position: 'absolute',
+                left: '14px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--outline)',
+                fontSize: '20px',
+                pointerEvents: 'none'
+              }}>
+                edit
+              </span>
+              <input
+                id="title"
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Ex: Impacto da malária na saúde infantil em Maputo"
+                required
+                style={{
+                  width: '100%',
+                  padding: '14px 16px 14px 44px',
+                  background: 'var(--surface-container-lowest)',
+                  border: '1px solid var(--outline-variant)',
+                  borderRadius: 'var(--radius-lg)',
+                  fontSize: 'var(--body-md)',
+                  fontFamily: 'var(--font-family)',
+                  color: 'var(--on-surface)',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={e => {
+                  e.target.style.borderColor = 'var(--primary)'
+                  e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
+                }}
+                onBlur={e => {
+                  e.target.style.borderColor = 'var(--outline-variant)'
+                  e.target.style.boxShadow = 'none'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Campo: Justificação */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <label htmlFor="justification" style={{
+              fontSize: 'var(--label-md)',
+              fontWeight: 'var(--font-medium)',
+              color: 'var(--on-surface-variant)'
+            }}>
+              Justificação do tema
+            </label>
+            <textarea
+              id="justification"
+              value={justification}
+              onChange={e => setJustification(e.target.value)}
+              placeholder="Explique brevemente a relevância do tema proposto, objetivos e contribuição esperada para a área científica."
+              rows={5}
+              maxLength={5000}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                background: 'var(--surface-container-lowest)',
+                border: '1px solid var(--outline-variant)',
+                borderRadius: 'var(--radius-lg)',
+                fontSize: 'var(--body-md)',
+                fontFamily: 'var(--font-family)',
+                color: 'var(--on-surface)',
+                outline: 'none',
+                transition: 'all 0.2s ease',
+                boxSizing: 'border-box',
+                resize: 'vertical',
+                minHeight: '120px',
+                lineHeight: 1.6
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = 'var(--primary)'
+                e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = 'var(--outline-variant)'
+                e.target.style.boxShadow = 'none'
+              }}
+            />
+            <span style={{
+              fontSize: 'var(--label-md)',
+              color: 'var(--outline)',
+              textAlign: 'right'
+            }}>
+              {justification.length}/5000 caracteres
+            </span>
           </div>
 
           {/* Campo: Upload de Documento */}
@@ -919,10 +1054,10 @@ export default function TopicPage() {
             flexDirection: 'column',
             gap: 'var(--space-2)',
             padding: 'var(--space-3) var(--space-4)',
-            background: 'var(--tertiary-fixed)',
-            color: 'var(--on-tertiary-fixed)',
+            background: 'var(--tertiary-container)',
+            color: 'var(--on-tertiary-container)',
             borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--tertiary-container)',
+            border: '1px solid var(--tertiary)',
             fontSize: 'var(--body-md)',
             fontFamily: 'var(--font-family)',
             marginTop: 'var(--space-4)'
@@ -936,7 +1071,7 @@ export default function TopicPage() {
               Temas similares encontrados
             </strong>
           </div>
-          <p style={{ color: 'var(--on-tertiary-fixed)', opacity: 0.9 }}>
+          <p>
             Encontrámos temas parecidos já aprovados. Verifique se o seu tema não é duplicado:
           </p>
           <ul style={{

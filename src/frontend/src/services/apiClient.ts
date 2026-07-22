@@ -18,6 +18,7 @@ function getHeaders(): Record<string, string> {
 
 interface ApiErrorPayload {
   message?: string;
+  errors?: Record<string, string[]>;  // 🆕 Para erros de validação
 }
 
 interface HttpError extends Error {
@@ -31,9 +32,22 @@ function isApiErrorPayload(value: unknown): value is ApiErrorPayload {
 
 async function readError(response: Response, fallbackMessage: string): Promise<HttpError> {
   const error = await response.json().catch(() => ({ message: fallbackMessage })) as unknown;
-  const message = isApiErrorPayload(error) && error.message ? error.message : fallbackMessage;
+  
+  // 🆕 Trata erros de validação do Laravel
+  let message = fallbackMessage;
+  if (isApiErrorPayload(error) && error.message) {
+    message = error.message;
+    
+    // Adiciona detalhes dos erros de validação
+    if (error.errors) {
+      const details = Object.values(error.errors).flat().join('; ');
+      if (details) {
+        message = `${message} (${details})`;
+      }
+    }
+  }
+  
   const err = new Error(message) as HttpError;
-
   err.status = response.status;
   err.data = error;
 
@@ -139,15 +153,17 @@ export async function downloadApiFile(url: string, fallbackFilename?: string): P
 
 // Requisição JSON padrão
 export async function req<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
-  const headers = {
-    ...getHeaders(),
-    'Content-Type': 'application/json',
-  };
+  const headers = getHeaders();
+  
+  // 🆕 Só adiciona Content-Type se NÃO for FormData
+  if (!(body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const response = await fetch(`${API_BASE_URL}${url}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
   });
 
   if (!response.ok) {
@@ -157,7 +173,7 @@ export async function req<T = unknown>(method: string, url: string, body?: unkno
   return response.json() as Promise<T>;
 }
 
-// Requisição FormData (para upload de arquivos)
+// 🆕 Requisição específica para FormData (multipart/form-data)
 export async function reqFormData<T = unknown>(method: string, url: string, formData: FormData): Promise<T> {
   const headers: Record<string, string> = {
     'Accept': 'application/json',
@@ -168,7 +184,8 @@ export async function reqFormData<T = unknown>(method: string, url: string, form
     headers['Authorization'] = `Bearer ${token}`;
   }
   
-  // Não define Content-Type - o browser define automaticamente com boundary para FormData
+  // ⚠️ NÃO define Content-Type manualmente
+  // O browser define automaticamente: multipart/form-data; boundary=...
 
   const response = await fetch(`${API_BASE_URL}${url}`, {
     method,

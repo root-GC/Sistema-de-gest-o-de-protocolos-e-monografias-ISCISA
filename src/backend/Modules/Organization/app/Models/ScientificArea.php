@@ -35,4 +35,5 @@ class ScientificArea extends Model
     {
         return $this->hasMany(CoordinatorProfile::class);
     }
+   
 }

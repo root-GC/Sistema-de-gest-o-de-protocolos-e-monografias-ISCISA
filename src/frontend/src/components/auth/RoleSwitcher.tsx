@@ -1,3 +1,4 @@
+//components/auth/RoleSwitcher.tsx
 import { useAuth } from '../../context/AuthContext';
 
 const ROLE_LABELS: Record<string, string> = {

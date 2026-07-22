@@ -14,11 +14,65 @@ export type Role =
   | 'secretary'
   | 'admin';
 
-export interface Profile {
-  course?: { name: string };
-  scientific_area?: { name: string };
-  organ?: { name: string };
+export interface CourseInfo {
+  id: number;
+  name: string;
+  code?: string;
 }
+
+export interface ScientificAreaInfo {
+  id: number;
+  name: string;
+}
+
+export interface OrganInfo {
+  id: number;
+  name: string;
+  type?: string;
+}
+
+export interface StudentProfile {
+  id: number;
+  student_number: string;
+  supervisor_id: number;
+  course: CourseInfo | null;
+  scientific_area: ScientificAreaInfo | null;
+}
+
+export interface TeacherProfile {
+  id: number;
+  department?: string;
+  academic_degree?: string;
+  is_internal?: boolean;
+  scientific_area: ScientificAreaInfo | null;
+}
+
+export interface CoordinatorProfile {
+  id: number;
+  office?: string;
+  course: CourseInfo | null;
+  scientific_area: ScientificAreaInfo | null;
+}
+
+export interface SecretaryProfile {
+  id: number;
+  office?: string;
+  organ: OrganInfo | null;
+}
+
+export interface AdminProfile {
+  id: number;
+  access_scope?: string;
+  organ: OrganInfo | null;
+}
+
+export type Profile = 
+  | StudentProfile 
+  | TeacherProfile 
+  | CoordinatorProfile 
+  | SecretaryProfile 
+  | AdminProfile 
+  | null;
 
 export interface User {
   id: string;
@@ -34,24 +88,30 @@ export interface UserPayload {
   status: 'active' | 'inactive';
   roles: Role[];
   permissions: string[];
-  profiles: Record<Role, Profile | null>;
+  profiles: {
+    student?: StudentProfile | null;
+    teacher?: TeacherProfile | null;
+    supervisor?: TeacherProfile | null;
+    reviewer?: TeacherProfile | null;
+    coordinator?: CoordinatorProfile | null;
+    secretary?: SecretaryProfile | null;
+    admin?: AdminProfile | null;
+  };
 }
 
 interface AuthContextType {
   user: User | null;
   roles: Role[];
   permissions: string[];
-  profiles: Record<Role, Profile | null>;
+  profiles: UserPayload['profiles'];
   activeRole: Role | null;
-  activeProfile: Profile | null;
+  activeProfile: Profile;
   loading: boolean;
   login: (email: string, password: string) => Promise<UserPayload>;
   completeAuth: (token: string, userData: UserPayload) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: (role: Role) => void;
   refresh: () => Promise<void>;
-
-  // Funções de verificação de permissões para o dashboard
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
   hasAllPermissions: (permissions: string[]) => boolean;
@@ -65,34 +125,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [profiles, setProfiles] = useState<Record<Role, Profile | null>>({} as Record<Role, Profile | null>);
+  const [profiles, setProfiles] = useState<UserPayload['profiles']>({});
   const [activeRole, setActiveRole] = useState<Role | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);  // ✅ Começa como true
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-  // Hidratar sessão ao carregar
+  // 🆕 Hidratar sessão ao carregar - SINCRONIZADO
   useEffect(() => {
     const token = localStorage.getItem('sgpmc_token');
     const saved = localStorage.getItem('sgpmc_user');
+    
     if (token && saved) {
       try {
-        hydrate(JSON.parse(saved) as UserPayload);
-      } catch {
+        const userData = JSON.parse(saved) as UserPayload;
+        console.log('🔍 Hidratando sessão:', userData);
+        hydrate(userData);
+      } catch (error) {
+        console.error('❌ Erro ao hidratar sessão:', error);
         clear();
       }
+    } else {
+      // Se não tem token, limpa tudo
+      clear();
     }
+    
+    // ✅ Só termina o loading DEPOIS de processar
     setLoading(false);
   }, []);
 
   function hydrate(data: UserPayload) {
-    setUser({ id: data.id, name: data.name, email: data.email, status: data.status });
+    console.log('💧 Hydrate:', {
+      id: data.id,
+      name: data.name,
+      roles: data.roles,
+      permissions: data.permissions?.length,
+      profiles: Object.keys(data.profiles || {})
+    });
+    
+    setUser({ 
+      id: data.id, 
+      name: data.name, 
+      email: data.email, 
+      status: data.status 
+    });
     setRoles(data.roles ?? []);
     setPermissions(data.permissions ?? []);
     setProfiles(data.profiles ?? {});
 
-    const saved = localStorage.getItem('sgpmc_active_role') as Role | null;
-    const first = data.roles?.[0] ?? null;
-    setActiveRole(data.roles?.includes(saved!) ? saved : first);
+    // Define o activeRole
+    const savedRole = localStorage.getItem('sgpmc_active_role') as Role | null;
+    const firstRole = data.roles?.[0] ?? null;
+    
+    // Usa o role salvo se existir nos roles do usuário
+    const roleToSet = (savedRole && data.roles?.includes(savedRole)) 
+      ? savedRole 
+      : firstRole;
+    
+    setActiveRole(roleToSet);
+    
+    console.log('✅ Active role:', roleToSet);
   }
 
   const login = useCallback(async (email: string, password: string): Promise<UserPayload> => {
@@ -100,20 +191,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { token, user: userData } = await authService.login(email, password);
 
-      // Persiste os dados primeiro
+      console.log('🔑 Login bem-sucedido:', userData);
+
+      // Persiste os dados
       localStorage.setItem('sgpmc_token', token);
       localStorage.setItem('sgpmc_user', JSON.stringify(userData));
 
-      // Atualiza o estado
+      // Hidrata o estado
       hydrate(userData);
 
-      // Aguarda o React processar as atualizações de estado
+      // Pequeno delay para garantir que o React processou
       await new Promise<void>(resolve => {
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            resolve();
-          }, 100);
-        });
+        setTimeout(() => resolve(), 50);
       });
 
       return userData;
@@ -122,8 +211,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Usado depois de fluxos que já devolvem token + user prontos
-  // (ex: verificação de OTP no registo), sem passar por email/password.
   const completeAuth = useCallback(async (token: string, userData: UserPayload): Promise<void> => {
     setIsAuthenticating(true);
     try {
@@ -133,9 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hydrate(userData);
 
       await new Promise<void>(resolve => {
-        requestAnimationFrame(() => {
-          setTimeout(() => resolve(), 100);
-        });
+        setTimeout(() => resolve(), 50);
       });
     } finally {
       setIsAuthenticating(false);
@@ -146,14 +231,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authService.logout();
     } catch {
-      // Ignora erros de logout
+      // Ignora erros
     } finally {
       clear();
     }
   }, []);
 
   const switchRole = useCallback((role: Role) => {
-    if (!roles.includes(role)) return;
+    if (!roles.includes(role)) {
+      console.warn(`⚠️ Role "${role}" não disponível. Roles:`, roles);
+      return;
+    }
+    console.log(`🔄 Trocando para role: ${role}`);
     setActiveRole(role);
     localStorage.setItem('sgpmc_active_role', role);
   }, [roles]);
@@ -164,57 +253,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('sgpmc_user', JSON.stringify(userData));
       hydrate(userData);
     } catch (error) {
-      console.error('Failed to refresh user data:', error);
+      console.error('❌ Failed to refresh user data:', error);
       clear();
     }
   }, []);
 
   function clear() {
+    console.log('🧹 Limpando sessão');
     localStorage.removeItem('sgpmc_token');
     localStorage.removeItem('sgpmc_user');
     localStorage.removeItem('sgpmc_active_role');
     setUser(null);
     setRoles([]);
     setPermissions([]);
-    setProfiles({} as Record<Role, Profile | null>);
+    setProfiles({});
     setActiveRole(null);
   }
 
-  // Verifica se o usuário tem uma permissão específica
   const hasPermission = useCallback((permission: string): boolean => {
     return permissions.includes(permission);
   }, [permissions]);
 
-  // Verifica se o usuário tem pelo menos uma das permissões
   const hasAnyPermission = useCallback((perms: string[]): boolean => {
     return perms.some(p => permissions.includes(p));
   }, [permissions]);
 
-  // Verifica se o usuário tem todas as permissões
   const hasAllPermissions = useCallback((perms: string[]): boolean => {
     return perms.every(p => permissions.includes(p));
   }, [permissions]);
 
-  // Verifica se pode acessar um widget baseado em suas configurações
   const canAccessWidget = useCallback((
     requiredPermissions?: string[],
     anyPermission?: boolean
   ): boolean => {
-    // Se não requer permissões, acesso público
     if (!requiredPermissions || requiredPermissions.length === 0) {
       return true;
     }
-
-    // Se anyPermission, basta ter uma
     if (anyPermission) {
       return hasAnyPermission(requiredPermissions);
     }
-
-    // Por padrão, precisa ter todas
     return hasAllPermissions(requiredPermissions);
   }, [hasAnyPermission, hasAllPermissions]);
 
-  const activeProfile = profiles[activeRole!] ?? null;
+  // 🆕 Pega o perfil ativo baseado no activeRole
+  const activeProfile = activeRole ? (profiles[activeRole] ?? null) : null;
+
+  // ✅ Só está carregando se loading OU authenticating
+  const isLoading = loading || isAuthenticating;
+
+  console.log('📊 Auth State:', {
+    user: user?.name,
+    activeRole,
+    rolesCount: roles.length,
+    permissionsCount: permissions.length,
+    profilesCount: Object.keys(profiles).length,
+    loading,
+    isAuthenticating,
+    isLoading
+  });
 
   return (
     <AuthContext.Provider
@@ -225,7 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profiles,
         activeRole,
         activeProfile,
-        loading: loading || isAuthenticating,
+        loading: isLoading,  // ✅ Usa a variável combinada
         login,
         completeAuth,
         logout,
