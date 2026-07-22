@@ -40,8 +40,8 @@ const ReportsPage            = lazy(() => import('./pages/coordinator/ReportsPag
 const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtocolsPage'))
 
 // Admin
-const AdminUsersPage         = lazy(() => import('./pages/admin/AdminUsersPage'))
-const AdminOrgansPage        = lazy(() => import('./pages/admin/AdminOrgansPage'))
+const AdminUsersPage         = lazy(() => import('./pages/system-admin/AdminUsersPage'))
+const AdminOrgansPage        = lazy(() => import('./pages/system-admin/AdminOrgansPage'))
 
 // Páginas públicas
 const RegisterPage       = lazy(() => import('./pages/RegisterPage'))
