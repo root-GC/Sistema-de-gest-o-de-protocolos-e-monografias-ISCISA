@@ -49,6 +49,11 @@ const GeneralAdminDashboard = lazy(() => import('./pages/general-admin/GeneralAd
 const ManagePersonnelPage  = lazy(() => import('./pages/general-admin/ManagePersonnelPage'))
 const CoursesManagementPage = lazy(() => import('./pages/general-admin/CoursesManagementPage'))
 
+// Organ President
+const OrganPresidentDashboard = lazy(() => import('./pages/organ-president/OrganPresidentDashboard'))
+const ManageOrganMembersPage = lazy(() => import('./pages/organ-president/ManageOrganMembersPage'))
+
+
 // Páginas públicas
 const RegisterPage       = lazy(() => import('./pages/RegisterPage'))
 const VerifyOtpPage      = lazy(() => import('./pages/VerifyOtpPage'))
@@ -162,6 +167,11 @@ export default function App() {
                    <Route path="/general-admin/courses" element={<CoursesManagementPage />} />
                 </Route>
 
+                {/* ── Organ President ─────────────────────────────── */}
+                <Route element={<ProtectedRoute permission="admin.organs" />}>
+                  <Route path="/organ-president" element={<OrganPresidentDashboard />} />
+                  <Route path="/organ-president/members" element={<ManageOrganMembersPage />} />
+                </Route>
 
               </Route>
             </Route>

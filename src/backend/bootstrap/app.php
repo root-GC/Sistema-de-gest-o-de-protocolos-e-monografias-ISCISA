@@ -28,6 +28,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Sanctum stateful domains para SPA (React)
         $middleware->statefulApi();
     })
+    ->withMiddleware(function (Middleware $middleware) {
+    $middleware->alias([
+        'technical.admin' => \Modules\Auth\app\Http\Middleware\EnsureTechnicalAdmin::class,
+    ]);
+})
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {

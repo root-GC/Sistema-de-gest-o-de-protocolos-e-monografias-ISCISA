@@ -198,6 +198,7 @@ class RoleSeeder extends Seeder
                     'admin.users',
                     'admin.organs',
                     'admin.reports',
+                    'admin.roles',
                     'admin.settings',
                     'reports.view.all',
                     'reports.export',

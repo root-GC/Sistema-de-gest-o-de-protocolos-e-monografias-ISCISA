@@ -133,6 +133,30 @@ export const menuRegistry = [
     roles: ['secretary'],
   },
 
+  // ── Organ President (Presidente de Órgão) ─────────────────────────
+  {
+    id: 'organ_president',
+    label: 'O meu Órgão',
+    icon: 'ti-building',
+    route: '/organ-president',
+    permission: null,
+    roles: ['admin'], // Presidentes têm role 'admin' com organ_id específico
+    children: [
+      {
+        id: 'organ_president_dashboard',
+        label: 'Painel',
+        route: '/organ-president',
+        permission: null,
+      },
+      {
+        id: 'organ_president_members',
+        label: 'Membros',
+        route: '/organ-president/members',
+        permission: null,
+      },
+    ],
+  },
+
   // ── General Admin / Direção Científica ────────────────────────────
   {
     id: 'general_admin',

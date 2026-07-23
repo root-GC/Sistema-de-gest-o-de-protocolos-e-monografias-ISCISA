@@ -108,10 +108,11 @@ class PermissionSeeder extends Seeder
             ['code' => 'reports.export',        'description' => 'Exportar relatórios'],
 
             // ── ADMIN (gestão do sistema) ─────────────────────────────────
-            ['code' => 'admin.users',           'description' => 'Gerir utilizadores e atribuir papéis'],
-            ['code' => 'admin.organs',          'description' => 'Gerir órgãos, áreas científicas e cursos'],
-            ['code' => 'admin.reports',         'description' => 'Acesso total a relatórios e métricas'],
-            ['code' => 'admin.settings',        'description' => 'Configurar parâmetros do sistema'],
+            ['code' => 'admin.users',    'description' => 'Gerir utilizadores e atribuir papéis'],
+            ['code' => 'admin.organs',   'description' => 'Gerir órgãos, áreas científicas e cursos'],
+            ['code' => 'admin.reports',  'description' => 'Acesso total a relatórios e métricas'],
+            ['code' => 'admin.roles',    'description' => 'Gerir roles e permissions do sistema (apenas admin técnico)'],
+            ['code' => 'admin.settings', 'description' => 'Configurar parâmetros do sistema (apenas admin técnico)'],
         ];
 
         foreach ($permissions as $permission) {

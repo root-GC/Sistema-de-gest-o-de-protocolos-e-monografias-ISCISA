@@ -9,4 +9,9 @@ class Permission extends Model
 {
     use SoftDeletes;
     protected $fillable = ['code', 'description'];
+
+     public function roles()
+    {
+        return $this->belongsToMany(Role::class, 'role_permissions')->withTimestamps();
+    }
 }
