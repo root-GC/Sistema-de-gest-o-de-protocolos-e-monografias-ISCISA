@@ -123,15 +123,34 @@ export const menuRegistry = [
     roles: ['coordinator'],
   },
 
-  // ── Secretary ─────────────────────────────────────────────────────
-  {
-    id: 'secretary_protocols',
-    label: 'Gestão de submissões',
-    icon: 'ti-clipboard-list',
-    route: '/secretary/protocols',
-    permission: 'protocol.triage',
-    roles: ['secretary'],
-  },
+// Adiciona depois de "Gestão de submissões"
+// ── Secretary ─────────────────────────────────────────────────────
+{
+  id: 'secretary_protocols',
+  label: 'Gestão de submissões',
+  icon: 'ti-clipboard-list',
+  route: '/secretary/protocols',
+  permission: 'protocol.triage',
+  roles: ['secretary'],
+},
+// 🆕 Harmonização
+{
+  id: 'secretary_harmonization',
+  label: 'Harmonização',
+  icon: 'ti-balance',
+  route: '/secretary/harmonization',
+  permission: 'evaluation.harmonize',
+  roles: ['secretary'],
+},
+// 🆕 Revisões Concluídas
+{
+  id: 'secretary_completed',
+  label: 'Revisões Concluídas',
+  icon: 'ti-check-double',
+  route: '/secretary/completed',
+  permission: 'protocol.view.all',
+  roles: ['secretary'],
+},
 
   // ── Organ President (Presidente de Órgão) ─────────────────────────
   {

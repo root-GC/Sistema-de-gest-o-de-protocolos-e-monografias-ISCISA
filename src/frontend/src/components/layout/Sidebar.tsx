@@ -86,6 +86,15 @@ const ICON_MAP: Record<string, string> = {
   'ti-folder-open': 'folder_open',
   'ti-users': 'group',
   
+  // 🆕 Secretary icons
+  'ti-balance': 'balance',
+  'ti-check-double': 'done_all',
+  'ti-chart-bar': 'bar_chart',
+  'ti-eye': 'visibility',
+  'ti-calendar-event': 'event_available',
+  'ti-chart-pie': 'pie_chart',
+  'ti-home': 'home',
+  
   // Mapeamentos adicionais
   dashboard: 'dashboard',
   inicio: 'dashboard',
@@ -180,6 +189,16 @@ const ICON_MAP: Record<string, string> = {
   assignment: 'assignment',
   description: 'description',
   circle: 'circle',
+  balance: 'balance',
+  done_all: 'done_all',
+  shield_person: 'shield_person',
+  key: 'key',
+  hourglass_top: 'hourglass_top',
+  verified: 'verified',
+  cancel: 'cancel',
+  rate_review: 'rate_review',
+  assignment_ind: 'assignment_ind',
+  check_circle: 'check_circle',
 }
 
 // ============================================================
@@ -214,7 +233,6 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
   function toggleMenu(id: string) {
     if (!reallyExpanded && !isMobile) {
       onExpand()
-      // Pequeno delay para expandir antes de abrir o submenu
       setTimeout(() => setExpandedMenu(prev => ({ ...prev, [id]: !prev[id] })), 100)
       return
     }
@@ -223,7 +241,6 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
 
   function handleItemClick(route: string) {
     if (!reallyExpanded && !isMobile) {
-      // Expande e navega
       onExpand()
       setTimeout(() => navigate(route), 150)
     } else {

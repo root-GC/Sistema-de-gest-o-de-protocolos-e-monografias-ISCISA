@@ -38,6 +38,8 @@ const ReportsPage            = lazy(() => import('./pages/coordinator/ReportsPag
 
 // Secretary
 const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtocolsPage'))
+const HarmonizationPage = lazy(() => import('./pages/shared/secretary/HarmonizationPage'))
+const CompletedReviewsPage = lazy(() => import('./pages/shared/secretary/CompletedReviewsPage'))
 
 // Admin
 const AdminUsersPage         = lazy(() => import('./pages/system-admin/AdminUsersPage'))
@@ -146,6 +148,8 @@ export default function App() {
                 {/* ── Secretary ───────────────────────────────── */}
                 <Route element={<ProtectedRoute permission="protocol.triage" />}>
                   <Route path="/secretary/protocols" element={<SecretaryProtocolsPage />} />
+                   <Route path="/secretary/harmonization" element={<HarmonizationPage />} />
+                   <Route path="/secretary/completed" element={<CompletedReviewsPage />} />
                 </Route>
 
                 {/* ── Admin ───────────────────────────────────── */}
