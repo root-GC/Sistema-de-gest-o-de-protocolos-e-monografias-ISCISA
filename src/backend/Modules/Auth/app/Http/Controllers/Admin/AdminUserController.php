@@ -47,72 +47,52 @@ class AdminUserController extends Controller
     }
 
     // POST /api/v1/admin/users — Criar admin de órgão + enviar convite
-    public function store(Request $request)
-    {
-        Log::info('[AdminUserController] store chamado', [
-            'user_id' => $request->user()?->id,
-            'payload' => $request->except(['password', 'password_confirmation']),
+public function store(Request $request)
+{
+    Log::info('[AdminUserController] store chamado', [
+        'user_id' => $request->user()?->id,
+        'payload' => $request->except(['password', 'password_confirmation']),
+    ]);
+
+    $data = $request->validate([
+        'name'     => ['required', 'string', 'max:255'],
+        'email'    => ['required', 'email', 'unique:users,email'],
+        'organ_id' => ['required', 'integer', 'exists:organs,id'],
+        // 'password' removido — o AdminInviteService gera uma senha aleatória
+        // temporária e o utilizador define a sua própria via link de email.
+        // Aceitar 'password' aqui e ignorá-lo era o que causava a duplicação.
+    ]);
+
+    try {
+        $user = $this->service->invite([
+            'name'         => $data['name'],
+            'email'        => $data['email'],
+            'organ_id'     => $data['organ_id'],
+            'access_scope' => 'organ',
         ]);
 
-        $data = $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8'],
-            'organ_id' => ['required', 'integer', 'exists:organs,id'],
-        ]);
-
-        Log::info('[AdminUserController] store — dados validados', [
-            'name'     => $data['name'],
-            'email'    => $data['email'],
+        Log::info('[AdminUserController] store — admin criado e convite enviado', [
+            'user_id'  => $user->id,
             'organ_id' => $data['organ_id'],
         ]);
 
-        // Cria o utilizador com role 'admin'
-        $user = User::create([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
-            'password' => bcrypt($data['password']),
-            'status'   => 'active',
+        return response()->json([
+            'message' => 'Administrador criado e convite enviado com sucesso.',
+            'user'    => $user->load('roles', 'adminProfile'),
+        ], 201);
+    } catch (\Exception $e) {
+        Log::error('[AdminUserController] store — ERRO', [
+            'error' => $e->getMessage(),
         ]);
 
-        $roleId = \DB::table('roles')->where('name', 'admin')->value('id');
-        $user->roles()->sync([$roleId]);
-
-        Log::info('[AdminUserController] store — utilizador criado', [
-            'user_id'  => $user->id,
-            'role'     => 'admin',
-        ]);
-
-        // 🆕 Envia convite por email
-        try {
-            $this->service->invite([
-                'name'         => $user->name,
-                'email'        => $user->email,
-                'organ_id'     => $data['organ_id'],
-                'access_scope' => 'organ',
-            ]);
-
-            Log::info('[AdminUserController] store — convite enviado', [
-                'user_id'  => $user->id,
-                'organ_id' => $data['organ_id'],
-            ]);
-
-            return response()->json([
-                'message' => 'Administrador criado e convite enviado com sucesso.',
-                'user'    => $user->load('roles', 'adminProfile'),
-            ], 201);
-        } catch (\Exception $e) {
-            Log::error('[AdminUserController] store — ERRO no convite', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return response()->json([
-                'message' => 'Admin criado, mas houve um erro ao enviar o convite: ' . $e->getMessage(),
-                'user'    => $user->load('roles'),
-            ], 201);
-        }
+        // Aqui sim faz sentido devolver erro real, já que agora o user
+        // só é criado DENTRO da transação do service — se falhar o email
+        // depois da transação, o user já existe mas sem convite enviado.
+        return response()->json([
+            'message' => 'Erro ao criar administrador: ' . $e->getMessage(),
+        ], 500);
     }
+}
 
     // PUT /api/v1/admin/users/{id} — Atualizar utilizador
     public function update(Request $request, $id)
@@ -157,43 +137,43 @@ class AdminUserController extends Controller
         return response()->json(['message' => 'Utilizador eliminado.']);
     }
 
-    // POST /api/v1/admin/users/admins — Convidar admin de órgão (usuário já existente)
-    public function invite(Request $request)
-    {
-        Log::info('[AdminUserController] invite chamado', [
-            'user_id' => $request->user()?->id,
-            'payload' => $request->except(['password']),
-        ]);
+//     // POST /api/v1/admin/users/admins — Convidar admin de órgão (usuário já existente)
+//     public function invite(Request $request)
+//     {
+//         Log::info('[AdminUserController] invite chamado', [
+//             'user_id' => $request->user()?->id,
+//             'payload' => $request->except(['password']),
+//         ]);
 
-        $data = $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'email', 'unique:users,email'],
-            'organ_id' => ['required', 'integer', 'exists:organs,id'],
-        ]);
+//         $data = $request->validate([
+//             'name'     => ['required', 'string', 'max:255'],
+//             'email'    => ['required', 'email', 'unique:users,email'],
+//             'organ_id' => ['required', 'integer', 'exists:organs,id'],
+//         ]);
 
-        try {
-            $user = $this->service->invite([
-                ...$data,
-                'access_scope' => 'organ',
-            ]);
+//         try {
+//             $user = $this->service->invite([
+//                 ...$data,
+//                 'access_scope' => 'organ',
+//             ]);
 
-            Log::info('[AdminUserController] invite — convite enviado', [
-                'user_id'  => $user->id,
-                'email'    => $user->email,
-            ]);
+//             Log::info('[AdminUserController] invite — convite enviado', [
+//                 'user_id'  => $user->id,
+//                 'email'    => $user->email,
+//             ]);
 
-            return response()->json([
-                'message' => 'Convite enviado com sucesso.',
-                'user'    => $user,
-            ], 201);
-        } catch (\Exception $e) {
-            Log::error('[AdminUserController] invite — ERRO', [
-                'error' => $e->getMessage(),
-            ]);
+//             return response()->json([
+//                 'message' => 'Convite enviado com sucesso.',
+//                 'user'    => $user,
+//             ], 201);
+//         } catch (\Exception $e) {
+//             Log::error('[AdminUserController] invite — ERRO', [
+//                 'error' => $e->getMessage(),
+//             ]);
 
-            return response()->json([
-                'message' => 'Erro ao enviar o convite: ' . $e->getMessage(),
-            ], 500);
-        }
-    }
+//             return response()->json([
+//                 'message' => 'Erro ao enviar o convite: ' . $e->getMessage(),
+//             ], 500);
+//         }
+//     }
 }

@@ -4,6 +4,7 @@ namespace Modules\Auth\app\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\User\app\Models\User;
 
@@ -41,20 +42,44 @@ class AdminInviteService
             return $user;
         });
 
-        // Mesmo mecanismo de token que o "esqueci-me da senha" usa —
-        // não Password::broker(), que este projecto não utiliza.
-        $plainToken = $this->passwordService->createToken($user->email);
+        // A partir daqui a transação já fechou (commit). Se algo falhar
+        // abaixo (token ou email), fazemos rollback manual apagando tudo
+        // o que foi criado, para não deixar um user "fantasma" sem convite.
+        try {
+            $plainToken = $this->passwordService->createToken($user->email);
 
-        $link = rtrim(config('app.frontend_url'), '/')
-            . '/reset-password?email=' . urlencode($user->email)
-            . '&token=' . $plainToken;
+            $link = rtrim(config('app.frontend_url'), '/')
+                . '/reset-password?email=' . urlencode($user->email)
+                . '&token=' . $plainToken;
 
-        $this->mailer->send(
-            ['email' => $user->email, 'name' => $user->name],
-            'Bem-vindo ao SGPMC-ISCISA — Defina a sua senha',
-            view('emails.admin-invite', ['name' => $user->name, 'link' => $link, 'ttlMinutes' => 60])->render()
-        );
+            $this->mailer->send(
+                ['email' => $user->email, 'name' => $user->name],
+                'Bem-vindo ao SGPMC-ISCISA — Defina a sua senha',
+                view('auth::emails.admin-invite', ['name' => $user->name, 'link' => $link, 'ttlMinutes' => 60])->render()
+            );
+        } catch (\Throwable $e) {
+            Log::error('[AdminInviteService] falha ao enviar convite — a desfazer criação do utilizador', [
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->rollbackUser($user);
+
+            throw new \RuntimeException(
+                'Não foi possível enviar o email de convite. O administrador não foi criado. Detalhe: ' . $e->getMessage()
+            );
+        }
 
         return $user;
+    }
+
+    private function rollbackUser(User $user): void
+    {
+        DB::transaction(function () use ($user) {
+            DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+            $user->adminProfile()?->delete();
+            DB::table('user_roles')->where('user_id', $user->id)->delete();
+            $user->forceDelete(); // forceDelete, não soft delete — não deve sobrar registo nenhum
+        });
     }
 }
