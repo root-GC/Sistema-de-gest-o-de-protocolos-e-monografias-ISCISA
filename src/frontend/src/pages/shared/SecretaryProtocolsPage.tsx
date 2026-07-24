@@ -1,11 +1,14 @@
 // src/pages/secretary/SecretaryProtocolsPage.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { topicService, type Topic } from '../../services/topicService'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { monographService, type Monograph } from '../../services/monographService'
 import TopicJustification, { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
 
+// ============================================================
+// HELPERS
+// ============================================================
 function getTopicStatusStyle(status: string) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
     topic_pending_nucleo: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
@@ -30,26 +33,21 @@ function getProtocolStatusStyle(status: string) {
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }
 
+// Interface para revisor com carga (preparada para o futuro)
 interface ReviewerWithLoad {
   id: number
   name: string
-  email: string
-  academic_degree: string
-  currentLoad: number
-  maxLoad: number
+  email?: string
+  scientific_area_name?: string
+  currentLoad?: number  // Será preenchido quando a API retornar
+  maxLoad?: number      // Será preenchido quando a API retornar
 }
 
 type TabType = 'topics' | 'protocols' | 'monographs'
 
-const MOCK_REVIEWERS: ReviewerWithLoad[] = [
-  { id: 1, name: 'Dr. Armando Macuácua', email: 'armando@iscisa.ac.mz', academic_degree: 'Doutoramento', currentLoad: 3, maxLoad: 5 },
-  { id: 2, name: 'Dra. Carla Mondlane', email: 'carla@iscisa.ac.mz', academic_degree: 'Mestrado', currentLoad: 1, maxLoad: 5 },
-  { id: 3, name: 'Prof. Doutor José Chissano', email: 'jose@iscisa.ac.mz', academic_degree: 'Doutoramento', currentLoad: 5, maxLoad: 5 },
-  { id: 4, name: 'Dra. Ana Tembe', email: 'ana@iscisa.ac.mz', academic_degree: 'Mestrado', currentLoad: 2, maxLoad: 5 },
-  { id: 5, name: 'Dr. Pedro Nkosi', email: 'pedro@iscisa.ac.mz', academic_degree: 'Doutoramento', currentLoad: 0, maxLoad: 5 },
-  { id: 6, name: 'Dra. Sofia Mabunda', email: 'sofia@iscisa.ac.mz', academic_degree: 'Mestrado', currentLoad: 4, maxLoad: 5 },
-]
-
+// ============================================================
+// COMPONENTE PRINCIPAL
+// ============================================================
 export default function SecretaryProtocolsPage() {
   const [tab, setTab] = useState<TabType>('topics')
 
@@ -95,7 +93,8 @@ function TopicsTab() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Record<number, number[]>>({})
   const [assigningId, setAssigningId] = useState<number | null>(null)
-  const [reviewerSearch, setReviewerSearch] = useState('')
+  const [reviewersByTopic, setReviewersByTopic] = useState<Record<number, ReviewerWithLoad[]>>({})
+  const [reviewerSearch, setReviewerSearch] = useState<Record<number, string>>({})
 
   useEffect(() => { load() }, [])
 
@@ -105,6 +104,18 @@ function TopicsTab() {
       const { topics } = await topicService.listForSecretary()
       setTopics(topics)
     } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
+  }
+
+  async function loadReviewers(topicId: number) {
+    try {
+      const { reviewers } = await topicService.eligibleReviewers(topicId)
+      setReviewersByTopic(prev => ({ 
+        ...prev, 
+        [topicId]: reviewers.map(r => ({ ...r, currentLoad: undefined, maxLoad: undefined })) 
+      }))
+    } catch (e) {
+      setError((e as Error).message)
+    }
   }
 
   function toggleReviewer(topicId: number, reviewerId: number) {
@@ -118,14 +129,40 @@ function TopicsTab() {
     const ids = selected[topicId] ?? []
     if (!ids.length) return
     setAssigningId(topicId)
-    try { await topicService.assignReviewers(topicId, ids); setSelected(p => { const n = { ...p }; delete n[topicId]; return n }); await load() }
+    try { 
+      await topicService.assignReviewers(topicId, ids)
+      setSelected(p => { const n = { ...p }; delete n[topicId]; return n })
+      setReviewersByTopic(prev => { const n = { ...prev }; delete n[topicId]; return n })
+      setReviewerSearch(prev => { const n = { ...prev }; delete n[topicId]; return n })
+      await load() 
+    }
     catch (e) { setError((e as Error).message) } finally { setAssigningId(null) }
   }
 
   const pending = topics.filter(t => t.status === 'topic_pending_nucleo')
-  const filteredReviewers = MOCK_REVIEWERS.filter(r => !reviewerSearch || r.name.toLowerCase().includes(reviewerSearch.toLowerCase()))
 
-  function getLoadColor(c: number, m: number): string { if (c >= m) return 'var(--error)'; if (c >= m * 0.8) return 'var(--tertiary)'; return 'var(--primary)' }
+  // Função para filtrar revisores (performance otimizada para 10k+)
+  function getFilteredReviewers(topicId: number): ReviewerWithLoad[] {
+    const allReviewers = reviewersByTopic[topicId] ?? []
+    const search = reviewerSearch[topicId] ?? ''
+    
+    if (!search.trim()) return allReviewers
+    
+    const searchLower = search.toLowerCase()
+    return allReviewers.filter(r => 
+      r.name.toLowerCase().includes(searchLower) ||
+      (r.email && r.email.toLowerCase().includes(searchLower)) ||
+      (r.scientific_area_name && r.scientific_area_name.toLowerCase().includes(searchLower))
+    )
+  }
+
+  // Função para cor da carga (preparada para o futuro)
+  function getLoadColor(c?: number, m?: number): string {
+    if (!c || !m) return 'transparent'
+    if (c >= m) return 'var(--error)'
+    if (c >= m * 0.8) return 'var(--tertiary)'
+    return 'var(--primary)'
+  }
 
   if (loading) return <Spinner text="A carregar temas..." />
 
@@ -141,6 +178,9 @@ function TopicsTab() {
           {pending.map(t => {
             const s = getTopicStatusStyle(t.status)
             const sel = selected[t.id] ?? []
+            const filteredReviewers = getFilteredReviewers(t.id)
+            const searchValue = reviewerSearch[t.id] ?? ''
+            
             return (
               <div key={t.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)' }}>
                 <h3 style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-bold)', marginBottom: '6px' }}>{t.title}</h3>
@@ -148,29 +188,137 @@ function TopicsTab() {
                 <TopicJustificationToggle justification={t.justification} showEmpty compact />
 
                 <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-                    <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)' }}>Docentes disponíveis</p>
-                    <input type="text" value={reviewerSearch} onChange={e => setReviewerSearch(e.target.value)} placeholder="Pesquisar docente..." style={{ padding: '6px 10px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--label-sm)', fontFamily: 'var(--font-family)', outline: 'none', width: '220px' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginBottom: 'var(--space-2)', maxHeight: '300px', overflow: 'auto' }}>
-                    {filteredReviewers.map(r => {
-                      const checked = sel.includes(r.id)
-                      const loadColor = getLoadColor(r.currentLoad, r.maxLoad)
-                      return (
-                        <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: checked ? 'var(--primary-container)' : 'var(--surface-container-lowest)', color: checked ? 'var(--on-primary-container)' : 'var(--on-surface)', fontSize: 'var(--body-sm)', border: checked ? '1px solid var(--primary)' : '1px solid transparent', transition: 'all 0.15s' }}>
-                          <input type="checkbox" checked={checked} onChange={() => toggleReviewer(t.id, r.id)} style={{ accentColor: 'var(--primary)', cursor: 'pointer', width: '16px', height: '16px' }} />
-                          <span style={{ flex: 1 }}>
-                            <span style={{ fontWeight: 'var(--font-semibold)' }}>{r.name}</span>
-                            <span style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', marginLeft: 'var(--space-1)' }}>• {r.academic_degree}</span>
-                          </span>
-                          <span style={{ fontSize: 'var(--label-sm)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: loadColor, color: 'white', whiteSpace: 'nowrap', fontWeight: 'var(--font-medium)' }}>
-                            {r.currentLoad}/{r.maxLoad}
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  <AssignButton assigning={assigningId === t.id} disabled={!sel.length} onClick={() => assign(t.id)} label={`Atribuir ${sel.length} avaliador${sel.length !== 1 ? 'es' : ''}`} />
+                  {!reviewersByTopic[t.id] ? (
+                    <button
+                      onClick={() => loadReviewers(t.id)}
+                      className="btn"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 'var(--space-1)',
+                        padding: '10px var(--space-3)', fontSize: 'var(--body-md)',
+                        fontWeight: 'var(--font-medium)', borderRadius: 'var(--radius-lg)',
+                        cursor: 'pointer', width: 'fit-content',
+                        border: '1px solid var(--outline-variant)',
+                        background: 'var(--surface-container-lowest)', color: 'var(--primary)',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span>
+                      Ver avaliadores elegíveis
+                    </button>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)', gap: 'var(--space-2)' }}>
+                        <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', margin: 0, whiteSpace: 'nowrap' }}>
+                          Avaliadores elegíveis ({reviewersByTopic[t.id].length})
+                          {filteredReviewers.length !== reviewersByTopic[t.id].length && 
+                            <span style={{ fontWeight: 'var(--font-regular)', color: 'var(--on-surface-variant)' }}> • {filteredReviewers.length} encontrados</span>
+                          }
+                        </p>
+                        <input 
+                          type="text" 
+                          value={searchValue} 
+                          onChange={e => setReviewerSearch(prev => ({ ...prev, [t.id]: e.target.value }))}
+                          placeholder="Pesquisar por nome, email ou área..." 
+                          style={{ 
+                            padding: '6px 10px', 
+                            background: 'var(--surface-container-lowest)', 
+                            border: '1px solid var(--outline-variant)', 
+                            borderRadius: 'var(--radius-lg)', 
+                            fontSize: 'var(--label-sm)', 
+                            fontFamily: 'var(--font-family)', 
+                            outline: 'none', 
+                            width: '280px',
+                            maxWidth: '100%'
+                          }} 
+                        />
+                      </div>
+                      
+                      {filteredReviewers.length === 0 ? (
+                        <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', fontStyle: 'italic', textAlign: 'center', padding: 'var(--space-2)' }}>
+                          {searchValue ? 'Nenhum avaliador encontrado com estes critérios.' : 'Nenhum avaliador elegível encontrado.'}
+                        </p>
+                      ) : (
+                        <>
+                          {sel.length > 0 && (
+                            <span style={{ 
+                              display: 'inline-block', 
+                              fontSize: 'var(--label-md)', 
+                              fontWeight: 'var(--font-medium)', 
+                              color: 'var(--primary)', 
+                              background: 'var(--primary-container)', 
+                              padding: '2px 10px', 
+                              borderRadius: 'var(--radius-full)',
+                              marginBottom: 'var(--space-2)'
+                            }}>
+                              {sel.length} selecionado{sel.length !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                          <div style={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: 'var(--space-1)', 
+                            marginBottom: 'var(--space-2)', 
+                            maxHeight: '400px', 
+                            overflow: 'auto' 
+                          }}>
+                            {filteredReviewers.map(r => {
+                              const checked = sel.includes(r.id)
+                              const loadColor = getLoadColor(r.currentLoad, r.maxLoad)
+                              const hasLoad = r.currentLoad !== undefined && r.maxLoad !== undefined
+                              
+                              return (
+                                <label key={r.id} style={{ 
+                                  display: 'flex', alignItems: 'center', gap: 'var(--space-2)', 
+                                  padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', 
+                                  background: checked ? 'var(--primary-container)' : 'var(--surface-container-lowest)', 
+                                  color: checked ? 'var(--on-primary-container)' : 'var(--on-surface)', 
+                                  fontSize: 'var(--body-sm)', 
+                                  border: checked ? '1px solid var(--primary)' : '1px solid transparent', 
+                                  transition: 'all 0.15s' 
+                                }}>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={checked} 
+                                    onChange={() => toggleReviewer(t.id, r.id)} 
+                                    style={{ accentColor: 'var(--primary)', cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }} 
+                                  />
+                                  <span className="material-symbols-outlined" style={{ fontSize: '18px', color: checked ? 'var(--primary)' : 'var(--on-surface-variant)' }}>person</span>
+                                  <span style={{ flex: 1 }}>
+                                    <span style={{ fontWeight: checked ? 'var(--font-semibold)' : 'var(--font-regular)' }}>{r.name}</span>
+                                    {r.scientific_area_name && (
+                                      <span style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', marginLeft: 'var(--space-1)' }}>
+                                        • {r.scientific_area_name}
+                                      </span>
+                                    )}
+                                  </span>
+                                  {hasLoad && (
+                                    <span style={{ 
+                                      fontSize: 'var(--label-sm)', 
+                                      padding: '2px 8px', 
+                                      borderRadius: 'var(--radius-full)', 
+                                      background: loadColor, 
+                                      color: 'white', 
+                                      whiteSpace: 'nowrap',
+                                      fontWeight: 'var(--font-medium)' 
+                                    }}>
+                                      {r.currentLoad}/{r.maxLoad}
+                                    </span>
+                                  )}
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )}
+                      
+                      <AssignButton 
+                        assigning={assigningId === t.id} 
+                        disabled={!sel.length} 
+                        onClick={() => assign(t.id)} 
+                        label={`Atribuir ${sel.length} avaliador${sel.length !== 1 ? 'es' : ''}`} 
+                      />
+                    </>
+                  )}
                 </div>
               </div>
             )
@@ -191,7 +339,8 @@ function ProtocolsTab() {
   const [pickOne, setPickOne] = useState<Record<number, number | ''>>({})
   const [pickTwo, setPickTwo] = useState<Record<number, number | ''>>({})
   const [assigningId, setAssigningId] = useState<number | null>(null)
-  const [reviewerSearch, setReviewerSearch] = useState('')
+  const [reviewersByProtocol, setReviewersByProtocol] = useState<Record<number, ReviewerWithLoad[]>>({})
+  const [reviewerSearch, setReviewerSearch] = useState<Record<number, string>>({})
 
   useEffect(() => { load() }, [])
 
@@ -199,6 +348,18 @@ function ProtocolsTab() {
     setLoading(true)
     try { const { protocols } = await protocolService.listForSecretary(); setProtocols(protocols) }
     catch (e) { setError((e as Error).message) } finally { setLoading(false) }
+  }
+
+  async function loadReviewers(protocolId: number) {
+    try {
+      const { reviewers } = await protocolService.getEligibleReviewersNucleo(protocolId)
+      setReviewersByProtocol(prev => ({ 
+        ...prev, 
+        [protocolId]: reviewers.map(r => ({ ...r, currentLoad: undefined, maxLoad: undefined })) 
+      }))
+    } catch (e) {
+      setError((e as Error).message)
+    }
   }
 
   async function assign(protocolId: number) {
@@ -209,14 +370,34 @@ function ProtocolsTab() {
       await protocolService.assignReviewersNucleo(protocolId, Number(one), Number(two))
       setPickOne(p => { const n = { ...p }; delete n[protocolId]; return n })
       setPickTwo(p => { const n = { ...p }; delete n[protocolId]; return n })
+      setReviewersByProtocol(prev => { const n = { ...prev }; delete n[protocolId]; return n })
+      setReviewerSearch(prev => { const n = { ...prev }; delete n[protocolId]; return n })
       await load()
     } catch (e) { setError((e as Error).message) } finally { setAssigningId(null) }
   }
 
-  const pending = protocols.filter(p => ['protocol_pending_nucleo', 'protocol_pending_comite_cientifico', 'protocol_pending_comite_bioetica'].includes(p.status))
-  const filteredReviewers = MOCK_REVIEWERS.filter(r => !reviewerSearch || r.name.toLowerCase().includes(reviewerSearch.toLowerCase()))
+  const pending = protocols.filter(p => p.status === 'protocol_pending_nucleo')
 
-  function getLoadColor(c: number, m: number): string { if (c >= m) return 'var(--error)'; if (c >= m * 0.8) return 'var(--tertiary)'; return 'var(--primary)' }
+  function getFilteredReviewers(protocolId: number): ReviewerWithLoad[] {
+    const allReviewers = reviewersByProtocol[protocolId] ?? []
+    const search = reviewerSearch[protocolId] ?? ''
+    
+    if (!search.trim()) return allReviewers
+    
+    const searchLower = search.toLowerCase()
+    return allReviewers.filter(r => 
+      r.name.toLowerCase().includes(searchLower) ||
+      (r.email && r.email.toLowerCase().includes(searchLower)) ||
+      (r.scientific_area_name && r.scientific_area_name.toLowerCase().includes(searchLower))
+    )
+  }
+
+  function getLoadColor(c?: number, m?: number): string {
+    if (!c || !m) return 'transparent'
+    if (c >= m) return 'var(--error)'
+    if (c >= m * 0.8) return 'var(--tertiary)'
+    return 'var(--primary)'
+  }
 
   if (loading) return <Spinner text="A carregar protocolos..." />
 
@@ -228,6 +409,13 @@ function ProtocolsTab() {
 
       {pending.map(p => {
         const s = getProtocolStatusStyle(p.status)
+        const allReviewers = reviewersByProtocol[p.id] ?? []
+        const filteredReviewers = getFilteredReviewers(p.id)
+        const sel1 = pickOne[p.id]
+        const sel2 = pickTwo[p.id]
+        const searchValue = reviewerSearch[p.id] ?? ''
+        const hasLoad = allReviewers.some(r => r.currentLoad !== undefined)
+        
         return (
           <div key={p.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '6px' }}>
@@ -238,36 +426,102 @@ function ProtocolsTab() {
             {p.topic && <TopicJustificationToggle justification={p.topic.justification} showEmpty compact />}
 
             <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-                <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)' }}>Docentes disponíveis</p>
-                <input type="text" value={reviewerSearch} onChange={e => setReviewerSearch(e.target.value)} placeholder="Pesquisar..." style={{ padding: '6px 10px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--label-sm)', fontFamily: 'var(--font-family)', outline: 'none', width: '200px' }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginBottom: 'var(--space-2)', maxHeight: '300px', overflow: 'auto' }}>
-                {filteredReviewers.map(r => {
-                  const loadColor = getLoadColor(r.currentLoad, r.maxLoad)
-                  const selectedAs = pickOne[p.id] === r.id ? '1' : pickTwo[p.id] === r.id ? '2' : ''
-                  return (
-                    <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '8px 12px', borderRadius: 'var(--radius-md)', background: selectedAs ? 'var(--primary-container)' : 'var(--surface-container-lowest)', fontSize: 'var(--body-sm)', transition: 'all 0.15s' }}>
-                      <span style={{ flex: 1 }}>
-                        <span style={{ fontWeight: 'var(--font-semibold)' }}>{r.name}</span>
-                        <span style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', marginLeft: 'var(--space-1)' }}>• {r.academic_degree}</span>
-                      </span>
-                      <span style={{ fontSize: 'var(--label-sm)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: loadColor, color: 'white', whiteSpace: 'nowrap', marginRight: 'var(--space-2)' }}>{r.currentLoad}/{r.maxLoad}</span>
-                      <select value={selectedAs} onChange={e => {
-                        const slot = e.target.value
-                        if (slot === '1') { setPickOne(prev => ({ ...prev, [p.id]: r.id })); if (pickTwo[p.id] === r.id) setPickTwo(prev => ({ ...prev, [p.id]: '' })) }
-                        else if (slot === '2') { setPickTwo(prev => ({ ...prev, [p.id]: r.id })); if (pickOne[p.id] === r.id) setPickOne(prev => ({ ...prev, [p.id]: '' })) }
-                        else { if (pickOne[p.id] === r.id) setPickOne(prev => ({ ...prev, [p.id]: '' })); if (pickTwo[p.id] === r.id) setPickTwo(prev => ({ ...prev, [p.id]: '' })) }
-                      }} style={{ padding: '4px 8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--outline-variant)', fontSize: 'var(--label-sm)', background: 'var(--surface-container-lowest)' }}>
-                        <option value="">—</option>
-                        <option value="1">Revisor 1</option>
-                        <option value="2">Revisor 2</option>
-                      </select>
+              {!reviewersByProtocol[p.id] ? (
+                <button
+                  onClick={() => loadReviewers(p.id)}
+                  className="btn"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 'var(--space-1)',
+                    padding: '10px var(--space-3)', fontSize: 'var(--body-md)',
+                    fontWeight: 'var(--font-medium)', borderRadius: 'var(--radius-lg)',
+                    cursor: 'pointer', width: 'fit-content',
+                    border: '1px solid var(--outline-variant)',
+                    background: 'var(--surface-container-lowest)', color: 'var(--primary)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span>
+                  Ver revisores elegíveis
+                </button>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                    <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', margin: 0 }}>
+                      Selecionar revisores ({allReviewers.length} disponíveis)
+                      {filteredReviewers.length !== allReviewers.length && 
+                        <span style={{ fontWeight: 'var(--font-regular)' }}> • {filteredReviewers.length} encontrados</span>
+                      }
+                    </p>
+                    <input 
+                      type="text" 
+                      value={searchValue} 
+                      onChange={e => setReviewerSearch(prev => ({ ...prev, [p.id]: e.target.value }))}
+                      placeholder="Pesquisar por nome, email ou área..." 
+                      style={{ 
+                        padding: '6px 10px', 
+                        background: 'var(--surface-container-lowest)', 
+                        border: '1px solid var(--outline-variant)', 
+                        borderRadius: 'var(--radius-lg)', 
+                        fontSize: 'var(--label-sm)', 
+                        fontFamily: 'var(--font-family)', 
+                        outline: 'none', 
+                        width: '280px',
+                        maxWidth: '100%'
+                      }} 
+                    />
+                  </div>
+                  
+                  {filteredReviewers.length === 0 ? (
+                    <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', fontStyle: 'italic', textAlign: 'center', padding: 'var(--space-2)' }}>
+                      {searchValue ? 'Nenhum revisor encontrado com estes critérios.' : 'Nenhum revisor elegível encontrado.'}
+                    </p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                        <label style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>Revisor 1</label>
+                        <select
+                          value={sel1 ?? ''}
+                          onChange={e => setPickOne(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
+                          style={{ width: '100%', padding: '10px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: 'pointer' }}
+                        >
+                          <option value="">— Escolher —</option>
+                          {filteredReviewers.map(r => {
+                            const loadColor = getLoadColor(r.currentLoad, r.maxLoad)
+                            const hasLoad = r.currentLoad !== undefined && r.maxLoad !== undefined
+                            return (
+                              <option key={r.id} value={r.id} disabled={sel2 === r.id}>
+                                {r.name}{r.scientific_area_name ? ` • ${r.scientific_area_name}` : ''}{hasLoad ? ` [${r.currentLoad}/${r.maxLoad}]` : ''}
+                              </option>
+                            )
+                          })}
+                        </select>
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                        <label style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>Revisor 2</label>
+                        <select
+                          value={sel2 ?? ''}
+                          onChange={e => setPickTwo(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
+                          style={{ width: '100%', padding: '10px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: 'pointer' }}
+                        >
+                          <option value="">— Escolher —</option>
+                          {filteredReviewers.map(r => {
+                            const loadColor = getLoadColor(r.currentLoad, r.maxLoad)
+                            const hasLoad = r.currentLoad !== undefined && r.maxLoad !== undefined
+                            return (
+                              <option key={r.id} value={r.id} disabled={sel1 === r.id}>
+                                {r.name}{r.scientific_area_name ? ` • ${r.scientific_area_name}` : ''}{hasLoad ? ` [${r.currentLoad}/${r.maxLoad}]` : ''}
+                              </option>
+                            )
+                          })}
+                        </select>
+                      </div>
                     </div>
-                  )
-                })}
-              </div>
-              <AssignButton assigning={assigningId === p.id} disabled={!pickOne[p.id] || !pickTwo[p.id]} onClick={() => assign(p.id)} label="Atribuir revisores" />
+                  )}
+                  
+                  <AssignButton assigning={assigningId === p.id} disabled={!sel1 || !sel2} onClick={() => assign(p.id)} label="Atribuir revisores" />
+                </>
+              )}
             </div>
           </div>
         )
@@ -308,10 +562,75 @@ function MonographsTab() {
 // ============================================================
 // COMPONENTES PARTILHADOS
 // ============================================================
-function Spinner({ text }: { text: string }) { return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '30vh', color: 'var(--on-surface-variant)', fontSize: 'var(--body-lg)', gap: 'var(--space-2)' }}><span style={{ width: '24px', height: '24px', border: '3px solid var(--outline-variant)', borderTopColor: 'var(--primary)', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} />{text}</div> }
-function ErrorAlert({ message }: { message: string }) { return <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: 'var(--space-2) var(--space-3)', background: 'var(--error-container)', color: 'var(--on-error-container)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)' }}><span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>{message}</div> }
-function EmptyState({ icon, text, sub }: { icon: string; text: string; sub: string }) { return <div style={{ textAlign: 'center', padding: 'var(--space-5) var(--space-3)', color: 'var(--on-surface-variant)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-xl)', border: '1px dashed var(--outline-variant)' }}><span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>{icon}</span><p style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-medium)' }}>{text}</p><p style={{ fontSize: 'var(--body-md)', marginTop: 'var(--space-1)' }}>{sub}</p></div> }
-function StatsRow({ items }: { items: { icon: string; count: number; label: string; color: string }[] }) { return <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>{items.map((item, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '8px 16px', borderRadius: 'var(--radius-full)', background: 'var(--surface-container)', color: item.color, fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)' }}><span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{item.icon}</span><span>{item.count}</span><span style={{ fontWeight: 'var(--font-regular)', color: 'var(--on-surface-variant)', fontSize: 'var(--label-md)' }}>{item.label}</span></div>)}</div> }
-function SectionTitle({ icon, title, color, count }: { icon: string; title: string; color?: string; count: number }) { return <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', color: color || 'var(--on-surface)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}><span className="material-symbols-outlined" style={{ fontSize: '24px' }}>{icon}</span>{title}<span style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>({count})</span></h2> }
-function StatusBadge({ s, label }: { s: { bg: string; color: string; dot: string }; label?: string }) { return <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: 'var(--radius-full)', fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', background: s.bg, color: s.color, whiteSpace: 'nowrap' }}><span style={{ width: '6px', height: '6px', borderRadius: 'var(--radius-full)', background: s.dot }} />{label}</span> }
-function AssignButton({ assigning, disabled, onClick, label }: { assigning: boolean; disabled: boolean; onClick: () => void; label: string }) { return <button onClick={onClick} disabled={disabled || assigning} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', borderRadius: 'var(--radius-lg)', border: 'none', cursor: disabled || assigning ? 'not-allowed' : 'pointer', opacity: disabled || assigning ? 0.6 : 1, width: 'fit-content' }}>{assigning ? <><span style={{ width: '16px', height: '16px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} /> A atribuir...</> : <><span className="material-symbols-outlined" style={{ fontSize: '20px' }}>person_add</span> {label}</>}</button> }
+function Spinner({ text }: { text: string }) { 
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '30vh', color: 'var(--on-surface-variant)', fontSize: 'var(--body-lg)', gap: 'var(--space-2)' }}>
+      <span style={{ width: '24px', height: '24px', border: '3px solid var(--outline-variant)', borderTopColor: 'var(--primary)', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} />{text}
+    </div>
+  ) 
+}
+
+function ErrorAlert({ message }: { message: string }) { 
+  return (
+    <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: 'var(--space-2) var(--space-3)', background: 'var(--error-container)', color: 'var(--on-error-container)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)' }}>
+      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>{message}
+    </div>
+  ) 
+}
+
+function EmptyState({ icon, text, sub }: { icon: string; text: string; sub: string }) { 
+  return (
+    <div style={{ textAlign: 'center', padding: 'var(--space-5) var(--space-3)', color: 'var(--on-surface-variant)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-xl)', border: '1px dashed var(--outline-variant)' }}>
+      <span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>{icon}</span>
+      <p style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-medium)' }}>{text}</p>
+      <p style={{ fontSize: 'var(--body-md)', marginTop: 'var(--space-1)' }}>{sub}</p>
+    </div>
+  ) 
+}
+
+function StatsRow({ items }: { items: { icon: string; count: number; label: string; color: string }[] }) { 
+  return (
+    <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '8px 16px', borderRadius: 'var(--radius-full)', background: 'var(--surface-container)', color: item.color, fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{item.icon}</span>
+          <span>{item.count}</span>
+          <span style={{ fontWeight: 'var(--font-regular)', color: 'var(--on-surface-variant)', fontSize: 'var(--label-md)' }}>{item.label}</span>
+        </div>
+      ))}
+    </div>
+  ) 
+}
+
+function SectionTitle({ icon, title, color, count }: { icon: string; title: string; color?: string; count: number }) { 
+  return (
+    <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', color: color || 'var(--on-surface)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+      <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>{icon}</span>{title}
+      <span style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>({count})</span>
+    </h2>
+  ) 
+}
+
+function StatusBadge({ s, label }: { s: { bg: string; color: string; dot: string }; label?: string }) { 
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: 'var(--radius-full)', fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>
+      <span style={{ width: '6px', height: '6px', borderRadius: 'var(--radius-full)', background: s.dot }} />{label}
+    </span>
+  ) 
+}
+
+function AssignButton({ assigning, disabled, onClick, label }: { assigning: boolean; disabled: boolean; onClick: () => void; label: string }) { 
+  return (
+    <button onClick={onClick} disabled={disabled || assigning} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', borderRadius: 'var(--radius-lg)', border: 'none', cursor: disabled || assigning ? 'not-allowed' : 'pointer', opacity: disabled || assigning ? 0.6 : 1, width: 'fit-content' }}>
+      {assigning ? (
+        <>
+          <span style={{ width: '16px', height: '16px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} /> A atribuir...
+        </>
+      ) : (
+        <>
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>person_add</span> {label}
+        </>
+      )}
+    </button>
+  ) 
+}

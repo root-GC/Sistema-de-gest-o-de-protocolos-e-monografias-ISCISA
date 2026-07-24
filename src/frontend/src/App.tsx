@@ -1,8 +1,9 @@
-// App.tsx
+// src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './guards/ProtectedRoute.tsx'
 import { AppLayout } from './components/layout/AppLayout.tsx'
+import { GlobalLoader } from './components/GlobalLoader'
 import { lazy, Suspense } from 'react'
 
 // Páginas públicas
@@ -44,9 +45,9 @@ const CompletedReviewsPage = lazy(() => import('./pages/shared/secretary/Complet
 // Admin
 const AdminUsersPage         = lazy(() => import('./pages/system-admin/AdminUsersPage'))
 const AdminOrgansPage        = lazy(() => import('./pages/system-admin/AdminOrgansPage'))
-const SystemStatusPage       = lazy(() => import('./pages/system-admin/SystemStatusPage')) // 🆕
+const SystemStatusPage       = lazy(() => import('./pages/system-admin/SystemStatusPage'))
 
-//Admin general
+// Admin general
 const GeneralAdminDashboard = lazy(() => import('./pages/general-admin/GeneralAdminDashboard'))
 const ManagePersonnelPage  = lazy(() => import('./pages/general-admin/ManagePersonnelPage'))
 const CoursesManagementPage = lazy(() => import('./pages/general-admin/CoursesManagementPage'))
@@ -55,16 +56,17 @@ const CoursesManagementPage = lazy(() => import('./pages/general-admin/CoursesMa
 const OrganPresidentDashboard = lazy(() => import('./pages/organ-president/OrganPresidentDashboard'))
 const ManageOrganMembersPage = lazy(() => import('./pages/organ-president/ManageOrganMembersPage'))
 
-
 // Páginas públicas
 const RegisterPage       = lazy(() => import('./pages/RegisterPage'))
 const VerifyOtpPage      = lazy(() => import('./pages/VerifyOtpPage'))
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
 
-const Loader = () => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-    <span style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>A carregar...</span>
+// 🆕 Loader melhorado
+const PageLoader = () => (
+  <div className="page-loader">
+    <div className="page-loader__spinner" />
+    <p className="page-loader__text">A carregar...</p>
   </div>
 )
 
@@ -72,7 +74,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Suspense fallback={<Loader />}>
+        <GlobalLoader />
+        <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* ── Públicas ─────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />
@@ -85,9 +88,6 @@ export default function App() {
             {/* ── Protegidas — qualquer utilizador autenticado ── */}
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
-                
-
-
 
                 {/* Dashboard */}
                 <Route path="/dashboard" element={<DashboardPage />} />
@@ -148,8 +148,8 @@ export default function App() {
                 {/* ── Secretary ───────────────────────────────── */}
                 <Route element={<ProtectedRoute permission="protocol.triage" />}>
                   <Route path="/secretary/protocols" element={<SecretaryProtocolsPage />} />
-                   <Route path="/secretary/harmonization" element={<HarmonizationPage />} />
-                   <Route path="/secretary/completed" element={<CompletedReviewsPage />} />
+                  <Route path="/secretary/harmonization" element={<HarmonizationPage />} />
+                  <Route path="/secretary/completed" element={<CompletedReviewsPage />} />
                 </Route>
 
                 {/* ── Admin ───────────────────────────────────── */}
@@ -159,19 +159,18 @@ export default function App() {
                 <Route element={<ProtectedRoute permission="admin.organs" />}>
                   <Route path="/admin/organs" element={<AdminOrgansPage />} />
                 </Route>
-                {/* 🆕 Estado do Sistema */}
                 <Route element={<ProtectedRoute permission="admin.settings" />}>
                   <Route path="/admin/system-status" element={<SystemStatusPage />} />
                 </Route>
 
-                {/* ── General Admin / Direção Científica ────────────── */}
+                {/* ── General Admin / Direção Científica ──────── */}
                 <Route element={<ProtectedRoute permission="admin.organs" />}>
                   <Route path="/general-admin" element={<GeneralAdminDashboard />} />
                   <Route path="/general-admin/personnel" element={<ManagePersonnelPage />} />
-                   <Route path="/general-admin/courses" element={<CoursesManagementPage />} />
+                  <Route path="/general-admin/courses" element={<CoursesManagementPage />} />
                 </Route>
 
-                {/* ── Organ President ─────────────────────────────── */}
+                {/* ── Organ President ─────────────────────────── */}
                 <Route element={<ProtectedRoute permission="admin.organs" />}>
                   <Route path="/organ-president" element={<OrganPresidentDashboard />} />
                   <Route path="/organ-president/members" element={<ManageOrganMembersPage />} />

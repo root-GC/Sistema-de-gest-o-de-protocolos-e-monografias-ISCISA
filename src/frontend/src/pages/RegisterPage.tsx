@@ -1,8 +1,10 @@
+// src/pages/RegisterPage.tsx
 import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { authService } from '../services/authService'
 import { registrationDataService } from '../services/registrationDataService'
+import { LoadingSpinner } from '../components/LoadingSpinner'
 import '../styles/global.css'
 
 type UserType = 'student' | 'teacher'
@@ -95,6 +97,11 @@ export default function RegisterPage() {
     }
   }
 
+  // Loading inicial dos dados do formulário
+  if (loadingData) {
+    return <LoadingSpinner variant="page" text="A carregar formulário..." />
+  }
+
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '12px 14px',
@@ -125,6 +132,9 @@ export default function RegisterPage() {
       background: 'var(--background)',
       fontFamily: 'var(--font-family)',
     }}>
+      {/* Overlay de loading ao submeter */}
+      {loading && <LoadingSpinner variant="overlay" text="A criar conta..." />}
+
       {/* Camadas atmosféricas */}
       <div style={{
         position: 'absolute',
@@ -212,6 +222,7 @@ export default function RegisterPage() {
                   key={t}
                   type="button"
                   onClick={() => setType(t)}
+                  disabled={loading}
                   style={{
                     flex: 1,
                     padding: '12px',
@@ -222,12 +233,13 @@ export default function RegisterPage() {
                     fontFamily: 'var(--font-family)',
                     fontSize: 'var(--body-md)',
                     fontWeight: type === t ? 'var(--font-semibold)' : 'var(--font-medium)',
-                    cursor: 'pointer',
+                    cursor: loading ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s ease',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
+                    opacity: loading ? 0.7 : 1
                   }}
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
@@ -242,7 +254,7 @@ export default function RegisterPage() {
               <div className="badge badge-error" role="alert" style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '10px 14px', marginBottom: 'var(--space-3)',
-                fontSize: 'var(--body-md)',
+                fontSize: 'var(--body-md)', animation: 'slideUp 0.3s ease'
               }}>
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
                 {error}
@@ -255,6 +267,8 @@ export default function RegisterPage() {
                 background: 'var(--surface-container-low)',
                 padding: 'var(--space-3)',
                 borderRadius: 'var(--radius-lg)',
+                opacity: loading ? 0.7 : 1,
+                pointerEvents: loading ? 'none' : 'auto'
               }}>
                 <h3 style={{
                   fontSize: 'var(--body-lg)',
@@ -278,6 +292,7 @@ export default function RegisterPage() {
                       value={name}
                       onChange={e => setName(e.target.value)}
                       required
+                      disabled={loading}
                       onFocus={e => {
                         e.target.style.borderColor = 'var(--primary)'
                         e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
@@ -298,6 +313,7 @@ export default function RegisterPage() {
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       required
+                      disabled={loading}
                       onFocus={e => {
                         e.target.style.borderColor = 'var(--primary)'
                         e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
@@ -316,6 +332,8 @@ export default function RegisterPage() {
                 background: 'var(--surface-container-low)',
                 padding: 'var(--space-3)',
                 borderRadius: 'var(--radius-lg)',
+                opacity: loading ? 0.7 : 1,
+                pointerEvents: loading ? 'none' : 'auto'
               }}>
                 <h3 style={{
                   fontSize: 'var(--body-lg)',
@@ -342,6 +360,7 @@ export default function RegisterPage() {
                         onChange={e => setPassword(e.target.value)}
                         required
                         minLength={8}
+                        disabled={loading}
                         onFocus={e => {
                           e.target.style.borderColor = 'var(--primary)'
                           e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
@@ -362,6 +381,7 @@ export default function RegisterPage() {
                         onChange={e => setPasswordConfirmation(e.target.value)}
                         required
                         minLength={8}
+                        disabled={loading}
                         onFocus={e => {
                           e.target.style.borderColor = 'var(--primary)'
                           e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
@@ -378,7 +398,7 @@ export default function RegisterPage() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 'var(--space-1)',
-                    cursor: 'pointer',
+                    cursor: loading ? 'not-allowed' : 'pointer',
                     fontSize: 'var(--body-md)',
                     color: 'var(--on-surface-variant)',
                   }}>
@@ -386,11 +406,12 @@ export default function RegisterPage() {
                       type="checkbox"
                       checked={showPassword}
                       onChange={e => setShowPassword(e.target.checked)}
+                      disabled={loading}
                       style={{
                         width: '16px',
                         height: '16px',
                         accentColor: 'var(--primary)',
-                        cursor: 'pointer'
+                        cursor: loading ? 'not-allowed' : 'pointer'
                       }}
                     />
                     Mostrar palavra-passe
@@ -403,6 +424,8 @@ export default function RegisterPage() {
                 background: 'var(--surface-container-low)',
                 padding: 'var(--space-3)',
                 borderRadius: 'var(--radius-lg)',
+                opacity: loading ? 0.7 : 1,
+                pointerEvents: loading ? 'none' : 'auto'
               }}>
                 <h3 style={{
                   fontSize: 'var(--body-lg)',
@@ -429,6 +452,7 @@ export default function RegisterPage() {
                         value={studentNumber}
                         onChange={e => setStudentNumber(e.target.value)}
                         required
+                        disabled={loading}
                         onFocus={e => {
                           e.target.style.borderColor = 'var(--primary)'
                           e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
@@ -447,7 +471,7 @@ export default function RegisterPage() {
                         value={courseId}
                         onChange={e => setCourseId(e.target.value)}
                         required
-                        disabled={loadingData}
+                        disabled={loading}
                       >
                         <option value="">Seleccione o curso</option>
                         {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -461,7 +485,7 @@ export default function RegisterPage() {
                         value={supervisorId}
                         onChange={e => setSupervisorId(e.target.value)}
                         required
-                        disabled={loadingData}
+                        disabled={loading}
                       >
                         <option value="">Seleccione o supervisor</option>
                         {supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -477,7 +501,7 @@ export default function RegisterPage() {
                         value={scientificAreaId}
                         onChange={e => setScientificAreaId(e.target.value)}
                         required
-                        disabled={loadingData}
+                        disabled={loading}
                       >
                         <option value="">Seleccione a área</option>
                         {scientificAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -491,6 +515,7 @@ export default function RegisterPage() {
                         value={academicDegree}
                         onChange={e => setAcademicDegree(e.target.value)}
                         required
+                        disabled={loading}
                       >
                         <option value="">Seleccione o grau</option>
                         <option value="licenciatura">Licenciatura</option>
@@ -506,6 +531,7 @@ export default function RegisterPage() {
                         placeholder="Ex: Departamento de Enfermagem"
                         value={department}
                         onChange={e => setDepartment(e.target.value)}
+                        disabled={loading}
                         onFocus={e => {
                           e.target.style.borderColor = 'var(--primary)'
                           e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
@@ -520,10 +546,11 @@ export default function RegisterPage() {
                 )}
               </div>
 
+              {/* Botão Submeter */}
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={loading || loadingData}
+                disabled={loading}
                 style={{
                   width: '100%',
                   padding: '16px',
@@ -536,16 +563,16 @@ export default function RegisterPage() {
                   fontWeight: 'var(--font-semibold)',
                   borderRadius: 'var(--radius-lg)',
                   border: 'none',
-                  cursor: (loading || loadingData) ? 'not-allowed' : 'pointer',
-                  opacity: (loading || loadingData) ? 0.7 : 1,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.8 : 1,
                   transition: 'all 0.2s ease',
                   boxShadow: 'var(--elevation-2)',
                   marginTop: 'var(--space-2)'
                 }}
                 onMouseEnter={e => {
-                  if (!loading && !loadingData) {
+                  if (!loading) {
                     e.currentTarget.style.boxShadow = 'var(--elevation-3)'
-                    e.currentTarget.style.transform = 'scale(0.98)'
+                    e.currentTarget.style.transform = 'scale(1.02)'
                   }
                 }}
                 onMouseLeave={e => {
@@ -580,7 +607,8 @@ export default function RegisterPage() {
               borderTop: '1px solid var(--outline-variant)',
               textAlign: 'center',
               fontSize: 'var(--body-md)',
-              color: 'var(--on-surface-variant)'
+              color: 'var(--on-surface-variant)',
+              opacity: loading ? 0.7 : 1
             }}>
               Já tem conta?{' '}
               <Link
@@ -590,7 +618,8 @@ export default function RegisterPage() {
                   fontWeight: 'var(--font-semibold)',
                   textDecoration: 'none',
                   marginLeft: '4px',
-                  transition: 'text-decoration 0.2s'
+                  transition: 'text-decoration 0.2s',
+                  pointerEvents: loading ? 'none' : 'auto'
                 }}
                 onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
                 onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
@@ -602,7 +631,6 @@ export default function RegisterPage() {
         </div>
       </main>
 
-      {/* Animação do spinner */}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }

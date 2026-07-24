@@ -1,7 +1,9 @@
+// src/pages/VerifyOtpPage.tsx
 import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { authService } from '../services/authService'
 import { useAuth } from '../context/AuthContext'
+import { LoadingSpinner } from '../components/LoadingSpinner'
 import '../styles/global.css'
 
 export default function VerifyOtpPage() {
@@ -74,6 +76,9 @@ export default function VerifyOtpPage() {
       background: 'var(--background)',
       fontFamily: 'var(--font-family)'
     }}>
+      {/* Overlay de loading ao verificar */}
+      {loading && <LoadingSpinner variant="overlay" text="A verificar código..." />}
+
       {/* Camadas atmosféricas */}
       <div style={{
         position: 'absolute',
@@ -161,10 +166,11 @@ export default function VerifyOtpPage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 'var(--space-1)',
-                  padding: 'var(--space-1) var(--space-2)',
+                  padding: 'var(--space-2) var(--space-3)',
                   marginBottom: 'var(--space-3)',
                   fontSize: 'var(--body-md)',
-                  fontWeight: 'var(--font-medium)'
+                  fontWeight: 'var(--font-medium)',
+                  animation: 'slideUp 0.3s ease'
                 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
@@ -214,6 +220,7 @@ export default function VerifyOtpPage() {
                   maxLength={6}
                   required
                   autoComplete="one-time-code"
+                  disabled={loading}
                   style={{
                     width: '100%',
                     padding: '16px',
@@ -228,7 +235,8 @@ export default function VerifyOtpPage() {
                     color: 'var(--on-surface)',
                     outline: 'none',
                     transition: 'all 0.2s ease',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    opacity: loading ? 0.7 : 1
                   }}
                   onFocus={e => {
                     e.target.style.borderColor = 'var(--primary)'
@@ -256,6 +264,7 @@ export default function VerifyOtpPage() {
                       borderRadius: '50%',
                       background: i < code.length ? 'var(--primary)' : 'var(--surface-container-high)',
                       transition: 'all 0.2s ease',
+                      opacity: loading ? 0.7 : 1
                     }}
                   />
                 ))}
@@ -285,7 +294,7 @@ export default function VerifyOtpPage() {
                 onMouseEnter={e => {
                   if (!loading && code.length === 6) {
                     e.currentTarget.style.boxShadow = 'var(--elevation-3)'
-                    e.currentTarget.style.transform = 'scale(0.98)'
+                    e.currentTarget.style.transform = 'scale(1.02)'
                   }
                 }}
                 onMouseLeave={e => {
@@ -332,27 +341,38 @@ export default function VerifyOtpPage() {
               <button
                 type="button"
                 onClick={handleResend}
-                disabled={resending || cooldown > 0}
+                disabled={resending || cooldown > 0 || loading}
                 className="btn"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
                   padding: '10px 20px',
-                  opacity: (resending || cooldown > 0) ? 0.5 : 1,
-                  cursor: (resending || cooldown > 0) ? 'not-allowed' : 'pointer',
+                  opacity: (resending || cooldown > 0 || loading) ? 0.5 : 1,
+                  cursor: (resending || cooldown > 0 || loading) ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s ease'
                 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                  {resending ? 'sync' : 'refresh'}
-                </span>
-                {cooldown > 0 
-                  ? `Reenviar em ${cooldown}s` 
-                  : resending 
-                    ? 'A enviar...' 
-                    : 'Reenviar Código'
-                }
+                {resending ? (
+                  <>
+                    <span style={{
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid var(--on-surface)',
+                      borderTopColor: 'transparent',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite'
+                    }} />
+                    A enviar...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                      {cooldown > 0 ? 'schedule' : 'refresh'}
+                    </span>
+                    {cooldown > 0 ? `Reenviar em ${cooldown}s` : 'Reenviar Código'}
+                  </>
+                )}
               </button>
             </div>
 
@@ -362,7 +382,8 @@ export default function VerifyOtpPage() {
               borderTop: '1px solid var(--outline-variant)',
               textAlign: 'center',
               fontSize: 'var(--body-md)',
-              color: 'var(--on-surface-variant)'
+              color: 'var(--on-surface-variant)',
+              opacity: loading ? 0.7 : 1
             }}>
               <Link
                 to="/login"
@@ -373,7 +394,8 @@ export default function VerifyOtpPage() {
                   color: 'var(--primary)',
                   fontWeight: 'var(--font-semibold)',
                   textDecoration: 'none',
-                  transition: 'text-decoration 0.2s'
+                  transition: 'text-decoration 0.2s',
+                  pointerEvents: loading ? 'none' : 'auto'
                 }}
                 onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
                 onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
@@ -386,14 +408,9 @@ export default function VerifyOtpPage() {
         </div>
       </main>
 
-      {/* Animação do spinner */}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.1); }
         }
       `}</style>
     </div>

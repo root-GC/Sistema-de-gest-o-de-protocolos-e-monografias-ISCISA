@@ -1,5 +1,6 @@
+// src/components/layout/AppLayout.tsx
 import { useState, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import '../../styles/global.css'
@@ -8,6 +9,15 @@ export function AppLayout() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [navigating, setNavigating] = useState(false)
+  const location = useLocation()
+
+  // Detecta mudanças de rota para mostrar barra de progresso
+  useEffect(() => {
+    setNavigating(true)
+    const timer = setTimeout(() => setNavigating(false), 400)
+    return () => clearTimeout(timer)
+  }, [location.pathname])
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth <= 768) }
@@ -49,7 +59,7 @@ export function AppLayout() {
         expanded={sidebarExpanded}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
-         onExpand={() => setSidebarExpanded(true)}   // ← ADICIONE esta linha
+        onExpand={() => setSidebarExpanded(true)}
         isMobile={isMobile}
       />
 
@@ -67,6 +77,24 @@ export function AppLayout() {
           isMobile={isMobile}
           mobileOpen={mobileOpen}
         />
+
+        {/* Barra de progresso ao navegar */}
+        {navigating && (
+          <div style={{
+            position: 'fixed',
+            top: '64px',
+            left: sidebarWidth,
+            right: 0,
+            height: '3px',
+            background: 'linear-gradient(90deg, var(--primary), var(--tertiary))',
+            zIndex: 39,
+            animation: 'progressBar 0.6s ease-in-out',
+            transformOrigin: 'left',
+            transition: 'left 0.3s ease',
+            boxShadow: '0 0 6px rgba(0, 105, 51, 0.3)'
+          }} />
+        )}
+
         <main style={{
           flex: 1,
           marginTop: '64px',
@@ -77,6 +105,14 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      <style>{`
+        @keyframes progressBar {
+          0% { transform: scaleX(0); opacity: 1; }
+          50% { transform: scaleX(0.7); opacity: 1; }
+          100% { transform: scaleX(1); opacity: 0; }
+        }
+      `}</style>
     </div>
   )
 }

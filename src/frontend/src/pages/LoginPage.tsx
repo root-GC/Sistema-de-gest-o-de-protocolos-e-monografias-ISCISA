@@ -1,6 +1,8 @@
+// src/pages/LoginPage.tsx
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { LoadingSpinner } from '../components/LoadingSpinner'
 import '../styles/global.css'
 
 export default function LoginPage() {
@@ -39,6 +41,9 @@ export default function LoginPage() {
       background: 'var(--background)',
       fontFamily: 'var(--font-family)'
     }}>
+      {/* Overlay de loading ao autenticar */}
+      {loading && <LoadingSpinner variant="overlay" text="A autenticar..." />}
+
       {/* Conteúdo principal */}
       <main style={{
         flex: 1,
@@ -105,7 +110,8 @@ export default function LoginPage() {
                   color: 'var(--on-error-container)',
                   borderRadius: 'var(--radius-lg)',
                   fontSize: 'var(--body-md)',
-                  fontWeight: 'var(--font-medium)'
+                  fontWeight: 'var(--font-medium)',
+                  animation: 'slideUp 0.3s ease'
                 }}>
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
                   {error}
@@ -144,6 +150,7 @@ export default function LoginPage() {
                     required
                     autoComplete="email"
                     autoFocus
+                    disabled={loading}
                     style={{
                       width: '100%',
                       padding: '14px 16px 14px 44px',
@@ -154,7 +161,16 @@ export default function LoginPage() {
                       fontFamily: 'var(--font-family)',
                       color: 'var(--on-surface)',
                       outline: 'none',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      opacity: loading ? 0.7 : 1
+                    }}
+                    onFocus={e => {
+                      e.target.style.borderColor = 'var(--primary)'
+                      e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
+                    }}
+                    onBlur={e => {
+                      e.target.style.borderColor = 'var(--outline-variant)'
+                      e.target.style.boxShadow = 'none'
                     }}
                   />
                 </div>
@@ -191,6 +207,7 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     required
                     autoComplete="current-password"
+                    disabled={loading}
                     style={{
                       width: '100%',
                       padding: '14px 48px 14px 44px',
@@ -201,12 +218,22 @@ export default function LoginPage() {
                       fontFamily: 'var(--font-family)',
                       color: 'var(--on-surface)',
                       outline: 'none',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      opacity: loading ? 0.7 : 1
+                    }}
+                    onFocus={e => {
+                      e.target.style.borderColor = 'var(--primary)'
+                      e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
+                    }}
+                    onBlur={e => {
+                      e.target.style.borderColor = 'var(--outline-variant)'
+                      e.target.style.boxShadow = 'none'
                     }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
+                    disabled={loading}
                     aria-label={showPassword ? 'Ocultar palavra-passe' : 'Mostrar palavra-passe'}
                     style={{
                       position: 'absolute',
@@ -216,11 +243,12 @@ export default function LoginPage() {
                       background: 'none',
                       border: 'none',
                       color: 'var(--outline)',
-                      cursor: 'pointer',
+                      cursor: loading ? 'not-allowed' : 'pointer',
                       padding: '6px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      opacity: loading ? 0.5 : 1
                     }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
@@ -240,19 +268,21 @@ export default function LoginPage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 'var(--space-1)',
-                  cursor: 'pointer',
+                  cursor: loading ? 'not-allowed' : 'pointer',
                   fontSize: 'var(--body-md)',
-                  color: 'var(--on-surface-variant)'
+                  color: 'var(--on-surface-variant)',
+                  opacity: loading ? 0.7 : 1
                 }}>
                   <input
                     type="checkbox"
                     checked={rememberMe}
                     onChange={e => setRememberMe(e.target.checked)}
+                    disabled={loading}
                     style={{
                       width: '16px',
                       height: '16px',
                       accentColor: 'var(--primary)',
-                      cursor: 'pointer'
+                      cursor: loading ? 'not-allowed' : 'pointer'
                     }}
                   />
                   Lembrar-me
@@ -263,7 +293,9 @@ export default function LoginPage() {
                     fontSize: 'var(--body-md)',
                     color: 'var(--secondary)',
                     textDecoration: 'none',
-                    fontWeight: 'var(--font-medium)'
+                    fontWeight: 'var(--font-medium)',
+                    pointerEvents: loading ? 'none' : 'auto',
+                    opacity: loading ? 0.7 : 1
                   }}
                 >
                   Esqueci-me da senha
@@ -288,9 +320,20 @@ export default function LoginPage() {
                   borderRadius: 'var(--radius-lg)',
                   border: 'none',
                   cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.7 : 1,
+                  opacity: loading ? 0.8 : 1,
                   letterSpacing: '0.02em',
-                  marginTop: 'var(--space-1)'
+                  marginTop: 'var(--space-1)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => {
+                  if (!loading) {
+                    e.currentTarget.style.boxShadow = 'var(--elevation-3)'
+                    e.currentTarget.style.transform = 'scale(1.02)'
+                  }
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = 'none'
+                  e.currentTarget.style.transform = 'scale(1)'
                 }}
               >
                 {loading ? (
@@ -329,7 +372,9 @@ export default function LoginPage() {
                 style={{
                   color: 'var(--primary)',
                   fontWeight: 'var(--font-bold)',
-                  textDecoration: 'none'
+                  textDecoration: 'none',
+                  pointerEvents: loading ? 'none' : 'auto',
+                  opacity: loading ? 0.7 : 1
                 }}
               >
                 Registe-se
@@ -354,27 +399,15 @@ export default function LoginPage() {
         fontSize: 'var(--label-md)',
         color: 'var(--on-surface-variant)'
       }}>
-        <p>© 2024 ISCISA — Instituto Superior de Ciências de Saúde</p>
+        <p>© 2026 ISCISA — Instituto Superior de Ciências de Saúde</p>
         <nav style={{ display: 'flex', gap: 'var(--gutter)' }}>
-          <Link to="/terms" style={{
-            color: 'var(--on-surface-variant)',
-            textDecoration: 'none',
-            fontSize: 'var(--label-md)'
-          }}>
+          <Link to="/terms" style={{ color: 'var(--on-surface-variant)', textDecoration: 'none', fontSize: 'var(--label-md)' }}>
             Termos de Uso
           </Link>
-          <Link to="/privacy" style={{
-            color: 'var(--on-surface-variant)',
-            textDecoration: 'none',
-            fontSize: 'var(--label-md)'
-          }}>
+          <Link to="/privacy" style={{ color: 'var(--on-surface-variant)', textDecoration: 'none', fontSize: 'var(--label-md)' }}>
             Privacidade
           </Link>
-          <Link to="/contact" style={{
-            color: 'var(--on-surface-variant)',
-            textDecoration: 'none',
-            fontSize: 'var(--label-md)'
-          }}>
+          <Link to="/contact" style={{ color: 'var(--on-surface-variant)', textDecoration: 'none', fontSize: 'var(--label-md)' }}>
             Contacto
           </Link>
         </nav>

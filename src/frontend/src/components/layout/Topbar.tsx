@@ -1,11 +1,21 @@
+// src/components/layout/Topbar.tsx
 import { useLocation } from 'react-router-dom'
 
 const ROUTE_LABELS: Record<string, string> = {
-  '/dashboard': 'Painel Principal', '/topic': 'O meu tema', '/protocol/mine': 'O meu protocolo',
-  '/monograph': 'Monografia', '/supervision': 'Corpo Docente', '/reviews': 'Revisões Científicas',
-  '/workload': 'A minha carga', '/protocols': 'Protocolos', '/protocols/assign': 'Atribuição de revisores',
-  '/defense': 'Defesas', '/reports': 'Relatórios', '/secretary/protocols': 'Gestão de submissões',
-  '/admin/users': 'Utilizadores', '/admin/organs': 'Órgãos e áreas',
+  '/dashboard': 'Painel Principal',
+  '/topic': 'O meu tema',
+  '/protocol/mine': 'O meu protocolo',
+  '/monograph': 'Monografia',
+  '/supervision': 'Corpo Docente',
+  '/reviews': 'Revisões Científicas',
+  '/workload': 'A minha carga',
+  '/protocols': 'Protocolos',
+  '/protocols/assign': 'Atribuição de revisores',
+  '/defense': 'Defesas',
+  '/reports': 'Relatórios',
+  '/secretary/protocols': 'Gestão de submissões',
+  '/admin/users': 'Utilizadores',
+  '/admin/organs': 'Órgãos e áreas',
 }
 
 interface TopbarProps {

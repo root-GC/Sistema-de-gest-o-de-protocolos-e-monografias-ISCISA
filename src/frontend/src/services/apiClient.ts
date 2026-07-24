@@ -2,7 +2,11 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// Headers padrão para JSON
+// 🆕 Evento customizado para loading global
+const dispatchLoading = (active: boolean) => {
+  window.dispatchEvent(new CustomEvent('global-loading', { detail: { active } }))
+}
+
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('sgpmc_token');
   const headers: Record<string, string> = {
@@ -18,7 +22,7 @@ function getHeaders(): Record<string, string> {
 
 interface ApiErrorPayload {
   message?: string;
-  errors?: Record<string, string[]>;  // 🆕 Para erros de validação
+  errors?: Record<string, string[]>;
 }
 
 interface HttpError extends Error {
@@ -33,12 +37,10 @@ function isApiErrorPayload(value: unknown): value is ApiErrorPayload {
 async function readError(response: Response, fallbackMessage: string): Promise<HttpError> {
   const error = await response.json().catch(() => ({ message: fallbackMessage })) as unknown;
   
-  // 🆕 Trata erros de validação do Laravel
   let message = fallbackMessage;
   if (isApiErrorPayload(error) && error.message) {
     message = error.message;
     
-    // Adiciona detalhes dos erros de validação
     if (error.errors) {
       const details = Object.values(error.errors).flat().join('; ');
       if (details) {
@@ -151,51 +153,59 @@ export async function downloadApiFile(url: string, fallbackFilename?: string): P
   setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
-// Requisição JSON padrão
+// 🆕 Requisição JSON com loading global
 export async function req<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
-  const headers = getHeaders();
+  dispatchLoading(true)
   
-  // 🆕 Só adiciona Content-Type se NÃO for FormData
-  if (!(body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
+  try {
+    const headers = getHeaders();
+    
+    if (!(body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      method,
+      headers,
+      body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
+    });
+
+    if (!response.ok) {
+      throw await readError(response, 'Erro na requisição');
+    }
+
+    return response.json() as Promise<T>;
+  } finally {
+    dispatchLoading(false)
   }
-
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    method,
-    headers,
-    body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
-  });
-
-  if (!response.ok) {
-    throw await readError(response, 'Erro na requisição');
-  }
-
-  return response.json() as Promise<T>;
 }
 
-// 🆕 Requisição específica para FormData (multipart/form-data)
+// 🆕 Requisição FormData com loading global
 export async function reqFormData<T = unknown>(method: string, url: string, formData: FormData): Promise<T> {
-  const headers: Record<string, string> = {
-    'Accept': 'application/json',
-  };
+  dispatchLoading(true)
   
-  const token = localStorage.getItem('sgpmc_token');
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+    
+    const token = localStorage.getItem('sgpmc_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      method,
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw await readError(response, 'Erro na requisição');
+    }
+
+    return response.json() as Promise<T>;
+  } finally {
+    dispatchLoading(false)
   }
-  
-  // ⚠️ NÃO define Content-Type manualmente
-  // O browser define automaticamente: multipart/form-data; boundary=...
-
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    method,
-    headers,
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw await readError(response, 'Erro na requisição');
-  }
-
-  return response.json() as Promise<T>;
 }

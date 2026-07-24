@@ -18,6 +18,18 @@ import { AdminPanelWidget } from './widgets/AdminPanelWidget';
 import { NotificationWidget } from './widgets/NotificationWidget';
 import { DeadlineWidget } from './widgets/DeadlineWidget';
 import { ProtocolWorkflowWidget } from './widgets/ProtocolWorkflowWidget';
+import { 
+  JointReturnWidget,
+  DebtPayoffWidget,
+  JointAllocationWidget,
+  StockWidget,
+  LoanWidget,
+  TransactionsWidget,
+  TaxReturnWidget,
+  ExcellentScoreWidget,
+  ProfileWidget,
+  PasswordWidget
+} from './widgets/SuaveWidgets';
 
 export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   // ========================
@@ -253,5 +265,116 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     component: DeadlineWidget,
     permissions: [],
     endpoint: '/api/deadlines'
+  },
+   // Widgets Suave/Financeiros
+  {
+    id: 'jointReturn',
+    title: 'Joint Return',
+    description: 'Returns overview',
+    category: 'general',
+    order: 10,
+    size: 'large',
+    component: JointReturnWidget,
+    permissions: [],
+    endpoint: '/api/joint-return'
+  },
+  {
+    id: 'debtPayoff',
+    title: 'Debt Payoff',
+    description: 'Financial planning',
+    category: 'general',
+    order: 11,
+    size: 'medium',
+    component: DebtPayoffWidget,
+    permissions: [],
+    endpoint: '/api/debt-payoff'
+  },
+  {
+    id: 'jointAllocation',
+    title: 'Joint Allocation',
+    description: 'Expense breakdown',
+    category: 'general',
+    order: 12,
+    size: 'medium',
+    component: JointAllocationWidget,
+    permissions: [],
+    endpoint: '/api/joint-allocation'
+  },
+  {
+    id: 'stocks',
+    title: 'Stocks',
+    description: 'Market overview',
+    category: 'general',
+    order: 13,
+    size: 'small',
+    component: StockWidget,
+    permissions: [],
+    endpoint: '/api/stocks'
+  },
+  {
+    id: 'loan',
+    title: 'Loan',
+    description: 'Loan details',
+    category: 'general',
+    order: 14,
+    size: 'small',
+    component: LoanWidget,
+    permissions: [],
+    endpoint: '/api/loan'
+  },
+  {
+    id: 'transactions',
+    title: 'Transactions',
+    description: 'Recent activity',
+    category: 'general',
+    order: 15,
+    size: 'small',
+    component: TransactionsWidget,
+    permissions: [],
+    endpoint: '/api/transactions'
+  },
+  {
+    id: 'taxReturn',
+    title: 'Tax Return',
+    description: '2023 tax summary',
+    category: 'general',
+    order: 16,
+    size: 'small',
+    component: TaxReturnWidget,
+    permissions: [],
+    endpoint: '/api/tax-return'
+  },
+  {
+    id: 'excellentScore',
+    title: 'Credit Score',
+    description: 'Your credit health',
+    category: 'general',
+    order: 17,
+    size: 'small',
+    component: ExcellentScoreWidget,
+    permissions: [],
+    endpoint: '/api/credit-score'
+  },
+  {
+    id: 'profile',
+    title: 'Profile',
+    description: 'User information',
+    category: 'general',
+    order: 18,
+    size: 'small',
+    component: ProfileWidget,
+    permissions: [],
+    endpoint: '/api/profile'
+  },
+  {
+    id: 'password',
+    title: 'Security',
+    description: 'Password management',
+    category: 'general',
+    order: 19,
+    size: 'small',
+    component: PasswordWidget,
+    permissions: [],
+    endpoint: '/api/password'
   }
 ];

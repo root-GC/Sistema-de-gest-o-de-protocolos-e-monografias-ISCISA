@@ -1,9 +1,10 @@
 // src/components/layout/Sidebar.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 // @ts-ignore
 import { useMenu } from '../../hooks/useMenu'
 import { useAuth } from '../../context/AuthContext'
+import '../../styles/global.css'
 
 interface MenuItem {
   id: string
@@ -85,8 +86,6 @@ const ICON_MAP: Record<string, string> = {
   'ti-person-check': 'person_check',
   'ti-folder-open': 'folder_open',
   'ti-users': 'group',
-  
-  // 🆕 Secretary icons
   'ti-balance': 'balance',
   'ti-check-double': 'done_all',
   'ti-chart-bar': 'bar_chart',
@@ -94,8 +93,6 @@ const ICON_MAP: Record<string, string> = {
   'ti-calendar-event': 'event_available',
   'ti-chart-pie': 'pie_chart',
   'ti-home': 'home',
-  
-  // Mapeamentos adicionais
   dashboard: 'dashboard',
   inicio: 'dashboard',
   home: 'dashboard',
@@ -202,7 +199,7 @@ const ICON_MAP: Record<string, string> = {
 }
 
 // ============================================================
-// CONTEXTO para expandir a sidebar a partir dos filhos
+// CONTEXTO
 // ============================================================
 interface SidebarContextType {
   expanded: boolean
@@ -220,15 +217,24 @@ interface SidebarProps {
 
 export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobile }: SidebarProps) {
   const menu: MenuItem[] = useMenu()
-  const { user, activeProfile, logout } = useAuth()
+  const { user, activeProfile, logout, loading: authLoading } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [expandedMenu, setExpandedMenu] = useState<Record<string, boolean>>({})
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
 
   const reallyExpanded = isMobile ? mobileOpen : expanded
-
-  // Expõe o contexto para os itens poderem pedir expansão
   SidebarContext.current = { expanded: reallyExpanded, requestExpand: onExpand }
+
+  useEffect(() => {
+    if (isMobile) onCloseMobile()
+  }, [location.pathname])
+
+  // Reset navigating state when route changes
+  useEffect(() => {
+    setNavigatingTo(null)
+  }, [location.pathname])
 
   function toggleMenu(id: string) {
     if (!reallyExpanded && !isMobile) {
@@ -240,6 +246,7 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
   }
 
   function handleItemClick(route: string) {
+    setNavigatingTo(route)
     if (!reallyExpanded && !isMobile) {
       onExpand()
       setTimeout(() => navigate(route), 150)
@@ -249,11 +256,23 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
     }
   }
 
+  async function handleLogout() {
+    setLoggingOut(true)
+    try {
+      await logout()
+    } catch {
+      setLoggingOut(false)
+    }
+  }
+
   const profileSub: string | null =
     (activeProfile as { course?: { name?: string } } | null | undefined)?.course?.name ??
     (activeProfile as { scientific_area?: { name?: string } } | null | undefined)?.scientific_area?.name ??
     (activeProfile as { organ?: { name?: string } } | null | undefined)?.organ?.name ??
     null
+
+  // Skeleton items para loading
+  const skeletonItems = Array.from({ length: 6 }, (_, i) => i)
 
   return (
     <aside style={{
@@ -272,6 +291,37 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
       transition: 'width 0.25s ease, transform 0.3s ease',
       overflow: 'hidden'
     }}>
+      {/* Overlay de logout - cobre toda a tela */}
+      {loggingOut && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          backdropFilter: 'blur(3px)', zIndex: 100, display: 'flex',
+          alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{
+            background: 'var(--surface-container-lowest)',
+            borderRadius: 'var(--radius-xl)', padding: 'var(--space-5)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 'var(--space-3)', boxShadow: 'var(--elevation-3)',
+            minWidth: '220px'
+          }}>
+            <div style={{
+              width: '44px', height: '44px',
+              border: '3px solid var(--outline-variant)',
+              borderTopColor: 'var(--secondary)',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite'
+            }} />
+            <p style={{
+              fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)',
+              fontWeight: 'var(--font-medium)', fontFamily: 'var(--font-family)'
+            }}>
+              A terminar sessão...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Botão fechar (mobile) */}
       {isMobile && mobileOpen && (
         <button onClick={onCloseMobile} aria-label="Fechar menu" style={{
@@ -324,100 +374,162 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
         flex: 1, overflow: 'auto', padding: '0 var(--space-1)',
         display: 'flex', flexDirection: 'column', gap: '2px'
       }} aria-label="Navegação principal">
-        {menu.map(item => {
-          const iconName = ICON_MAP[item.id] || ICON_MAP[item.icon] || item.icon || 'circle'
+        {authLoading ? (
+          // Skeleton enquanto carrega
+          skeletonItems.map(i => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center',
+              padding: reallyExpanded ? '12px var(--space-2)' : '12px 0',
+              justifyContent: reallyExpanded ? 'flex-start' : 'center',
+              gap: reallyExpanded ? 'var(--space-2)' : '0'
+            }}>
+              <div className="skeleton" style={{ width: '22px', height: '22px', borderRadius: 'var(--radius-md)' }} />
+              {reallyExpanded && (
+                <div className="skeleton skeleton--text-short" style={{ height: '14px', flex: 1 }} />
+              )}
+            </div>
+          ))
+        ) : (
+          menu.map(item => {
+            const iconName = ICON_MAP[item.id] || ICON_MAP[item.icon] || item.icon || 'circle'
+            const isNavigating = navigatingTo === item.route
 
-          if (item.children && item.children.length > 0) {
-            const isActiveParent = item.children.some(child => location.pathname === child.route)
+            if (item.children && item.children.length > 0) {
+              const isActiveParent = item.children.some(child => location.pathname === child.route)
 
-            return (
-              <div key={item.id}>
-                <button
-                  onClick={() => toggleMenu(item.id)}
-                  aria-expanded={!!expandedMenu[item.id]}
-                  title={!reallyExpanded ? item.label : undefined}
-                  style={{
-                    display: 'flex', alignItems: 'center',
-                    gap: reallyExpanded ? 'var(--space-2)' : '0',
-                    width: '100%',
-                    padding: reallyExpanded ? '12px var(--space-2)' : '12px 0',
-                    borderRadius: 'var(--radius-lg)', border: 'none',
-                    background: isActiveParent ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-                    color: isActiveParent ? 'var(--primary)' : 'var(--on-surface-variant)',
-                    fontSize: 'var(--body-md)',
-                    fontWeight: isActiveParent ? 'var(--font-bold)' : 'var(--font-regular)',
-                    cursor: 'pointer', transition: 'all 0.2s',
-                    justifyContent: reallyExpanded ? 'space-between' : 'center',
-                    textAlign: 'left'
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{iconName}</span>
+              return (
+                <div key={item.id}>
+                  <button
+                    onClick={() => toggleMenu(item.id)}
+                    aria-expanded={!!expandedMenu[item.id]}
+                    title={!reallyExpanded ? item.label : undefined}
+                    style={{
+                      display: 'flex', alignItems: 'center',
+                      gap: reallyExpanded ? 'var(--space-2)' : '0',
+                      width: '100%',
+                      padding: reallyExpanded ? '12px var(--space-2)' : '12px 0',
+                      borderRadius: 'var(--radius-lg)', border: 'none',
+                      background: isActiveParent ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
+                      color: isActiveParent ? 'var(--primary)' : 'var(--on-surface-variant)',
+                      fontSize: 'var(--body-md)',
+                      fontWeight: isActiveParent ? 'var(--font-bold)' : 'var(--font-regular)',
+                      cursor: 'pointer', transition: 'all 0.2s',
+                      justifyContent: reallyExpanded ? 'space-between' : 'center',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{iconName}</span>
+                    {reallyExpanded && (
+                      <>
+                        <span style={{ flex: 1 }}>{item.label}</span>
+                        <span className="material-symbols-outlined" style={{
+                          fontSize: '18px', transition: 'transform 0.2s ease',
+                          transform: expandedMenu[item.id] ? 'rotate(180deg)' : 'rotate(0deg)'
+                        }}>expand_more</span>
+                      </>
+                    )}
+                  </button>
+
                   {reallyExpanded && (
-                    <>
-                      <span style={{ flex: 1 }}>{item.label}</span>
-                      <span className="material-symbols-outlined" style={{
-                        fontSize: '18px', transition: 'transform 0.2s ease',
-                        transform: expandedMenu[item.id] ? 'rotate(180deg)' : 'rotate(0deg)'
-                      }}>expand_more</span>
-                    </>
+                    <div style={{
+                      maxHeight: expandedMenu[item.id] ? '500px' : '0', overflow: 'hidden',
+                      transition: 'max-height 0.25s ease', paddingLeft: 'var(--space-4)'
+                    }}>
+                      {item.children.map(child => {
+                        const childNavigating = navigatingTo === child.route
+                        return (
+                          <NavLink key={child.route} to={child.route} onClick={onCloseMobile} style={{
+                            display: 'flex', alignItems: 'center', gap: 'var(--space-1)',
+                            padding: '8px var(--space-2)', borderRadius: 'var(--radius-lg)',
+                            fontSize: 'var(--body-md)', textDecoration: 'none',
+                            color: location.pathname === child.route ? 'var(--primary)' : 'var(--on-surface-variant)',
+                            fontWeight: location.pathname === child.route ? 'var(--font-semibold)' : 'var(--font-regular)',
+                            background: location.pathname === child.route ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
+                            transition: 'all 0.2s', marginTop: '2px',
+                            pointerEvents: childNavigating ? 'none' : 'auto',
+                            opacity: childNavigating ? 0.7 : 1
+                          }}>
+                            {childNavigating && (
+                              <span style={{
+                                width: '12px', height: '12px',
+                                border: '2px solid var(--primary)',
+                                borderTopColor: 'transparent',
+                                borderRadius: '50%',
+                                animation: 'spin 0.6s linear infinite',
+                                flexShrink: 0
+                              }} />
+                            )}
+                            {child.label}
+                          </NavLink>
+                        )
+                      })}
+                    </div>
                   )}
-                </button>
+                </div>
+              )
+            }
 
-                {reallyExpanded && (
-                  <div style={{
-                    maxHeight: expandedMenu[item.id] ? '500px' : '0', overflow: 'hidden',
-                    transition: 'max-height 0.25s ease', paddingLeft: 'var(--space-4)'
-                  }}>
-                    {item.children.map(child => (
-                      <NavLink key={child.route} to={child.route} onClick={onCloseMobile} style={{
-                        display: 'flex', padding: '8px var(--space-2)', borderRadius: 'var(--radius-lg)',
-                        fontSize: 'var(--body-md)', textDecoration: 'none',
-                        color: location.pathname === child.route ? 'var(--primary)' : 'var(--on-surface-variant)',
-                        fontWeight: location.pathname === child.route ? 'var(--font-semibold)' : 'var(--font-regular)',
-                        background: location.pathname === child.route ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-                        transition: 'all 0.2s', marginTop: '2px'
-                      }}>{child.label}</NavLink>
-                    ))}
-                  </div>
+            const active = location.pathname === (item.route || '/')
+            return (
+              <div
+                key={item.id}
+                onClick={() => handleItemClick(item.route || '/')}
+                title={!reallyExpanded ? item.label : undefined}
+                style={{
+                  display: 'flex', alignItems: 'center',
+                  gap: reallyExpanded ? 'var(--space-2)' : '0',
+                  padding: reallyExpanded ? '12px var(--space-2)' : '12px 0',
+                  borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)',
+                  textDecoration: 'none',
+                  color: active ? 'var(--primary)' : 'var(--on-surface-variant)',
+                  fontWeight: active ? 'var(--font-bold)' : 'var(--font-regular)',
+                  background: active ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
+                  borderRight: active && reallyExpanded ? '3px solid var(--primary)' : '3px solid transparent',
+                  transition: 'all 0.2s',
+                  justifyContent: reallyExpanded ? 'flex-start' : 'center',
+                  cursor: isNavigating ? 'wait' : 'pointer',
+                  opacity: isNavigating ? 0.7 : 1,
+                  pointerEvents: isNavigating ? 'none' : 'auto'
+                }}
+              >
+                {isNavigating ? (
+                  <span style={{
+                    width: '20px', height: '20px',
+                    border: '2px solid var(--primary)',
+                    borderTopColor: 'transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 0.6s linear infinite',
+                    flexShrink: 0
+                  }} />
+                ) : (
+                  <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{iconName}</span>
                 )}
+                {reallyExpanded && <span>{item.label}</span>}
               </div>
             )
-          }
-
-          const active = location.pathname === (item.route || '/')
-          return (
-            <div
-              key={item.id}
-              onClick={() => handleItemClick(item.route || '/')}
-              title={!reallyExpanded ? item.label : undefined}
-              style={{
-                display: 'flex', alignItems: 'center',
-                gap: reallyExpanded ? 'var(--space-2)' : '0',
-                padding: reallyExpanded ? '12px var(--space-2)' : '12px 0',
-                borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)',
-                textDecoration: 'none',
-                color: active ? 'var(--primary)' : 'var(--on-surface-variant)',
-                fontWeight: active ? 'var(--font-bold)' : 'var(--font-regular)',
-                background: active ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-                borderRight: active && reallyExpanded ? '3px solid var(--primary)' : '3px solid transparent',
-                transition: 'all 0.2s',
-                justifyContent: reallyExpanded ? 'flex-start' : 'center',
-                cursor: 'pointer'
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{iconName}</span>
-              {reallyExpanded && <span>{item.label}</span>}
-            </div>
-          )
-        })}
+          })
+        )}
       </nav>
 
       {/* Footer */}
       <div style={{ padding: '0 var(--space-1)', marginTop: 'auto' }}>
-        {reallyExpanded ? (
+        {authLoading ? (
+          // Skeleton do footer enquanto carrega
+          <div style={{
+            display: 'flex', flexDirection: 'column', gap: 'var(--space-2)',
+            padding: 'var(--space-2) 0', borderTop: '1px solid var(--outline-variant)',
+            alignItems: reallyExpanded ? 'stretch' : 'center'
+          }}>
+            <div className="skeleton" style={{ width: '22px', height: '22px', borderRadius: 'var(--radius-md)', alignSelf: 'center' }} />
+            <div className="skeleton" style={{ width: '22px', height: '22px', borderRadius: 'var(--radius-md)', alignSelf: 'center' }} />
+            {reallyExpanded && (
+              <div className="skeleton skeleton--card" style={{ height: '60px' }} />
+            )}
+          </div>
+        ) : reallyExpanded ? (
           <>
             <div style={{ borderTop: '1px solid var(--outline-variant)', paddingTop: 'var(--space-2)' }}>
-              <div onClick={() => { navigate('/settings'); if (isMobile) onCloseMobile() }} style={{
+              <div onClick={() => handleItemClick('/settings')} style={{
                 display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px var(--space-2)',
                 borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', cursor: 'pointer',
                 color: location.pathname === '/settings' ? 'var(--primary)' : 'var(--on-surface-variant)',
@@ -428,7 +540,7 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>settings</span>
                 <span>Configurações</span>
               </div>
-              <div onClick={() => { navigate('/help'); if (isMobile) onCloseMobile() }} style={{
+              <div onClick={() => handleItemClick('/help')} style={{
                 display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px var(--space-2)',
                 borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', cursor: 'pointer',
                 color: location.pathname === '/help' ? 'var(--primary)' : 'var(--on-surface-variant)',
@@ -464,10 +576,20 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
                   }}>{profileSub}</p>
                 )}
               </div>
-              <button onClick={logout} aria-label="Terminar sessão" style={{
-                background: 'none', border: 'none', color: 'var(--secondary)',
-                cursor: 'pointer', padding: '4px', borderRadius: 'var(--radius-md)', display: 'flex'
-              }}>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                aria-label="Terminar sessão"
+                title="Terminar sessão"
+                style={{
+                  background: 'none', border: 'none',
+                  color: loggingOut ? 'var(--outline)' : 'var(--secondary)',
+                  cursor: loggingOut ? 'not-allowed' : 'pointer',
+                  padding: '6px', borderRadius: 'var(--radius-md)',
+                  display: 'flex', transition: 'all 0.2s',
+                  opacity: loggingOut ? 0.6 : 1
+                }}
+              >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>logout</span>
               </button>
             </div>
@@ -496,14 +618,24 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontWeight: 'var(--font-bold)', fontSize: 'var(--body-md)'
             }}>{user?.name?.charAt(0).toUpperCase() || 'U'}</div>
-            <button onClick={logout} title="Terminar sessão" style={{
-              background: 'none', border: 'none', color: 'var(--secondary)', cursor: 'pointer', padding: '4px'
-            }}>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              title="Terminar sessão"
+              style={{
+                background: 'none', border: 'none',
+                color: loggingOut ? 'var(--outline)' : 'var(--secondary)',
+                cursor: loggingOut ? 'not-allowed' : 'pointer', padding: '4px',
+                opacity: loggingOut ? 0.6 : 1, transition: 'all 0.2s'
+              }}
+            >
               <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>logout</span>
             </button>
           </div>
         )}
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </aside>
   )
 }

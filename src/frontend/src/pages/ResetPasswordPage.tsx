@@ -1,6 +1,8 @@
+// src/pages/ResetPasswordPage.tsx
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { authService } from '../services/authService'
+import { LoadingSpinner } from '../components/LoadingSpinner'
 import '../styles/global.css'
 
 export default function ResetPasswordPage() {
@@ -40,6 +42,7 @@ export default function ResetPasswordPage() {
     }
   }
 
+  // Link inválido
   if (!token || !email) {
     return (
       <div style={{
@@ -97,6 +100,9 @@ export default function ResetPasswordPage() {
       background: 'var(--background)',
       fontFamily: 'var(--font-family)'
     }}>
+      {/* Overlay de loading ao submeter */}
+      {loading && <LoadingSpinner variant="overlay" text="A actualizar palavra-passe..." />}
+
       {/* Camadas atmosféricas */}
       <div style={{
         position: 'absolute',
@@ -183,10 +189,11 @@ export default function ResetPasswordPage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 'var(--space-1)',
-                  padding: 'var(--space-1) var(--space-2)',
+                  padding: 'var(--space-2) var(--space-3)',
                   marginBottom: 'var(--space-3)',
                   fontSize: 'var(--body-md)',
-                  fontWeight: 'var(--font-medium)'
+                  fontWeight: 'var(--font-medium)',
+                  animation: 'slideUp 0.3s ease'
                 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
@@ -230,10 +237,11 @@ export default function ResetPasswordPage() {
                     placeholder="Mínimo 8 caracteres"
                     required
                     minLength={8}
+                    disabled={loading}
                     style={{
                       width: '100%',
-                      padding: '12px 48px 12px 40px',
-                      background: 'var(--surface-container-lowest)',
+                      padding: '14px 48px 14px 40px',
+                      background: 'var(--surface-container-low)',
                       border: '1px solid var(--outline-variant)',
                       borderRadius: 'var(--radius-lg)',
                       fontSize: 'var(--body-md)',
@@ -241,7 +249,8 @@ export default function ResetPasswordPage() {
                       color: 'var(--on-surface)',
                       outline: 'none',
                       transition: 'all 0.2s ease',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      opacity: loading ? 0.7 : 1
                     }}
                     onFocus={e => {
                       e.target.style.borderColor = 'var(--primary)'
@@ -290,10 +299,11 @@ export default function ResetPasswordPage() {
                     placeholder="Repita a palavra-passe"
                     required
                     minLength={8}
+                    disabled={loading}
                     style={{
                       width: '100%',
-                      padding: '12px 48px 12px 40px',
-                      background: 'var(--surface-container-lowest)',
+                      padding: '14px 48px 14px 40px',
+                      background: 'var(--surface-container-low)',
                       border: '1px solid var(--outline-variant)',
                       borderRadius: 'var(--radius-lg)',
                       fontSize: 'var(--body-md)',
@@ -301,7 +311,8 @@ export default function ResetPasswordPage() {
                       color: 'var(--on-surface)',
                       outline: 'none',
                       transition: 'all 0.2s ease',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      opacity: loading ? 0.7 : 1
                     }}
                     onFocus={e => {
                       e.target.style.borderColor = 'var(--primary)'
@@ -320,24 +331,26 @@ export default function ResetPasswordPage() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 'var(--space-1)',
-                cursor: 'pointer',
+                cursor: loading ? 'not-allowed' : 'pointer',
                 fontSize: 'var(--body-md)',
                 color: 'var(--on-surface-variant)',
-                transition: 'color 0.2s'
+                transition: 'color 0.2s',
+                opacity: loading ? 0.7 : 1
               }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--primary)'}
+              onMouseEnter={e => { if (!loading) e.currentTarget.style.color = 'var(--primary)' }}
               onMouseLeave={e => e.currentTarget.style.color = 'var(--on-surface-variant)'}
               >
                 <input
                   type="checkbox"
                   checked={showPassword}
                   onChange={e => setShowPassword(e.target.checked)}
+                  disabled={loading}
                   style={{
                     width: '16px',
                     height: '16px',
                     accentColor: 'var(--primary)',
                     borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer'
+                    cursor: loading ? 'not-allowed' : 'pointer'
                   }}
                 />
                 <span>Mostrar palavra-passe</span>
@@ -349,7 +362,8 @@ export default function ResetPasswordPage() {
                 background: 'var(--surface-container-low)',
                 borderRadius: 'var(--radius-lg)',
                 fontSize: 'var(--label-md)',
-                color: 'var(--on-surface-variant)'
+                color: 'var(--on-surface-variant)',
+                opacity: loading ? 0.7 : 1
               }}>
                 <p style={{ fontWeight: 'var(--font-medium)', marginBottom: 'var(--space-1)' }}>
                   A palavra-passe deve conter:
@@ -391,7 +405,7 @@ export default function ResetPasswordPage() {
                 onMouseEnter={e => {
                   if (!loading && password === confirmation && password.length >= 8) {
                     e.currentTarget.style.boxShadow = 'var(--elevation-3)'
-                    e.currentTarget.style.transform = 'scale(0.98)'
+                    e.currentTarget.style.transform = 'scale(1.02)'
                   }
                 }}
                 onMouseLeave={e => {
@@ -426,7 +440,8 @@ export default function ResetPasswordPage() {
               borderTop: '1px solid var(--outline-variant)',
               textAlign: 'center',
               fontSize: 'var(--body-md)',
-              color: 'var(--on-surface-variant)'
+              color: 'var(--on-surface-variant)',
+              opacity: loading ? 0.7 : 1
             }}>
               <Link
                 to="/login"
@@ -437,7 +452,8 @@ export default function ResetPasswordPage() {
                   color: 'var(--primary)',
                   fontWeight: 'var(--font-semibold)',
                   textDecoration: 'none',
-                  transition: 'text-decoration 0.2s'
+                  transition: 'text-decoration 0.2s',
+                  pointerEvents: loading ? 'none' : 'auto'
                 }}
                 onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
                 onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
@@ -450,12 +466,7 @@ export default function ResetPasswordPage() {
         </div>
       </main>
 
-      {/* Animação do spinner */}
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
