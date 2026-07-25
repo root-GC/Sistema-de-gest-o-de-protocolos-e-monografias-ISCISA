@@ -11,6 +11,8 @@ class MonographDatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // $this->call([]);
+        $this->call([
+            MonographTestSeeder::class,
+        ]);
     }
 }

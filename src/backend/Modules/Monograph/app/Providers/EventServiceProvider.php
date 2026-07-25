@@ -1,27 +1,24 @@
 <?php
 
-namespace Modules\Monograph\Providers;
+namespace Modules\Monograph\app\Providers;
 
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
+use Modules\Monograph\app\Events\{MonographForwardedToOrgan, MonographReturned, MonographVerified};
+use Modules\Monograph\app\Listeners\{NotifyOrganOnForward, NotifyStudentOnReturn, LogWorkflowTransition};
 
 class EventServiceProvider extends ServiceProvider
 {
-    /**
-     * The event handler mappings for the application.
-     *
-     * @var array<string, array<int, string>>
-     */
-    protected $listen = [];
-
-    /**
-     * Indicates if events should be discovered.
-     *
-     * @var bool
-     */
-    protected static $shouldDiscoverEvents = true;
-
-    /**
-     * Configure the proper event listeners for email verification.
-     */
-    protected function configureEmailVerification(): void {}
+    protected $listen = [
+        MonographForwardedToOrgan::class => [
+            NotifyOrganOnForward::class,
+            LogWorkflowTransition::class,
+        ],
+        MonographReturned::class => [
+            NotifyStudentOnReturn::class,
+            LogWorkflowTransition::class,
+        ],
+        MonographVerified::class => [
+            LogWorkflowTransition::class,
+        ],
+    ];
 }

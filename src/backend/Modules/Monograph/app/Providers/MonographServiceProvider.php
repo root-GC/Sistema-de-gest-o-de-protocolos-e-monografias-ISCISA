@@ -7,6 +7,7 @@ use Illuminate\Console\Scheduling\Schedule;
 
 class MonographServiceProvider extends ModuleServiceProvider
 {
+<<<<<<< Updated upstream
     /**
      * The name of the module.
      */
@@ -44,3 +45,17 @@ class MonographServiceProvider extends ModuleServiceProvider
     //     $schedule->command('inspire')->hourly();
     // }
 }
+=======
+    public function register(): void
+    {
+        $this->app->register(EventServiceProvider::class);
+        $this->app->register(RouteServiceProvider::class);
+        $this->app->register(AuthServiceProvider::class);
+    }
+
+    public function boot(): void
+    {
+        //
+    }
+}
+>>>>>>> Stashed changes
