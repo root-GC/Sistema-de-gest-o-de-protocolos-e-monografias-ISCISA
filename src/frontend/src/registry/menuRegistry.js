@@ -1,10 +1,8 @@
-// Fonte única de verdade — toda a navegação do sistema.
-// Regra: item visível se user tiver item.permission OU uma das item.roles.
-// Para adicionar um item basta adicioná-lo aqui — sem tocar em componentes.
+// src/config/menuRegistry.ts
 
 export const menuRegistry = [
 
-  // ── Dashboard (toda a gente autenticada) ─────────────────────────
+  // ── Dashboard ─────────────────────────────────────────────────────
   {
     id: 'dashboard',
     label: 'Início',
@@ -123,56 +121,45 @@ export const menuRegistry = [
     roles: ['coordinator'],
   },
 
-// Adiciona depois de "Gestão de submissões"
-// ── Secretary ─────────────────────────────────────────────────────
-{
-  id: 'secretary_protocols',
-  label: 'Gestão de submissões',
-  icon: 'ti-clipboard-list',
-  route: '/secretary/protocols',
-  permission: 'protocol.triage',
-  roles: ['secretary'],
-},
-// 🆕 Harmonização
-{
-  id: 'secretary_harmonization',
-  label: 'Harmonização',
-  icon: 'ti-balance',
-  route: '/secretary/harmonization',
-  permission: 'evaluation.harmonize',
-  roles: ['secretary'],
-},
-// 🆕 Revisões Concluídas
-{
-  id: 'secretary_completed',
-  label: 'Revisões Concluídas',
-  icon: 'ti-check-double',
-  route: '/secretary/completed',
-  permission: 'protocol.view.all',
-  roles: ['secretary'],
-},
+  // ── Secretary ─────────────────────────────────────────────────────
+  {
+    id: 'secretary_protocols',
+    label: 'Gestão de submissões',
+    icon: 'ti-clipboard-list',
+    route: '/secretary/protocols',
+    permission: 'protocol.triage',
+    roles: ['secretary'],
+  },
+  // 🆕 Marcar Reunião (substitui Harmonização)
+  {
+    id: 'secretary_meeting',
+    label: 'Marcar Reunião',
+    icon: 'ti-calendar-plus',
+    route: '/secretary/meeting',
+    permission: 'evaluation.harmonize',
+    roles: ['secretary'],
+  },
+  // 🆕 Planilha de Protocolos (substitui Revisões Concluídas)
+  {
+    id: 'secretary_spreadsheet',
+    label: 'Planilha de Protocolos',
+    icon: 'ti-table',
+    route: '/secretary/spreadsheet',
+    permission: 'protocol.view.all',
+    roles: ['secretary'],
+  },
 
-  // ── Organ President (Presidente de Órgão) ─────────────────────────
+  // ── Organ President ───────────────────────────────────────────────
   {
     id: 'organ_president',
     label: 'O meu Órgão',
     icon: 'ti-building',
     route: '/organ-president',
     permission: null,
-    roles: ['admin'], // Presidentes têm role 'admin' com organ_id específico
+    roles: ['admin'],
     children: [
-      {
-        id: 'organ_president_dashboard',
-        label: 'Painel',
-        route: '/organ-president',
-        permission: null,
-      },
-      {
-        id: 'organ_president_members',
-        label: 'Membros',
-        route: '/organ-president/members',
-        permission: null,
-      },
+      { id: 'organ_president_dashboard', label: 'Painel', route: '/organ-president', permission: null },
+      { id: 'organ_president_members',   label: 'Membros', route: '/organ-president/members', permission: null },
     ],
   },
 
@@ -185,24 +172,9 @@ export const menuRegistry = [
     permission: 'admin.organs',
     roles: ['admin'],
     children: [
-      {
-        id: 'general_admin_dashboard',
-        label: 'Painel',
-        route: '/general-admin',
-        permission: 'admin.organs',
-      },
-      {
-        id: 'general_admin_personnel',
-        label: 'Gestão de Pessoal',
-        route: '/general-admin/personnel',
-        permission: 'admin.organs',
-      },
-      {
-        id: 'general_admin_courses',
-        label: 'Cursos e Áreas',
-        route: '/general-admin/courses',
-        permission: 'admin.organs',
-      },
+      { id: 'general_admin_dashboard',  label: 'Painel',            route: '/general-admin',               permission: 'admin.organs' },
+      { id: 'general_admin_personnel',  label: 'Gestão de Pessoal', route: '/general-admin/personnel',     permission: 'admin.organs' },
+      { id: 'general_admin_courses',    label: 'Cursos e Áreas',    route: '/general-admin/courses',       permission: 'admin.organs' },
     ],
   },
 
@@ -214,30 +186,9 @@ export const menuRegistry = [
     permission: 'admin.users',
     roles: ['admin'],
     children: [
-      {
-        id: 'admin_users',
-        label: 'Utilizadores',
-        icon: 'ti-users-group',
-        route: '/admin/users',
-        permission: 'admin.users',
-        roles: ['admin'],
-      },
-      {
-        id: 'admin_organs',
-        label: 'Órgãos e áreas',
-        icon: 'ti-building',
-        route: '/admin/organs',
-        permission: 'admin.organs',
-        roles: ['admin'],
-      },
-      {
-        id: 'admin_system_status',
-        label: 'Estado do Sistema',
-        icon: 'ti-trending-up',
-        route: '/admin/system-status',
-        permission: 'admin.settings',
-        roles: ['admin'],
-      },
+      { id: 'admin_users',         label: 'Utilizadores',      icon: 'ti-users-group', route: '/admin/users',         permission: 'admin.users',    roles: ['admin'] },
+      { id: 'admin_organs',        label: 'Órgãos e áreas',    icon: 'ti-building',    route: '/admin/organs',        permission: 'admin.organs',   roles: ['admin'] },
+      { id: 'admin_system_status', label: 'Estado do Sistema', icon: 'ti-trending-up', route: '/admin/system-status', permission: 'admin.settings', roles: ['admin'] },
     ],
   },
 ]

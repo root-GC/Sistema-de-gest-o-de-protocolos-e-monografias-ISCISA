@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   topicService,
@@ -6,12 +6,12 @@ import {
   type TopicReviewComment,
 } from '../../services/topicService'
 import { protocolService, type Protocol } from '../../services/protocolService'
-import { evaluationService, type EvaluationForm, type EvaluationOpinionResult, type FormCriterion } from '../../services/evaluationService'
+import { evaluationService, type EvaluationForm, type EvaluationOpinionResult, type FormCriterion, type ReviewerEvaluation } from '../../services/evaluationService'
 import { useAuth } from '../../context/AuthContext'
 import TopicJustification from '../../components/TopicJustification'
 import '../../styles/global.css'
-import './EvaluationPage.css'
 
+// ── Helpers ────────────────────────────────────────────
 function isTopicClosed(status?: string) {
   return status === 'topic_approved_nucleo' || status === 'topic_rejected_nucleo' || status === 'topic_rejected'
 }
@@ -22,16 +22,33 @@ function decisionLabel(decision: 'approved' | 'rejected' | null | undefined) {
   return 'Pendente'
 }
 
-function organLabel(organ?: string) {
-  const labels: Record<string, string> = {
-    nucleo: 'Núcleo Científico',
-    comite_cientifico: 'Comité Científico',
-    comite_bioetica: 'Comité de Bioética',
-  }
-
-  return labels[organ || ''] || 'Órgão Científico'
+function evaluationStatusMessage(topic: Topic): string {
+  if (topic.status === 'topic_approved_nucleo') return 'Este tema foi aprovado pelo Núcleo Científico.'
+  if (topic.status === 'topic_rejected_nucleo') return 'Este tema foi rejeitado pelo Núcleo Científico.'
+  return ''
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+}
+
+type ExpandedPanel = 'both' | 'document' | 'form'
+type FormTab = 'my-evaluation' | 'other-evaluation' | 'comparison'
+
+const MIN_PANEL_WIDTH = 300
+const DEFAULT_SPLIT = 50
+
+interface ImportedDocument {
+  file: File
+  name: string
+  size: number
+  url: string
+  uploadedAt: Date
+}
+
+// ── Componente Principal ──────────────────────────────
 export default function EvaluationPage() {
   const { topicId, protocolId } = useParams<{ topicId: string; protocolId: string }>()
   const navigate = useNavigate()
@@ -67,119 +84,293 @@ export default function EvaluationPage() {
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  // ── Document Viewer state ──
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null)
+  const [documentLoading, setDocumentLoading] = useState(false)
+  const [documentError, setDocumentError] = useState<string | null>(null)
+
+  // ── Imported Document state ──
+  const [importedDocument, setImportedDocument] = useState<ImportedDocument | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
+
+  // ── Panel state ──
+  const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>('both')
+  const [splitPosition, setSplitPosition] = useState(DEFAULT_SPLIT)
+  const [isDragging, setIsDragging] = useState(false)
+
+  // ── Form Tab state ──
+  const [activeFormTab, setActiveFormTab] = useState<FormTab>('my-evaluation')
+
+  // ── Other Reviewer state ──
+  const [otherReviewerEval, setOtherReviewerEval] = useState<ReviewerEvaluation | null>(null)
+  const [otherReviewerCriterionReviews, setOtherReviewerCriterionReviews] = useState<Record<number, string>>({})
+
+  // ── Refs ──
+  const containerRef = useRef<HTMLDivElement>(null)
+  const dividerRef = useRef<HTMLDivElement>(null)
+  const savedSplitPosition = useRef(DEFAULT_SPLIT)
+
+  // ═══════════════════════════════════════════════
+  // DRAG TO RESIZE
+  // ═══════════════════════════════════════════════
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isDragging) return
+    function handleMouseMove(e: MouseEvent) {
+      if (!containerRef.current) return
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const containerWidth = containerRect.width
+      const mouseX = e.clientX - containerRect.left
+      let newSplitPercent = (mouseX / containerWidth) * 100
+      const leftPanelPx = (newSplitPercent / 100) * containerWidth
+      const rightPanelPx = containerWidth - leftPanelPx
+      if (leftPanelPx < MIN_PANEL_WIDTH) newSplitPercent = (MIN_PANEL_WIDTH / containerWidth) * 100
+      else if (rightPanelPx < MIN_PANEL_WIDTH) newSplitPercent = ((containerWidth - MIN_PANEL_WIDTH) / containerWidth) * 100
+      newSplitPercent = Math.max(20, Math.min(80, newSplitPercent))
+      setSplitPosition(newSplitPercent)
+    }
+    function handleMouseUp() { setIsDragging(false) }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isDragging])
+
+  // ═══════════════════════════════════════════════
+  // PANEL TOGGLE
+  // ═══════════════════════════════════════════════
+  function toggleDocumentFullscreen() {
+    if (expandedPanel === 'document') {
+      setExpandedPanel('both')
+      setSplitPosition(savedSplitPosition.current)
+    } else {
+      savedSplitPosition.current = splitPosition
+      setExpandedPanel('document')
+    }
+  }
+
+  function toggleFormFullscreen() {
+    if (expandedPanel === 'form') {
+      setExpandedPanel('both')
+      setSplitPosition(savedSplitPosition.current)
+    } else {
+      savedSplitPosition.current = splitPosition
+      setExpandedPanel('form')
+    }
+  }
+
+  useEffect(() => {
+    function handleKeyboard(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === '\\') { e.preventDefault(); toggleDocumentFullscreen() }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '\\') { e.preventDefault(); toggleFormFullscreen() }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '0') { e.preventDefault(); setSplitPosition(DEFAULT_SPLIT); setExpandedPanel('both') }
+    }
+    window.addEventListener('keydown', handleKeyboard)
+    return () => window.removeEventListener('keydown', handleKeyboard)
+  }, [expandedPanel, splitPosition])
+
+  // ═══════════════════════════════════════════════
+  // IMPORT / UPLOAD + DRAG & DROP
+  // ═══════════════════════════════════════════════
+  function processFile(file: File) {
+    const allowedExtensions = ['.docx', '.doc', '.pdf']
+    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+
+    if (!allowedExtensions.includes(fileExtension)) {
+      setError('Formato não suportado. Use .docx, .doc ou .pdf')
+      setTimeout(() => setError(null), 4000)
+      return
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setError('Arquivo muito grande. Máximo 50MB.')
+      setTimeout(() => setError(null), 4000)
+      return
+    }
+
+    setIsUploading(true)
+    setError(null)
+
+    try {
+      const objectUrl = URL.createObjectURL(file)
+      if (importedDocument?.url) URL.revokeObjectURL(importedDocument.url)
+
+      setImportedDocument({
+        file,
+        name: file.name,
+        size: file.size,
+        url: objectUrl,
+        uploadedAt: new Date(),
+      })
+      setSuccess(`Documento "${file.name}" importado com sucesso!`)
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (e) {
+      setError('Erro ao importar arquivo.')
+      setTimeout(() => setError(null), 4000)
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  function handleImportClick() {
+    fileInputRef.current?.click()
+  }
+
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    processFile(file)
+  }
+
+  // Drag & Drop handlers
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!formConcluded && !myEvaluationSubmitted) {
+      setIsDraggingOver(true)
+    }
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingOver(false)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingOver(false)
+
+    if (formConcluded || myEvaluationSubmitted) return
+
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    processFile(file)
+  }
+
+  function handleRemoveImported() {
+    if (importedDocument?.url) URL.revokeObjectURL(importedDocument.url)
+    setImportedDocument(null)
+    setSuccess('Documento importado removido.')
+    setTimeout(() => setSuccess(null), 2000)
+  }
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (importedDocument?.url) URL.revokeObjectURL(importedDocument.url)
+    }
+  }, [])
+
+  // ═══════════════════════════════════════════════
+  // LIFECYCLE
+  // ═══════════════════════════════════════════════
   useEffect(() => {
     if (isProtocol && id) loadProtocolEvaluation()
     else if (id) loadTopicEvaluation()
   }, [id, isProtocol])
 
-  // ═══════════════════════════════════════════════
-  // TOPIC EVALUATION (existing)
-  // ═══════════════════════════════════════════════
+  useEffect(() => {
+    if (protocol?.latest_document?.download_url) {
+      loadDocumentForViewer(protocol.latest_document.download_url)
+    }
+  }, [protocol])
+
+  async function loadDocumentForViewer(downloadUrl: string) {
+    setDocumentLoading(true)
+    setDocumentError(null)
+    try {
+      const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(downloadUrl)}&embedded=true`
+      setDocumentUrl(viewerUrl)
+    } catch (e) {
+      setDocumentError((e as Error).message)
+      setDocumentUrl(null)
+    } finally {
+      setDocumentLoading(false)
+    }
+  }
+
+  // ... (loadTopicEvaluation, loadProtocolEvaluation, etc. - MANTIDAS IGUAIS)
+
   async function loadTopicEvaluation() {
     setLoading(true)
     try {
       const topicsData = await topicService.listForReviewer()
       const currentTopic = topicsData.topics.find(t => t.id === id)
-
-      if (!currentTopic) {
-        throw new Error('Tema não encontrado entre as revisões atribuídas a si.')
-      }
-
+      if (!currentTopic) throw new Error('Tema não encontrado.')
       setTopic(currentTopic)
-
       const currentDecision = currentTopic.my_assignment?.evaluation?.decision ?? null
       const isClosed = isTopicClosed(currentTopic.status)
-
       setMyDecision(currentDecision)
       setEvaluationDone(Boolean(currentDecision) || isClosed)
       setDecision('')
-
-      if (currentDecision) {
-        setSuccess(`A sua avaliação já foi registada: ${decisionLabel(currentDecision)}.`)
-      } else if (isClosed) {
-        setSuccess('Este tema já foi avaliado e o processo de revisão está concluído.')
-      } else {
-        setSuccess(null)
-      }
-
+      if (currentDecision) setSuccess(`Avaliação já registada: ${decisionLabel(currentDecision)}.`)
+      else if (isClosed) setSuccess('Processo de revisão concluído.')
+      else setSuccess(null)
       const response = await topicService.getComments(id)
       setComments(response.comments || [])
-
       setError(null)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (e) { setError((e as Error).message) }
+    finally { setLoading(false) }
   }
 
   async function addComment(e: React.FormEvent) {
     e.preventDefault()
     if (!newComment.trim() || evaluationDone) return
-    setSubmitting(true)
-    setError(null)
+    setSubmitting(true); setError(null)
     try {
       await topicService.submitComment(id, newComment)
-      setNewComment('')
-      setSuccess('Comentário adicionado com sucesso!')
-      await loadTopicEvaluation()
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setSubmitting(false)
-    }
+      setNewComment(''); setSuccess('Comentário adicionado!')
+      await loadTopicEvaluation(); setTimeout(() => setSuccess(null), 3000)
+    } catch (e) { setError((e as Error).message) }
+    finally { setSubmitting(false) }
   }
 
   async function submitDecision() {
     if (!decision || evaluationDone) return
-    setSubmitting(true)
-    setError(null)
+    setSubmitting(true); setError(null)
     try {
       await topicService.submitEvaluation(id, decision)
-      setMyDecision(decision)
-      setSuccess(`Tema ${decision === 'approved' ? 'aprovado' : 'rejeitado'} com sucesso!`)
-      setEvaluationDone(true)
-      setDecision('')
-      await loadTopicEvaluation()
-      setTimeout(() => { navigate('/reviews') }, 2000)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setSubmitting(false)
-    }
+      setMyDecision(decision); setSuccess(`Tema ${decision === 'approved' ? 'aprovado' : 'rejeitado'}!`)
+      setEvaluationDone(true); setDecision('')
+      await loadTopicEvaluation(); setTimeout(() => { navigate('/reviews') }, 2000)
+    } catch (e) { setError((e as Error).message) }
+    finally { setSubmitting(false) }
   }
 
-  // ═══════════════════════════════════════════════
-  // PROTOCOL EVALUATION (new)
-  // ═══════════════════════════════════════════════
   async function loadProtocolEvaluation() {
     setLoading(true)
     try {
       const data = await protocolService.listForReviewer()
       const currentProtocol = data.protocols.find(p => p.id === id)
-
-      if (!currentProtocol) {
-        throw new Error('Protocolo não encontrado entre as revisões atribuídas a si.')
-      }
-
+      if (!currentProtocol) throw new Error('Protocolo não encontrado.')
       setProtocol(currentProtocol)
 
       const formsData = await evaluationService.listForReviewer()
       const form = formsData.evaluation_forms.find(f => f.protocol_id === id)
-
-      if (!form) {
-        throw new Error('Nenhuma ficha de avaliação encontrada para este protocolo.')
-      }
+      if (!form) throw new Error('Ficha de avaliação não encontrada.')
 
       const fullForm = await evaluationService.getForm(form.id)
       setEvaluationForm(fullForm.evaluation_form)
 
       const allEvals = fullForm.evaluation_form.reviewer_evaluations || []
       const currentUserId = user?.id ? Number(user.id) : null
-      const myEval = allEvals.find(
-        re => currentUserId !== null && re.reviewer?.user?.id === currentUserId
-      )
+      const myEval = allEvals.find(re => currentUserId !== null && re.reviewer?.user?.id === currentUserId)
       const mySubmitStatus = myEval?.status === 'submitted'
       const allSubmitted = allEvals.length > 0 && allEvals.every(re => re.status === 'submitted')
       const concluded = fullForm.evaluation_form.status === 'concluded'
@@ -188,54 +379,52 @@ export default function EvaluationPage() {
       setMyEvaluationSubmitted(mySubmitStatus)
       setAllReviewersSubmitted(allSubmitted)
       setProtocolDecision(fullForm.evaluation_form.final_decision || myEval?.recommendation || null)
-      setRecommendation('')
-      setOverallComment('')
-      setFinalDecision('')
+      setRecommendation(''); setOverallComment(''); setFinalDecision('')
       setConclusionSummary(fullForm.evaluation_form.conclusion_summary || '')
-      setCriterionReviews({})
-      setOpinionResult(null)
+      setCriterionReviews({}); setOpinionResult(null)
+
+      const otherEval = allEvals.find(re => currentUserId !== null && re.reviewer?.user?.id !== currentUserId)
+      if (otherEval) {
+        setOtherReviewerEval(otherEval)
+        const otherReviews: Record<number, string> = {}
+        if (otherEval.criterion_reviews) {
+          otherEval.criterion_reviews.forEach(cr => {
+            if (cr.evaluation_form_criterion_id && cr.comment) otherReviews[cr.evaluation_form_criterion_id] = cr.comment
+          })
+        }
+        setOtherReviewerCriterionReviews(otherReviews)
+      } else {
+        setOtherReviewerEval(null); setOtherReviewerCriterionReviews({})
+      }
 
       if (myEval?.criterion_reviews) {
         const reviews: Record<number, string> = {}
         myEval.criterion_reviews.forEach(cr => {
-          if (cr.evaluation_form_criterion_id && cr.comment) {
-            reviews[cr.evaluation_form_criterion_id] = cr.comment
-          }
+          if (cr.evaluation_form_criterion_id && cr.comment) reviews[cr.evaluation_form_criterion_id] = cr.comment
         })
         setCriterionReviews(reviews)
       }
 
-      if (concluded) {
-        setSuccess('Este protocolo já foi avaliado e o processo está concluído.')
-      } else if (mySubmitStatus) {
-        setSuccess('A sua avaliação já foi submetida. Aguarde a conclusão.')
-      } else {
-        setSuccess(null)
-      }
+      if (concluded) setSuccess('Protocolo já avaliado.')
+      else if (mySubmitStatus) setSuccess('Avaliação submetida. Aguarde conclusão.')
+      else setSuccess(null)
 
       try {
         const { opinions } = await protocolService.listOpinions(id)
         const latestOpinion = opinions[0]
         if (latestOpinion) {
           setOpinionResult({
-            id: latestOpinion.id,
-            decision: latestOpinion.decision,
-            issued_at: latestOpinion.issued_at,
+            id: latestOpinion.id, decision: latestOpinion.decision, issued_at: latestOpinion.issued_at,
             document_url: latestOpinion.document_url || undefined,
             download_url: latestOpinion.download_url || undefined,
             evaluation_form_download_url: latestOpinion.evaluation_form_download_url || undefined,
           })
         }
-      } catch {
-        setOpinionResult(null)
-      }
+      } catch { setOpinionResult(null) }
 
       setError(null)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (e) { setError((e as Error).message) }
+    finally { setLoading(false) }
   }
 
   async function handleSaveCriterionReview(formCriterionId: number) {
@@ -244,31 +433,20 @@ export default function EvaluationPage() {
     try {
       const comment = criterionReviews[formCriterionId] || null
       await evaluationService.saveCriterionReview(evaluationForm.id, formCriterionId, comment)
-      setSuccess('Comentário guardado!')
-      setTimeout(() => setSuccess(null), 2000)
-    } catch (e) {
-      setError((e as Error).message)
-    }
+      setSuccess('Comentário guardado!'); setTimeout(() => setSuccess(null), 2000)
+    } catch (e) { setError((e as Error).message) }
   }
 
   async function openFile(url: string | null | undefined, fallbackFilename?: string) {
     if (!url) return
-
-    try {
-      await evaluationService.openFile(url, fallbackFilename)
-    } catch (e) {
-      setError((e as Error).message)
-    }
+    try { await evaluationService.openFile(url, fallbackFilename) }
+    catch (e) { setError((e as Error).message) }
   }
 
   async function downloadFile(url: string | null | undefined, fallbackFilename?: string) {
     if (!url) return
-
-    try {
-      await evaluationService.downloadFile(url, fallbackFilename)
-    } catch (e) {
-      setError((e as Error).message)
-    }
+    try { await evaluationService.downloadFile(url, fallbackFilename) }
+    catch (e) { setError((e as Error).message) }
   }
 
   async function handleSubmitEvaluation() {
@@ -276,11 +454,10 @@ export default function EvaluationPage() {
     setSubmitting(true)
     setError(null)
     try {
-      await evaluationService.submit(
-        evaluationForm.id,
-        recommendation,
-        overallComment || null
-      )
+      if (importedDocument?.file) {
+        await protocolService.uploadReviewedDocument(id, importedDocument.file)
+      }
+      await evaluationService.submit(evaluationForm.id, recommendation, overallComment || null)
       setSuccess('Avaliação submetida com sucesso!')
       setMyEvaluationSubmitted(true)
       await loadProtocolEvaluation()
@@ -293,585 +470,469 @@ export default function EvaluationPage() {
 
   async function handleDecide() {
     if (!evaluationForm || formConcluded || !finalDecision) return
-    setSubmitting(true)
-    setError(null)
+    setSubmitting(true); setError(null)
     try {
-      const result = await evaluationService.decide(
-        evaluationForm.id,
-        finalDecision,
-        conclusionSummary || null
-      )
-      setSuccess(result.message)
-      setFormConcluded(true)
+      const result = await evaluationService.decide(evaluationForm.id, finalDecision, conclusionSummary || null)
+      setSuccess(result.message); setFormConcluded(true)
       setProtocolDecision(finalDecision)
-      if (result.opinion) {
-        setOpinionResult(result.opinion)
-      }
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setSubmitting(false)
-    }
+      if (result.opinion) setOpinionResult(result.opinion)
+    } catch (e) { setError((e as Error).message) }
+    finally { setSubmitting(false) }
   }
 
   // ═══════════════════════════════════════════════
   // RENDER HELPERS
   // ═══════════════════════════════════════════════
-  const topicClosed = isTopicClosed(topic?.status)
-  const evaluationStatusMessage = topicClosed
-    ? topic?.status === 'topic_approved_nucleo'
-      ? 'Este tema foi aprovado pelo Núcleo Científico.'
-      : 'Este tema foi rejeitado pelo Núcleo Científico.'
-    : myDecision
-      ? `A sua avaliação foi registada como "${decisionLabel(myDecision)}".`
-      : ''
+  function renderCriterionRow(criterion: FormCriterion, isReadOnly: boolean = false) {
+    const myComment = criterionReviews[criterion.id] || ''
+    const otherComment = otherReviewerCriterionReviews[criterion.id] || ''
+    const showComparison = activeFormTab === 'comparison' && otherReviewerEval
 
-  const groupedCriteria = evaluationForm?.form_criteria?.reduce<Record<string, FormCriterion[]>>((groups, c) => {
-    const group = c.group_name || 'Outros'
-    if (!groups[group]) groups[group] = []
-    groups[group].push(c)
-    return groups
-  }, {}) || {}
-
-  const reviewerEvaluations = evaluationForm?.reviewer_evaluations || []
-  const currentUserId = user?.id ? Number(user.id) : null
-  const finalProtocolDecision = evaluationForm?.final_decision || protocolDecision
-  const protocolEvaluationState = formConcluded
-    ? 'Concluído'
-    : myEvaluationSubmitted
-      ? 'Submetido'
-      : 'Pendente'
-
-  if (loading) {
     return (
-      <div style={{
-        width: '100%',
-        fontFamily: 'var(--font-family)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 'var(--space-6)',
-        fontSize: 'var(--body-lg)',
-        color: 'var(--on-surface-variant)'
-      }}>
-        <span style={{
-          width: '24px',
-          height: '24px',
-          border: '3px solid var(--outline-variant)',
-          borderTopColor: 'var(--primary)',
-          borderRadius: 'var(--radius-full)',
-          animation: 'spin 0.8s linear infinite',
-          marginRight: 'var(--space-2)'
-        }} />
-        A carregar...
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div key={criterion.id} className="criterion-item">
+        <div className="criterion-header">
+          <label htmlFor={`criterion-${criterion.id}`}>{criterion.criterion_name}</label>
+          <div className="criterion-rating">
+            {[1, 2, 3, 4, 5].map(score => (
+              <button key={score} type="button"
+                className={`rating-dot ${myComment?.startsWith(`Nota ${score}`) ? 'is-active' : ''}`}
+                onClick={() => {
+                  if (myEvaluationSubmitted || formConcluded || isReadOnly) return
+                  const currentComment = myComment?.replace(/^Nota \d\/5 - /, '') || ''
+                  setCriterionReviews(prev => ({ ...prev, [criterion.id]: `Nota ${score}/5 - ${currentComment}` }))
+                }}
+                disabled={myEvaluationSubmitted || formConcluded || isReadOnly}
+                title={`Nota ${score}`}
+              >{score}</button>
+            ))}
+          </div>
+        </div>
+        <div className={showComparison ? 'criterion-comparison' : ''}>
+          <div className="criterion-review-block">
+            {showComparison && <div className="criterion-review-label criterion-review-label--mine"><span className="material-symbols-outlined">person</span>Minha avaliação</div>}
+            <textarea
+              id={`criterion-${criterion.id}`}
+              value={myComment?.replace(/^Nota \d\/5 - /, '') || ''}
+              onChange={e => setCriterionReviews(prev => ({ ...prev, [criterion.id]: e.target.value }))}
+              onBlur={() => !isReadOnly && handleSaveCriterionReview(criterion.id)}
+              placeholder="Observações sobre este critério..."
+              rows={showComparison ? 2 : 3}
+              disabled={myEvaluationSubmitted || formConcluded || isReadOnly}
+            />
+          </div>
+          {showComparison && otherReviewerEval && (
+            <div className="criterion-review-block criterion-review-block--other">
+              <div className="criterion-review-label criterion-review-label--other">
+                <span className="material-symbols-outlined">group</span>
+                {otherReviewerEval.reviewer?.user?.name || 'Outro Revisor'}
+                {otherReviewerEval.status === 'submitted' ? <span className="other-review-badge submitted">Submetido</span> : <span className="other-review-badge pending">Pendente</span>}
+              </div>
+              {otherComment ? (
+                <div className="other-review-content">{otherComment.replace(/^Nota \d\/5 - /, '')}</div>
+              ) : (
+                <div className="other-review-empty"><span className="material-symbols-outlined">hourglass_empty</span><span>Aguardando...</span></div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     )
   }
 
   // ═══════════════════════════════════════════════
-  // TOPIC EVALUATION RENDER
+  // LOADING
+  // ═══════════════════════════════════════════════
+  if (loading) {
+    return <div className="page-loader"><div className="page-loader__spinner" /><span className="page-loader__text">A carregar avaliação...</span></div>
+  }
+
+  // ═══════════════════════════════════════════════
+  // TOPIC EVALUATION
   // ═══════════════════════════════════════════════
   if (!isProtocol && topic) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-4)',
-        fontFamily: 'var(--font-family)',
-        color: 'var(--on-background)',
-        width: '100%'
-      }}>
-        {/* Cabeçalho */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 'var(--space-2)'
-        }}>
+      <div className="evaluation-topic-page">
+        <header className="evaluation-topic-header">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
-              <Link
-                to="/reviews"
-                style={{
-                  color: 'var(--on-surface-variant)',
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  transition: 'color 0.2s'
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = 'var(--primary)'}
-                onMouseLeave={e => e.currentTarget.style.color = 'var(--on-surface-variant)'}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>arrow_back</span>
-              </Link>
-              <h1 style={{
-                fontSize: 'var(--headline-lg)',
-                fontWeight: 'var(--font-semibold)',
-                color: 'var(--on-surface)',
-                fontFamily: 'var(--font-family)'
-              }}>
-                Avaliação do tema #{id}
-              </h1>
+            <div className="evaluation-title-row">
+              <Link to="/reviews" className="evaluation-back"><span className="material-symbols-outlined">arrow_back</span></Link>
+              <h1>Avaliação do tema #{id}</h1>
             </div>
-            <p style={{
-              fontSize: 'var(--body-md)',
-              color: 'var(--on-surface-variant)',
-              fontFamily: 'var(--font-family)'
-            }}>
-              {topic.title}
-            </p>
+            <p className="evaluation-topic-title">{topic.title}</p>
             {topic.status_label && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                marginTop: 'var(--space-1)',
-                padding: '4px 12px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: 'var(--label-sm)',
-                fontWeight: 'var(--font-medium)',
-                background: topic.status === 'topic_approved_nucleo'
-                  ? 'var(--primary-container)'
-                  : topic.status === 'topic_rejected_nucleo'
-                    ? 'var(--error-container)'
-                    : 'var(--surface-container)',
-                color: topic.status === 'topic_approved_nucleo'
-                  ? 'var(--on-primary-container)'
-                  : topic.status === 'topic_rejected_nucleo'
-                    ? 'var(--on-error-container)'
-                    : 'var(--on-surface-variant)'
-              }}>
-                <span style={{
-                  width: '6px', height: '6px', borderRadius: 'var(--radius-full)',
-                  background: topic.status === 'topic_approved_nucleo'
-                    ? 'var(--primary)' : topic.status === 'topic_rejected_nucleo'
-                      ? 'var(--error)' : 'var(--outline)'
-                }} />
-                {topic.status_label}
-              </span>
+              <span className={`badge ${topic.status === 'topic_approved_nucleo' ? 'badge-success' : topic.status === 'topic_rejected_nucleo' ? 'badge-error' : 'badge-warning'}`}>{topic.status_label}</span>
             )}
           </div>
-        </div>
-
+        </header>
         {topic && <TopicJustification justification={topic.justification} showEmpty />}
-
-        {/* Mensagens */}
-        {success && (
-          <div role="status" style={{
-            display: 'flex', alignItems: 'center', gap: 'var(--space-1)',
-            padding: 'var(--space-2) var(--space-3)',
-            background: 'var(--tertiary-container)',
-            color: 'var(--on-tertiary-container)',
-            borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)',
-            fontFamily: 'var(--font-family)', border: '1px solid var(--outline-variant)'
-          }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>check_circle</span>
-            {success}
-          </div>
-        )}
-        {error && (
-          <div role="alert" style={{
-            display: 'flex', alignItems: 'center', gap: 'var(--space-1)',
-            padding: 'var(--space-2) var(--space-3)',
-            background: 'var(--error-container)', color: 'var(--on-error-container)',
-            borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)',
-            fontFamily: 'var(--font-family)'
-          }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
-            {error}
-          </div>
-        )}
-
+        {success && <div role="status" className="eval-notice eval-notice--success"><span className="material-symbols-outlined">check_circle</span>{success}</div>}
+        {error && <div role="alert" className="eval-notice eval-notice--error"><span className="material-symbols-outlined">error</span>{error}</div>}
         {evaluationDone && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-            padding: 'var(--space-3) var(--space-4)',
-            background: 'var(--surface-container)', borderRadius: 'var(--radius-xl)',
-            border: '2px solid var(--outline-variant)', fontSize: 'var(--body-md)',
-            color: 'var(--on-surface-variant)'
-          }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '32px', color: 'var(--primary)' }}>task_alt</span>
-            <div>
-              <strong style={{ fontSize: 'var(--body-lg)', color: 'var(--on-surface)' }}>Processo de avaliação concluído</strong>
-              <p style={{ marginTop: '4px' }}>{evaluationStatusMessage}</p>
-            </div>
-          </div>
+          <div className="evaluation-done-banner"><span className="material-symbols-outlined">task_alt</span><div><strong>Processo concluído</strong><p>{evaluationStatusMessage(topic)}</p></div></div>
         )}
-
-        {/* Comentários */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', padding: 'var(--space-4)', opacity: evaluationDone ? 0.8 : 1 }}>
-          <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', fontFamily: 'var(--font-family)', display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>chat</span>
-            Comentários ({comments.length})
-          </h2>
-
+        <section className="card">
+          <h2 className="section-title"><span className="material-symbols-outlined">chat</span>Comentários ({comments.length})</h2>
           {comments.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 'var(--space-4) var(--space-3)', color: 'var(--on-surface-variant)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--outline-variant)', fontSize: 'var(--body-md)' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '32px', marginBottom: 'var(--space-1)', display: 'block' }}>forum</span>
-              Nenhum comentário ainda.{!evaluationDone && ' Inicie a discussão abaixo.'}
-            </div>
+            <div className="empty-state"><span className="material-symbols-outlined">forum</span>Nenhum comentário ainda.</div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', maxHeight: '400px', overflow: 'auto' }}>
-              {comments.map((comment: TopicReviewComment) => (
-                <div key={comment.id} style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)', fontSize: 'var(--body-md)', color: 'var(--on-surface)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-1)', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
-                    <span style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', fontWeight: 'var(--font-medium)', background: 'var(--surface-container)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
-                      {comment.user?.name || 'Anônimo'}
-                    </span>
-                    <span style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
-                      {new Date(comment.created_at).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{comment.content}</p>
+            <div className="comments-list">
+              {comments.map(comment => (
+                <div key={comment.id} className="comment-item">
+                  <div className="comment-header"><span className="comment-author">{comment.user?.name || 'Anônimo'}</span><span className="comment-date">{new Date(comment.created_at).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
+                  <p>{comment.content}</p>
                 </div>
               ))}
             </div>
           )}
-        </div>
-
+        </section>
         {!evaluationDone && (
-          <form onSubmit={addComment} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--space-3) var(--space-4)' }}>
-            <label htmlFor="comment" style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)', fontFamily: 'var(--font-family)' }}>
-              Adicionar comentário
-            </label>
-            <textarea id="comment" value={newComment} onChange={e => setNewComment(e.target.value)}
-              placeholder="Escreva o seu comentário técnico-científico..." minLength={3} required rows={4}
-              style={{ width: '100%', padding: '12px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', resize: 'vertical', transition: 'all 0.2s ease', boxSizing: 'border-box' }}
-              onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)' }}
-              onBlur={e => { e.target.style.borderColor = 'var(--outline-variant)'; e.target.style.boxShadow = 'none' }}
-            />
-            <button type="submit" className="btn btn-primary" disabled={submitting || !newComment.trim()}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-1)', padding: '10px var(--space-3)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', fontFamily: 'var(--font-family)', borderRadius: 'var(--radius-lg)', border: 'none', cursor: submitting || !newComment.trim() ? 'not-allowed' : 'pointer', opacity: submitting || !newComment.trim() ? 0.6 : 1, transition: 'all 0.2s ease', width: 'fit-content' }}>
-              {submitting ? (
-                <><span style={{ width: '16px', height: '16px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} /> A enviar...</>
-              ) : (
-                <><span className="material-symbols-outlined" style={{ fontSize: '20px' }}>send</span> Comentar</>
-              )}
-            </button>
+          <form onSubmit={addComment} className="card">
+            <label htmlFor="comment">Adicionar comentário</label>
+            <textarea id="comment" value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Escreva o seu comentário..." rows={4} />
+            <button type="submit" className="btn btn-primary" disabled={submitting || !newComment.trim()}>{submitting ? 'A enviar...' : 'Comentar'}</button>
           </form>
         )}
-
         {!evaluationDone && (
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', padding: 'var(--space-4)', border: decision ? `2px solid var(--${decision === 'approved' ? 'primary' : 'error'})` : '1px solid var(--outline-variant)' }}>
-            <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', fontFamily: 'var(--font-family)', display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>gavel</span>
-              Decisão final
-            </h2>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', borderRadius: 'var(--radius-lg)', cursor: 'pointer', background: decision === 'approved' ? 'var(--primary-container)' : 'var(--surface-container-low)', color: decision === 'approved' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)', border: decision === 'approved' ? '2px solid var(--primary)' : '1px solid var(--outline-variant)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)', fontFamily: 'var(--font-family)', transition: 'all 0.2s' }}>
-                <input type="radio" name="decision" checked={decision === 'approved'} onChange={() => setDecision('approved')} style={{ accentColor: 'var(--primary)', cursor: 'pointer' }} />
-                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--primary)' }}>check_circle</span>
-                Aprovado
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', borderRadius: 'var(--radius-lg)', cursor: 'pointer', background: decision === 'rejected' ? 'var(--error-container)' : 'var(--surface-container-low)', color: decision === 'rejected' ? 'var(--on-error-container)' : 'var(--on-surface-variant)', border: decision === 'rejected' ? '2px solid var(--error)' : '1px solid var(--outline-variant)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)', fontFamily: 'var(--font-family)', transition: 'all 0.2s' }}>
-                <input type="radio" name="decision" checked={decision === 'rejected'} onChange={() => setDecision('rejected')} style={{ accentColor: 'var(--error)', cursor: 'pointer' }} />
-                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--error)' }}>cancel</span>
-                Não Aprovado
-              </label>
+          <section className="card decision-card">
+            <h2 className="section-title"><span className="material-symbols-outlined">gavel</span>Decisão final</h2>
+            <div className="decision-options">
+              <label className={`decision-option ${decision === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="decision" checked={decision === 'approved'} onChange={() => setDecision('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovado</label>
+              <label className={`decision-option ${decision === 'rejected' ? 'is-rejected' : ''}`}><input type="radio" name="decision" checked={decision === 'rejected'} onChange={() => setDecision('rejected')} /><span className="material-symbols-outlined">cancel</span>Não Aprovado</label>
             </div>
-            <button onClick={submitDecision} disabled={!decision || submitting}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-1)', padding: '14px var(--space-4)', fontSize: 'var(--body-lg)', fontWeight: 'var(--font-bold)', fontFamily: 'var(--font-family)', borderRadius: 'var(--radius-lg)', border: 'none', cursor: !decision || submitting ? 'not-allowed' : 'pointer', opacity: !decision || submitting ? 0.6 : 1, transition: 'all 0.2s ease', width: '100%', boxShadow: 'var(--elevation-1)', background: decision === 'approved' ? 'var(--primary)' : decision === 'rejected' ? 'var(--error)' : 'var(--outline)', color: 'var(--on-primary)' }}>
-              {submitting ? (
-                <><span style={{ width: '18px', height: '18px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} /> A processar...</>
-              ) : (
-                <><span className="material-symbols-outlined" style={{ fontSize: '20px' }}>gavel</span> Confirmar decisão</>
-              )}
-            </button>
-          </div>
+            <button onClick={submitDecision} className="btn btn-primary btn-block" disabled={!decision || submitting}>{submitting ? 'A processar...' : 'Confirmar decisão'}</button>
+          </section>
         )}
-
-        {evaluationDone && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'var(--space-2)' }}>
-            <Link to="/reviews" className="btn" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-4)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', fontFamily: 'var(--font-family)', borderRadius: 'var(--radius-lg)', textDecoration: 'none', background: 'var(--surface-container)', color: 'var(--on-surface)', border: '1px solid var(--outline-variant)', transition: 'all 0.2s ease' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>arrow_back</span>
-              Voltar para lista de temas
-            </Link>
-          </div>
-        )}
-
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        {evaluationDone && <Link to="/reviews" className="btn btn-outline back-link"><span className="material-symbols-outlined">arrow_back</span>Voltar</Link>}
       </div>
     )
   }
 
   // ═══════════════════════════════════════════════
-  // PROTOCOL EVALUATION RENDER
+  // PROTOCOL EVALUATION (SPLIT-VIEW)
   // ═══════════════════════════════════════════════
   if (isProtocol && protocol) {
+    const finalProtocolDecision = evaluationForm?.final_decision || protocolDecision
+    const protocolEvaluationState = formConcluded ? 'Concluído' : myEvaluationSubmitted ? 'Submetido' : 'Pendente'
+    const protocolCode = protocol.code || `ISC-P-${id}`
+    const docFileName = protocol.latest_document?.file_name || `${protocolCode}.docx`
+
     return (
-      <div className="evaluation-protocol-page">
-        {/* Cabeçalho */}
-        <header className="evaluation-protocol-header">
-          <div>
-            <div className="evaluation-title-row">
-              <Link to="/reviews" className="evaluation-back" aria-label="Voltar para revisões">
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>arrow_back</span>
-              </Link>
-              <h1 className="evaluation-protocol-code">{protocol.code}</h1>
-              <span className="evaluation-organ-badge">{organLabel(evaluationForm?.organ)}</span>
-            </div>
-            <div className="evaluation-status-line">
-              <span className={`protocol-state-chip ${formConcluded ? 'is-complete' : ''} ${formConcluded && finalProtocolDecision === 'rejected' ? 'is-rejected' : ''}`}>
-                {protocolEvaluationState}
-              </span>
-              <span><span className="status-dot" /> {protocol.status_label || protocol.version}</span>
-            </div>
-          </div>
-
-          {/* Documento */}
-          {protocol.latest_document && (
-            <div className="evaluation-document-actions">
-              <button
-                type="button"
-                onClick={() => openFile(protocol.latest_document?.download_url, protocol.latest_document?.file_name)}
-                className="evaluation-document-button is-primary"
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>description</span>
-                Ver protocolo
+      <div className={`evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
+        
+        {/* ═══════════════ LEFT: DOCUMENT VIEWER ═══════════════ */}
+        <section className="doc-viewer-pane" style={{
+          width: expandedPanel === 'document' ? '100%' : expandedPanel === 'form' ? '0%' : `${splitPosition}%`,
+          minWidth: expandedPanel === 'document' ? '100%' : expandedPanel === 'form' ? '0px' : `${MIN_PANEL_WIDTH}px`,
+          opacity: expandedPanel === 'form' ? 0 : 1,
+          pointerEvents: expandedPanel === 'form' ? 'none' : 'auto',
+        }}>
+          
+          {/* ── Toolbar Superior ── */}
+          <div className="doc-toolbar">
+            <div className="doc-toolbar-left">
+              <button className="panel-toggle-btn" onClick={toggleDocumentFullscreen}
+                title={expandedPanel === 'document' ? 'Restaurar (Ctrl+\\)' : 'Expandir (Ctrl+\\)'}>
+                <span className="material-symbols-outlined">{expandedPanel === 'document' ? 'collapse_content' : 'expand_content'}</span>
               </button>
-              {protocol.latest_document.download_url && (
-                <button
-                  type="button"
-                  onClick={() => downloadFile(protocol.latest_document?.download_url, protocol.latest_document?.file_name)}
-                  className="evaluation-document-button"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>download</span>
-                  Baixar
-                </button>
-              )}
-              {evaluationForm && (
-                <button
-                  type="button"
-                  onClick={() => downloadFile(`/api/v1/evaluation-forms/${evaluationForm.id}/download`, `ficha-${protocol.code}.pdf`)}
-                  className="evaluation-document-button"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>assignment</span>
-                  Ficha de Avaliação
-                </button>
-              )}
+              <span className="doc-filename" title={docFileName}>{docFileName}</span>
+              <span className="doc-file-type-badge">DOCX</span>
             </div>
-          )}
-        </header>
-
-        {/* Mensagens */}
-        {success && (
-          <div role="status" className="evaluation-notice is-submitted">
-            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>check_circle</span>
-            <div>
-              <strong>{myEvaluationSubmitted ? 'Avaliação submetida' : 'Avaliação actualizada'}</strong>
-              <div>{success}</div>
+            <div className="doc-toolbar-right">
+              <button onClick={() => openFile(protocol.latest_document?.download_url, docFileName)} title="Abrir em nova aba">
+                <span className="material-symbols-outlined">open_in_new</span>
+              </button>
             </div>
           </div>
-        )}
-        {error && (
-          <div role="alert" className="evaluation-notice is-error">
-            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
-            {error}
-          </div>
-        )}
 
-        {/* Estado concluído */}
-        {formConcluded && (
-          <section className={`evaluation-outcome ${finalProtocolDecision === 'approved' ? 'is-approved' : ''}`}>
-            <div className="evaluation-outcome-main">
-              <span className="material-symbols-outlined evaluation-outcome-icon">
-                {finalProtocolDecision === 'approved' ? 'check_circle' : finalProtocolDecision === 'rejected' ? 'cancel' : 'task_alt'}
-              </span>
-              <div>
-                <h2>
-                  {finalProtocolDecision === 'approved' ? 'Protocolo Aprovado' : finalProtocolDecision === 'rejected' ? 'Protocolo Reprovado' : 'Avaliação concluída'}
-                </h2>
-                <p>
-                  {evaluationForm?.conclusion_summary || (finalProtocolDecision === 'approved'
-                    ? 'Este protocolo foi aprovado e será encaminhado ao próximo órgão.'
-                    : finalProtocolDecision === 'rejected'
-                      ? 'Este protocolo foi reprovado pelo órgão científico.'
-                      : 'O processo de revisão está concluído.')}
-                </p>
+          {/* ── Área do Documento ── */}
+          <div 
+            className={`doc-content-area ${isDraggingOver ? 'doc-content-area--drag-over' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            ref={dropZoneRef}
+          >
+            {/* Overlay de Drag & Drop */}
+            {isDraggingOver && (
+              <div className="doc-drop-overlay">
+                <span className="material-symbols-outlined">cloud_upload</span>
+                <p>Solte o arquivo aqui para importar</p>
+                <span className="doc-drop-formats">.docx, .doc, .pdf (máx. 50MB)</span>
               </div>
+            )}
+
+            {documentLoading ? (
+              <div className="doc-state-loading"><div className="doc-spinner" /><p>A carregar documento...</p></div>
+            ) : documentError ? (
+              <div className="doc-state-error">
+                <span className="material-symbols-outlined">error_outline</span>
+                <p>{documentError}</p>
+              </div>
+            ) : !documentUrl ? (
+              <div className="doc-state-empty">
+                <span className="material-symbols-outlined">description</span>
+                <p>Nenhum documento disponível</p>
+              </div>
+            ) : (
+              <div className="doc-viewer-iframe-wrapper">
+                <iframe src={documentUrl} className="doc-viewer-iframe" title="Documento do Protocolo"
+                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms" />
+              </div>
+            )}
+          </div>
+
+          {/* ═══════════════ BARRA INFERIOR: DOWNLOAD + IMPORTAR ═══════════════ */}
+          <div className="doc-bottom-bar">
+            <div className="doc-bottom-bar-left">
+              <span className="material-symbols-outlined">description</span>
+              <span className="doc-bottom-filename">{docFileName}</span>
+              <span className="doc-bottom-filesize">
+                {protocol.latest_document?.version ? `v${protocol.latest_document.version}` : ''}
+              </span>
             </div>
-            {(opinionResult?.download_url || opinionResult?.document_url) && (
-              <div className="evaluation-outcome-actions">
-                <button
-                  type="button"
-                  onClick={() => downloadFile(opinionResult.download_url || opinionResult.document_url, `parecer-${protocol.code}.pdf`)}
-                  className="evaluation-outcome-button"
+
+            <div className="doc-bottom-bar-right">
+              {/* Botão Download */}
+              <button 
+                className="doc-bottom-btn doc-bottom-btn--download"
+                onClick={() => downloadFile(protocol.latest_document?.download_url, docFileName)}
+                title="Baixar documento original"
+              >
+                <span className="material-symbols-outlined">download</span>
+                <span>Download</span>
+              </button>
+
+              {/* Separador */}
+              <div className="doc-bottom-divider" />
+
+              {/* Área de Importação */}
+              <input ref={fileInputRef} type="file" accept=".docx,.doc,.pdf" onChange={handleFileSelected} style={{ display: 'none' }} />
+              
+              {importedDocument ? (
+                /* Documento importado - mostra miniatura */
+                <div className="doc-imported-preview">
+                  <div className="doc-imported-preview-icon">
+                    <span className="material-symbols-outlined">description</span>
+                  </div>
+                  <div className="doc-imported-preview-info">
+                    <span className="doc-imported-preview-name">{importedDocument.name}</span>
+                    <span className="doc-imported-preview-size">{formatFileSize(importedDocument.size)}</span>
+                  </div>
+                  <div className="doc-imported-preview-actions">
+                    <button className="doc-imported-preview-replace" onClick={handleImportClick} title="Substituir">
+                      <span className="material-symbols-outlined">swap_horiz</span>
+                    </button>
+                    <button className="doc-imported-preview-remove" onClick={handleRemoveImported} title="Remover">
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Sem documento importado - mostra botão de importar */
+                <button 
+                  className="doc-bottom-btn doc-bottom-btn--import"
+                  onClick={handleImportClick}
+                  disabled={isUploading || formConcluded || myEvaluationSubmitted}
+                  title="Importar documento revisado do computador"
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>download</span>
-                  Baixar Parecer (PDF)
+                  <span className="material-symbols-outlined">{isUploading ? 'hourglass_top' : 'upload_file'}</span>
+                  <span>{isUploading ? 'Importando...' : 'Importar'}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => openFile(opinionResult.download_url || opinionResult.document_url, `parecer-${protocol.code}.pdf`)}
-                  className="evaluation-outcome-button"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span>
-                  Abrir Parecer
+              )}
+
+              {/* Badge de estado */}
+              {importedDocument && (
+                <span className="doc-imported-badge">
+                  <span className="material-symbols-outlined">check_circle</span>
+                  Pronto para enviar
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════ DIVIDER ═══════════════ */}
+        <div ref={dividerRef} className={`split-pane-divider ${isDragging ? 'is-dragging' : ''}`}
+          onMouseDown={handleMouseDown} title="Arraste para redimensionar">
+          <div className="split-pane-divider-handle"><span className="material-symbols-outlined">drag_indicator</span></div>
+        </div>
+
+        {/* ═══════════════ RIGHT: FICHA DE AVALIAÇÃO ═══════════════ */}
+        <section className="evaluation-form-pane" style={{
+          width: expandedPanel === 'form' ? '100%' : expandedPanel === 'document' ? '0%' : `${100 - splitPosition}%`,
+          minWidth: expandedPanel === 'form' ? '100%' : expandedPanel === 'document' ? '0px' : `${MIN_PANEL_WIDTH}px`,
+          opacity: expandedPanel === 'document' ? 0 : 1,
+          pointerEvents: expandedPanel === 'document' ? 'none' : 'auto',
+        }}>
+          
+          {/* ── Header ── */}
+          <div className="evaluation-form-header">
+            <span className="material-symbols-outlined">fact_check</span>
+            <div className="form-tabs">
+              <button className={`form-tab ${activeFormTab === 'my-evaluation' ? 'is-active' : ''}`} onClick={() => setActiveFormTab('my-evaluation')}>
+                <span className="material-symbols-outlined">edit_note</span>Minha Avaliação
+              </button>
+              {otherReviewerEval && (
+                <button className={`form-tab ${activeFormTab === 'other-evaluation' ? 'is-active' : ''}`} onClick={() => setActiveFormTab('other-evaluation')}>
+                  <span className="material-symbols-outlined">visibility</span>
+                  {otherReviewerEval.reviewer?.user?.name || 'Outro Revisor'}
+                  {otherReviewerEval.status === 'submitted' && <span className="tab-status-dot tab-status-dot--submitted" />}
                 </button>
-                {opinionResult.evaluation_form_download_url && (
-                  <button
-                    type="button"
-                    onClick={() => downloadFile(opinionResult.evaluation_form_download_url, `ficha-${protocol.code}.pdf`)}
-                    className="evaluation-outcome-button"
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>assignment</span>
-                    Baixar Ficha
+              )}
+              {otherReviewerEval && (
+                <button className={`form-tab ${activeFormTab === 'comparison' ? 'is-active' : ''}`} onClick={() => setActiveFormTab('comparison')}>
+                  <span className="material-symbols-outlined">compare_arrows</span>Comparar
+                </button>
+              )}
+            </div>
+            <button className="panel-toggle-btn panel-toggle-btn--form" onClick={toggleFormFullscreen}
+              title={expandedPanel === 'form' ? 'Restaurar (Ctrl+Shift+\\)' : 'Expandir (Ctrl+Shift+\\)'}>
+              <span className="material-symbols-outlined">{expandedPanel === 'form' ? 'collapse_content' : 'expand_content'}</span>
+            </button>
+          </div>
+
+          {/* ── Conteúdo ── */}
+          <div className="evaluation-form-content">
+            <div className="eval-info-card">
+              <div className="eval-info-header">
+                <span className="eval-info-label">Estado Atual</span>
+                <span className={`eval-info-badge ${formConcluded ? 'is-concluded' : myEvaluationSubmitted ? 'is-submitted' : 'is-pending'}`}>{protocolEvaluationState}</span>
+              </div>
+              <h4>Ficha de Avaliação Científica</h4>
+              <p>{protocolCode} — {protocol.topic?.title || protocol.version}</p>
+            </div>
+
+            {success && <div role="status" className="eval-notice eval-notice--success"><span className="material-symbols-outlined">check_circle</span>{success}</div>}
+            {error && <div role="alert" className="eval-notice eval-notice--error"><span className="material-symbols-outlined">error</span>{error}</div>}
+
+            {formConcluded && (
+              <div className={`eval-outcome-banner ${finalProtocolDecision === 'approved' ? 'is-approved' : 'is-rejected'}`}>
+                <span className="material-symbols-outlined">{finalProtocolDecision === 'approved' ? 'check_circle' : 'cancel'}</span>
+                <div>
+                  <strong>{finalProtocolDecision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Reprovado'}</strong>
+                  <p>{evaluationForm?.conclusion_summary || 'Processo concluído.'}</p>
+                </div>
+              </div>
+            )}
+
+            {evaluationForm && (
+              <div className="eval-reviewer-status">
+                <h3><span className="material-symbols-outlined">group</span>Estado dos Revisores</h3>
+                <div className="reviewer-chips-list">
+                  {(evaluationForm.reviewer_evaluations || []).map((re, idx) => {
+                    const isCurrentUser = user?.id && re.reviewer?.user?.id === Number(user.id)
+                    return (
+                      <span key={re.id} className={`reviewer-chip ${re.status === 'submitted' ? 'is-submitted' : ''} ${isCurrentUser ? 'is-you' : ''}`}>
+                        {re.reviewer?.user?.name || `Revisor #${idx + 1}`}{isCurrentUser ? ' (você)' : ''}: {re.status === 'submitted' ? 'Submetido' : 'Pendente'}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Critérios */}
+            {activeFormTab === 'my-evaluation' && evaluationForm && (
+              <>
+                <div className="eval-criteria-section">
+                  {Object.entries(
+                    (evaluationForm.form_criteria || []).reduce<Record<string, FormCriterion[]>>((groups, c) => {
+                      const group = c.group_name || 'Outros'
+                      if (!groups[group]) groups[group] = []
+                      groups[group].push(c)
+                      return groups
+                    }, {})
+                  ).map(([groupName, criteria]) => (
+                    <div key={groupName} className="criteria-group-block">
+                      <h3 className="criteria-group-title"><span className="material-symbols-outlined">checklist</span>{groupName}</h3>
+                      {criteria.map(criterion => renderCriterionRow(criterion, false))}
+                    </div>
+                  ))}
+                </div>
+
+                {!formConcluded && !myEvaluationSubmitted && (
+                  <div className="eval-recommendation-section">
+                    <h3><span className="material-symbols-outlined">rate_review</span>Conclusão</h3>
+                    <div className="eval-field">
+                      <label htmlFor="overall-comment">Resumo / Parecer</label>
+                      <textarea id="overall-comment" value={overallComment} onChange={e => setOverallComment(e.target.value)} placeholder="Resumo da sua avaliação..." rows={3} />
+                    </div>
+                    <div className="recommendation-choices">
+                      <label className={`recommendation-choice ${recommendation === 'approved' ? 'is-approved' : ''}`}>
+                        <input type="radio" name="recommendation" checked={recommendation === 'approved'} onChange={() => setRecommendation('approved')} />
+                        <span className="material-symbols-outlined">check_circle</span>Aprovar protocolo
+                      </label>
+                      <label className={`recommendation-choice ${recommendation === 'rejected' ? 'is-rejected' : ''}`}>
+                        <input type="radio" name="recommendation" checked={recommendation === 'rejected'} onChange={() => setRecommendation('rejected')} />
+                        <span className="material-symbols-outlined">cancel</span>Reprovar protocolo
+                      </label>
+                    </div>
+                    <button className="btn btn-primary btn-block btn-lg" onClick={handleSubmitEvaluation} disabled={!recommendation || submitting}>
+                      {submitting ? 'A submeter...' : importedDocument ? 'Enviar Avaliação + Documento' : 'Submeter Avaliação'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {evaluationForm && !formConcluded && allReviewersSubmitted && (
+              <div className="eval-final-decision">
+                <h3><span className="material-symbols-outlined">gavel</span>Decisão Final</h3>
+                <p>Todos os revisores submeteram.</p>
+                <div className="eval-field">
+                  <label htmlFor="conclusion-summary">Resumo</label>
+                  <textarea id="conclusion-summary" value={conclusionSummary} onChange={e => setConclusionSummary(e.target.value)} placeholder="Resumo..." rows={3} />
+                </div>
+                <div className="recommendation-choices">
+                  <label className={`recommendation-choice ${finalDecision === 'approved' ? 'is-approved' : ''}`}>
+                    <input type="radio" name="final-decision" checked={finalDecision === 'approved'} onChange={() => setFinalDecision('approved')} />
+                    <span className="material-symbols-outlined">check_circle</span>Aprovar
+                  </label>
+                  <label className={`recommendation-choice ${finalDecision === 'rejected' ? 'is-rejected' : ''}`}>
+                    <input type="radio" name="final-decision" checked={finalDecision === 'rejected'} onChange={() => setFinalDecision('rejected')} />
+                    <span className="material-symbols-outlined">cancel</span>Reprovar
+                  </label>
+                </div>
+                <button className="btn btn-primary btn-block btn-lg" onClick={handleDecide} disabled={!finalDecision || submitting}>
+                  {submitting ? 'A confirmar...' : 'Confirmar Decisão Final'}
+                </button>
+              </div>
+            )}
+
+            <div style={{ height: '40px' }} />
+          </div>
+
+          {/* ── Footer ── */}
+          {!formConcluded && evaluationForm && (
+            <div className="eval-form-footer">
+              <div className="eval-footer-left">
+                <Link to="/reviews" className="btn btn-outline btn-sm"><span className="material-symbols-outlined">arrow_back</span>Voltar</Link>
+              </div>
+              <div className="eval-footer-right">
+                {!myEvaluationSubmitted && (
+                  <>
+                    <button className="btn btn-outline btn-sm" onClick={() => setRecommendation('rejected')}><span className="material-symbols-outlined">cancel</span>Rejeitar</button>
+                    <button className="btn btn-outline btn-sm"><span className="material-symbols-outlined">edit_note</span>Pedir Correções</button>
+                    <button className="btn btn-primary" onClick={handleSubmitEvaluation} disabled={!recommendation || submitting}>
+                      <span className="material-symbols-outlined">check_circle</span>
+                      {importedDocument ? 'Enviar com Revisão' : 'Aprovar Protocolo'}
+                    </button>
+                  </>
+                )}
+                {allReviewersSubmitted && !formConcluded && (
+                  <button className="btn btn-primary" onClick={handleDecide} disabled={!finalDecision || submitting}>
+                    <span className="material-symbols-outlined">gavel</span>Decidir
                   </button>
                 )}
               </div>
-            )}
-          </section>
-        )}
-
-        {evaluationForm && (
-          <section className="evaluation-panel reviewer-summary">
-            <h2 className="evaluation-panel-title">
-              <span className="material-symbols-outlined" style={{ fontSize: '23px' }}>group</span>
-              Estado dos Revisores
-            </h2>
-            <div className="reviewer-chips">
-              {reviewerEvaluations.map((reviewerEvaluation, index) => {
-                const isCurrentReviewer = currentUserId !== null && reviewerEvaluation.reviewer?.user?.id === currentUserId
-                const submitted = reviewerEvaluation.status === 'submitted'
-                const reviewerName = reviewerEvaluation.reviewer?.user?.name || `Revisor #${index + 1}`
-
-                return (
-                  <span key={reviewerEvaluation.id} className={`reviewer-chip ${submitted ? 'is-submitted' : ''}`}>
-                    {reviewerName}{isCurrentReviewer ? ' (você)' : ''}: {submitted ? 'Submetido' : 'Pendente'}
-                  </span>
-                )
-              })}
             </div>
-          </section>
-        )}
-
-        {/* Critérios de avaliação */}
-        {evaluationForm && (
-          <section className="evaluation-panel evaluation-criteria-panel">
-            {Object.entries(groupedCriteria).map(([groupName, criteria]) => (
-              <section key={groupName} className="criteria-group">
-                <h2 className="criteria-group-heading">
-                  <span className="material-symbols-outlined" style={{ fontSize: '23px' }}>checklist</span>
-                  {groupName}
-                </h2>
-                {criteria.map(criterion => (
-                  <div key={criterion.id} className="criterion-field">
-                    <label htmlFor={`criterion-${criterion.id}`}>{criterion.criterion_name}</label>
-                    <textarea
-                      id={`criterion-${criterion.id}`}
-                      value={criterionReviews[criterion.id] || ''}
-                      onChange={e => setCriterionReviews(prev => ({ ...prev, [criterion.id]: e.target.value }))}
-                      onBlur={() => handleSaveCriterionReview(criterion.id)}
-                      placeholder="Escreva o seu comentário..."
-                      rows={3}
-                      disabled={myEvaluationSubmitted || formConcluded}
-                    />
-                  </div>
-                ))}
-              </section>
-            ))}
-          </section>
-        )}
-
-        {/* Recomendação e submissão */}
-        {evaluationForm && !formConcluded && !myEvaluationSubmitted && (
-          <section className="evaluation-panel evaluation-panel--recommendation">
-            <h2 className="evaluation-panel-title">
-              <span className="material-symbols-outlined" style={{ fontSize: '23px' }}>rate_review</span>
-              Conclusão da avaliação
-            </h2>
-            <div>
-              <label className="evaluation-field-label" htmlFor="overall-comment">Resumo / Conclusão</label>
-              <textarea
-                id="overall-comment"
-                className="evaluation-textarea"
-                value={overallComment}
-                onChange={e => setOverallComment(e.target.value)}
-                placeholder="Resumo da sua avaliação (opcional)..."
-                rows={3}
-              />
-            </div>
-            <div className="recommendation-options">
-              <label className={`recommendation-choice ${recommendation === 'approved' ? 'is-selected-approved' : ''}`}>
-                <input type="radio" name="recommendation" checked={recommendation === 'approved'} onChange={() => setRecommendation('approved')} />
-                <span className="material-symbols-outlined is-approved">check_circle</span>
-                Aprovar protocolo
-              </label>
-              <label className={`recommendation-choice ${recommendation === 'rejected' ? 'is-selected-rejected' : ''}`}>
-                <input type="radio" name="recommendation" checked={recommendation === 'rejected'} onChange={() => setRecommendation('rejected')} />
-                <span className="material-symbols-outlined is-rejected">cancel</span>
-                Reprovar protocolo
-              </label>
-            </div>
-            <button className="evaluation-submit-button" onClick={handleSubmitEvaluation} disabled={!recommendation || submitting}>
-              {submitting ? (
-                <><span className="material-symbols-outlined">progress_activity</span> A submeter...</>
-              ) : (
-                <><span className="material-symbols-outlined">send</span> Submeter avaliação</>
-              )}
-            </button>
-          </section>
-        )}
-
-        {/* Decisão final (só depois de TODOS os revisores submeterem) */}
-        {evaluationForm && !formConcluded && allReviewersSubmitted && (
-          <section className="evaluation-panel evaluation-panel--decision">
-            <h2 className="evaluation-panel-title">
-              <span className="material-symbols-outlined" style={{ fontSize: '23px' }}>gavel</span>
-              Decisão final
-            </h2>
-            <p>Todos os revisores submeteram a sua avaliação. Pode agora tomar a decisão final.</p>
-            <div>
-              <label className="evaluation-field-label" htmlFor="conclusion-summary">Resumo / Conclusão</label>
-              <textarea
-                id="conclusion-summary"
-                className="evaluation-textarea"
-                value={conclusionSummary}
-                onChange={e => setConclusionSummary(e.target.value)}
-                placeholder="Resumo da conclusão da avaliação..."
-                rows={3}
-              />
-            </div>
-            <div className="final-decision-options">
-              <label className={`final-decision-choice ${finalDecision === 'approved' ? 'is-selected-approved' : ''}`}>
-                <input type="radio" name="final-decision" checked={finalDecision === 'approved'} onChange={() => setFinalDecision('approved')} />
-                <span className="material-symbols-outlined is-approved">check_circle</span>
-                Aprovar protocolo
-              </label>
-              <label className={`final-decision-choice ${finalDecision === 'rejected' ? 'is-selected-rejected' : ''}`}>
-                <input type="radio" name="final-decision" checked={finalDecision === 'rejected'} onChange={() => setFinalDecision('rejected')} />
-                <span className="material-symbols-outlined is-rejected">cancel</span>
-                Reprovar protocolo
-              </label>
-            </div>
-            <button className="final-confirm-button" onClick={handleDecide} disabled={!finalDecision || submitting}>
-              <span className="material-symbols-outlined">gavel</span>
-              {submitting ? 'A confirmar decisão...' : 'Confirmar decisão final'}
-            </button>
-          </section>
-        )}
-
-        {formConcluded && (
-          <Link to="/reviews" className="back-to-reviews">
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>arrow_back</span>
-              Voltar para lista de revisões
-          </Link>
-        )}
-
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          )}
+        </section>
       </div>
     )
   }
 
-  // Estado vazio (sem dados)
   return (
-    <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-surface-variant)', textAlign: 'center', padding: 'var(--space-6)' }}>
-      <p>Nenhum dado encontrado.</p>
-      <Link to="/reviews" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 'var(--font-semibold)' }}>
-        Voltar para revisões
-      </Link>
-    </div>
+    <div className="page-loader"><p>Nenhum dado encontrado.</p><Link to="/reviews" className="btn btn-outline">Voltar</Link></div>
   )
 }

@@ -15,7 +15,6 @@ interface MenuItem {
   roles?: string[]
   children?: { label: string; route: string; permission?: string }[]
 }
-
 const ICON_MAP: Record<string, string> = {
   'ti-dashboard': 'dashboard',
   'ti-school': 'school',
@@ -93,6 +92,15 @@ const ICON_MAP: Record<string, string> = {
   'ti-calendar-event': 'event_available',
   'ti-chart-pie': 'pie_chart',
   'ti-home': 'home',
+  
+  // 🆕 NOVOS ÍCONES ADICIONADOS
+  'ti-calendar-plus': 'calendar_add_on',    // 📅➕ Marcar Reunião
+  'ti-table': 'table',                       // 📊 Planilha de Protocolos
+  
+  // Fallbacks por ID
+  'secretary_meeting': 'calendar_add_on',    // Marcar Reunião
+  'secretary_spreadsheet': 'table',          // Planilha de Protocolos
+  
   dashboard: 'dashboard',
   inicio: 'dashboard',
   home: 'dashboard',

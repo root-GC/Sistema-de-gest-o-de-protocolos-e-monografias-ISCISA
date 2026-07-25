@@ -113,7 +113,20 @@ export interface ProtocolOpinion {
   evaluation_form_download_url?: string | null;
 }
 
+// Tipo para o documento revisado enviado pelo revisor
+export interface ReviewedDocument {
+  id: number;
+  file_name: string;
+  file_url: string;
+  download_url?: string;
+  file_path: string;
+  version: number;
+  status: string;
+  uploaded_at: string;
+}
+
 export const protocolService = {
+  // ── Submissão de protocolo ──────────────────────────
   submit: (topicId: number, protocolType: string, file: File) => {
     const formData = new FormData();
     formData.append('topic_id', String(topicId));
@@ -125,6 +138,7 @@ export const protocolService = {
     }>;
   },
 
+  // ── Listagem e consulta ─────────────────────────────
   list: () => req('GET', '/api/v1/protocols') as Promise<{ protocols: Protocol[] }>,
 
   getById: (id: number) => req('GET', `/api/v1/protocols/${id}`) as Promise<{ protocol: Protocol }>,
@@ -132,11 +146,45 @@ export const protocolService = {
   listOpinions: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/opinions`) as Promise<{ opinions: ProtocolOpinion[] }>,
 
+  // ── Ficheiros ───────────────────────────────────────
   openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
 
   downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
 
-  // Supervisor
+  // ── Upload de documento revisado pelo revisor ───────
+  /**
+   * Faz upload do documento revisado (.docx) que o revisor 
+   * editou localmente e quer anexar à sua avaliação.
+   */
+  uploadReviewedDocument: (protocolId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('document', file);
+    formData.append('protocol_id', String(protocolId));
+    formData.append('type', 'reviewed'); // Para o backend saber que é documento revisado
+
+    return reqFormData('POST', `/api/v1/protocols/${protocolId}/upload-reviewed`, formData) as Promise<{
+      message: string;
+      document: ReviewedDocument;
+    }>;
+  },
+
+  /**
+   * Remove um documento revisado que foi enviado anteriormente.
+   */
+  removeReviewedDocument: (protocolId: number, documentId: number) =>
+    req('DELETE', `/api/v1/protocols/${protocolId}/reviewed-documents/${documentId}`) as Promise<{
+      message: string;
+    }>,
+
+  /**
+   * Lista documentos revisados anexados ao protocolo.
+   */
+  listReviewedDocuments: (protocolId: number) =>
+    req('GET', `/api/v1/protocols/${protocolId}/reviewed-documents`) as Promise<{
+      documents: ReviewedDocument[];
+    }>,
+
+  // ── Supervisor ──────────────────────────────────────
   listForSupervisor: () => 
     req('GET', '/api/v1/supervisor/protocols') as Promise<{ protocols: Protocol[] }>,
 
@@ -152,7 +200,7 @@ export const protocolService = {
       protocol: Protocol;
     }>,
 
-  // Secretary
+  // ── Secretary ───────────────────────────────────────
   listForSecretary: () =>
     req('GET', '/api/v1/secretary/protocols') as Promise<{ protocols: Protocol[] }>,
 
@@ -177,7 +225,7 @@ export const protocolService = {
       protocol: Protocol;
     }>,
 
-  // === NÚCLEO ===
+  // ── Núcleo Científico ───────────────────────────────
   getEligibleReviewersNucleo: (protocolId: number) =>
     req('GET', `/api/v1/nucleo/protocols/${protocolId}/eligible-reviewers`) as Promise<{
       reviewers: EligibleReviewer[];
@@ -199,7 +247,7 @@ export const protocolService = {
       protocol: Protocol;
     }>,
 
-  // === COMITÉ CIENTÍFICO (CC) ===
+  // ── Comité Científico (CC) ──────────────────────────
   getEligibleReviewersCC: (protocolId: number) =>
     req('GET', `/api/v1/comite-cientifico/protocols/${protocolId}/eligible-reviewers`) as Promise<{
       reviewers: EligibleReviewer[];
@@ -221,7 +269,7 @@ export const protocolService = {
       protocol: Protocol;
     }>,
 
-  // === COMITÉ DE BIOÉTICA ===
+  // ── Comité de Bioética ──────────────────────────────
   getEligibleReviewersBioetica: (protocolId: number) =>
     req('GET', `/api/v1/comite-bioetica/protocols/${protocolId}/eligible-reviewers`) as Promise<{
       reviewers: EligibleReviewer[];
@@ -243,7 +291,7 @@ export const protocolService = {
       protocol: Protocol;
     }>,
 
-  // Reviewer
+  // ── Reviewer ────────────────────────────────────────
   listForReviewer: () =>
     req('GET', '/api/v1/reviewer/protocols') as Promise<{ protocols: Protocol[] }>,
 };
