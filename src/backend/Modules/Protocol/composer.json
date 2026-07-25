@@ -17,9 +17,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Modules\\Protocol\\": "app/",
-            "Modules\\Protocol\\Database\\Factories\\": "database/factories/",
-            "Modules\\Protocol\\Database\\Seeders\\": "database/seeders/"
+            "Modules\\Protocol\\": "app/"
         }
     },
     "autoload-dev": {

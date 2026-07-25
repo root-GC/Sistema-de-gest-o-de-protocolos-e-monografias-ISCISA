@@ -1,8 +1,101 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Modules\Protocol\Http\Controllers\ProtocolController;
+use Modules\Protocol\app\Http\Controllers\TopicController;
+use Modules\Protocol\app\Http\Controllers\EvaluationFormController;
+use Modules\Protocol\app\Http\Controllers\OnlyOfficeController;
+use Modules\Protocol\app\Http\Controllers\SupervisorController;
+use Modules\Protocol\app\Http\Controllers\ProtocolApiController;
+use Modules\Protocol\app\Http\Controllers\DashboardController;
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
-    Route::apiResource('protocols', ProtocolController::class)->names('protocol');
+Route::prefix('api')->middleware(['api'])->group(function () {
+  
+    Route::get('/onlyoffice/config',
+        [OnlyOfficeController::class, 'config']
+    );
+    Route::post('/protocolo/onlyoffice/callback',
+    [OnlyOfficeController::class, 'callback']
+    
+);
+});
+
+
+Route::prefix('api')->middleware(['api'])->group(function () {
+ Route::middleware('auth:sanctum')
+    ->get('/dashboard/my-protocols', [DashboardController::class, 'myProtocols']);
+});
+
+
+Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () {
+
+    //Seus proprios temas
+     Route::get(
+        '/topics/my-approved',
+        [TopicController::class, 'getMyApprovedTopics']
+    );
+
+   
+
+    Route::post('topics', [TopicController::class, 'store'])->name('topic.store');
+    Route::get('topics', [TopicController::class, 'index'])->name('topic.index');
+
+    Route::patch('topics/{topic}/supervisor-approve', [TopicController::class, 'approveBySupervisor'])->name('topic.approve');
+    Route::patch('topics/{topic}/supervisor-reject', [TopicController::class, 'rejectBySupervisor'])->name('topic.reject');
+    Route::get('supervisor/supervisees', [SupervisorController::class, 'supervisees'])->name('supervisor.supervisees.list');
+    Route::get('supervisor/topics', [TopicController::class, 'getForSupervisor'])->name('supervisor.topics.list');
+
+    // Secretary operations: list topics for assignment, get eligible reviewers, assign reviewers
+    Route::get('secretary/topics', [TopicController::class, 'getForSecretary'])->name('secretary.topics.list');
+    Route::get('topics/{topic}/eligible-reviewers', [TopicController::class, 'getEligibleReviewers'])->name('topic.eligible-reviewers');
+    Route::get('topics/{topic}/reviewers', [TopicController::class, 'getAssignedReviewers'])->name('topic.reviewers.index');
+    Route::post('topics/{topic}/assign-reviewers', [TopicController::class, 'assignReviewers'])->name('topic.assign-reviewers');
+    Route::get('reviewer/topics', [TopicController::class, 'getForReviewer'])->name('reviewer.topics.list');
+    Route::get('topics/{topic}/comments', [TopicController::class, 'getComments'])->name('topic.comments.index');
+    Route::post('topics/{topic}/comments', [TopicController::class, 'submitComment'])->name('topic.comments.store');
+    Route::post('topics/{topic}/evaluations', [TopicController::class, 'submitEvaluation'])->name('topic.evaluations.store');
+
+
+     Route::get('supervisor/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForSupervisor')->name('supervisor.protocols.list');
+    Route::post('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@store')->name('protocol.store');
+    Route::get('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@index')->name('protocol.index');
+    Route::get('protocols/{protocol}', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@show')->name('protocol.show');
+    Route::patch('protocols/{protocol}/supervisor-approve', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@approveBySupervisor')->name('protocol.supervisor-approve');
+    Route::patch('protocols/{protocol}/supervisor-reject', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@rejectBySupervisor')->name('protocol.supervisor-reject');
+
+    // Secretary operations: list protocols for nucleus, get eligible reviewers, assign reviewers
+    Route::get('secretary/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForSecretary')->name('secretary.protocols.list');
+
+    // === NÚCLEO ===
+    Route::get('nucleo/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersNucleo'])->name('nucleo.protocols.eligible-reviewers');
+    Route::get('nucleo/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersNucleo'])->name('nucleo.protocols.reviewers');
+    Route::post('nucleo/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersNucleo'])->name('nucleo.protocols.assign-reviewers');
+
+    // === COMITÉ CIENTÍFICO (CC) ===
+    Route::get('comite-cientifico/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersCC'])->name('cc.protocols.eligible-reviewers');
+    Route::get('comite-cientifico/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersCC'])->name('cc.protocols.reviewers');
+    Route::post('comite-cientifico/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersCC'])->name('cc.protocols.assign-reviewers');
+
+    // === COMITÉ DE BIOÉTICA ===
+    Route::get('comite-bioetica/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersBioetica'])->name('bioetica.protocols.eligible-reviewers');
+    Route::get('comite-bioetica/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersBioetica'])->name('bioetica.protocols.reviewers');
+    Route::post('comite-bioetica/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersBioetica'])->name('bioetica.protocols.assign-reviewers');
+
+    // Reviewer operations: list assigned protocols for evaluation
+    Route::get('reviewer/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForReviewer')->name('reviewer.protocols.list');
+
+    // Document download
+    Route::get('protocols/{protocol}/download', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@downloadDocument')->name('protocols.document.download');
+
+    // Evaluation forms
+    Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('evaluation-forms.show');
+    Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('evaluation-forms.criteria.review');
+    Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('evaluation-forms.submit');
+    Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('evaluation-forms.decide');
+    Route::get('evaluation-forms/{form}/download', [EvaluationFormController::class, 'downloadEvaluationForm'])->name('evaluation-forms.download');
+    Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('reviewer.evaluations.list');
+    Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('secretary.evaluations.list');
+
+    // Opinions (pareceres)
+    Route::get('opinions/{opinion}/download', [EvaluationFormController::class, 'downloadOpinion'])->name('opinions.download');
+    Route::get('protocols/{protocol}/opinions', [EvaluationFormController::class, 'listOpinionsForProtocol'])->name('protocols.opinions.list');
 });

@@ -1,0 +1,282 @@
+<?php
+
+namespace Modules\Protocol\app\Http\Controllers;
+
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Storage;
+use Modules\Protocol\app\Http\Requests\DecideEvaluationRequest;
+use Modules\Protocol\app\Http\Requests\SubmitCriterionReviewRequest;
+use Modules\Protocol\app\Http\Requests\SubmitEvaluationRequest;
+use Modules\Protocol\app\Http\Resources\EvaluationFormResource;
+use Modules\Protocol\app\Models\EvaluationForm;
+use Modules\Protocol\app\Models\EvaluationFormCriterion;
+use Modules\Protocol\app\Models\Opinion;
+use Modules\Protocol\app\Models\Protocol;
+use Modules\Protocol\app\Services\DocumentGenerationService;
+use Modules\Protocol\app\Services\EvaluationService;
+use Modules\User\app\Models\User;
+
+class EvaluationFormController extends Controller
+{
+    use AuthorizesRequests;
+
+    public function __construct(private EvaluationService $evaluationService) {}
+
+    private function canAccessProtocolDocument(User $user, Protocol $protocol): bool
+    {
+        $user->loadMissing(['teacherProfile', 'secretaryProfile']);
+
+        if ($user->hasPermission('protocol.view.all') || (int) $protocol->student === (int) $user->id) {
+            return true;
+        }
+
+        $teacherProfile = $user->teacherProfile;
+
+        if ($teacherProfile && (int) $protocol->supervisor_id === (int) $teacherProfile->id) {
+            return true;
+        }
+
+        if ($teacherProfile && $user->hasPermission('protocol.evaluate')) {
+            return $protocol->reviewAssignments()
+                ->where(fn($query) => $query
+                    ->where('reviewer_one', $teacherProfile->id)
+                    ->orWhere('reviewer_two', $teacherProfile->id)
+                )
+                ->exists();
+        }
+
+        if ($user->hasPermission('protocol.assign')) {
+            $secretaryProfile = $user->secretaryProfile;
+
+            return ! $secretaryProfile
+                || ! $secretaryProfile->organ_id
+                || (int) $protocol->current_organ_id === (int) $secretaryProfile->organ_id;
+        }
+
+        return false;
+    }
+
+    public function show(EvaluationForm $form)
+    {
+        $this->authorize('view', $form);
+
+        $user = request()->user();
+
+        return response()->json([
+            'evaluation_form' => EvaluationFormResource::make(
+                $this->evaluationService->getFormWithReviews($form, $user)
+            ),
+        ]);
+    }
+
+    public function saveCriterionReview(
+        SubmitCriterionReviewRequest $request,
+        EvaluationForm $form,
+        EvaluationFormCriterion $formCriterion
+    ) {
+        $this->authorize('submitEvaluation', $form);
+
+        if ((int) $formCriterion->evaluation_form_id !== (int) $form->id) {
+            abort(404);
+        }
+
+        $result = $this->evaluationService->saveCriterionReview(
+            $form,
+            $formCriterion,
+            $request->user(),
+            $request->input('comment')
+        );
+
+        return response()->json([
+            'message' => 'Comentário registado com sucesso.',
+            'criterion_review' => $result,
+        ]);
+    }
+
+    public function submit(SubmitEvaluationRequest $request, EvaluationForm $form)
+    {
+        $this->authorize('submitEvaluation', $form);
+
+        $result = $this->evaluationService->submitEvaluation(
+            $form,
+            $request->user(),
+            $request->input('recommendation'),
+            $request->input('overall_comment')
+        );
+
+        return response()->json([
+            'message' => 'Avaliação submetida com sucesso.',
+            'reviewer_evaluation' => $result,
+        ]);
+    }
+
+    public function decide(
+        DecideEvaluationRequest $request,
+        EvaluationForm $form,
+        DocumentGenerationService $documentService
+    ) {
+        $this->authorize('decide', $form);
+
+        $result = $this->evaluationService->decide(
+            $form,
+            $request->user(),
+            $request->input('decision'),
+            $request->input('conclusion_summary')
+        );
+
+        $opinion = $result['opinion'];
+        $path = $documentService->generateOpinionPdf($opinion);
+        $opinion->update(['document_path' => $path]);
+
+        $protocol = $result['evaluation_form']->protocol;
+        $messages = [
+            \Modules\Protocol\app\Models\Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
+            \Modules\Protocol\app\Models\Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
+            \Modules\Protocol\app\Models\Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
+            \Modules\Protocol\app\Models\Protocol::STATUS_REJECTED_FINAL => 'Protocolo reprovado.',
+        ];
+
+        return response()->json([
+            'message' => $messages[$protocol->status] ?? 'Protocolo actualizado.',
+            'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
+            'opinion' => [
+                'id' => $opinion->id,
+                'decision' => $opinion->decision,
+                'issued_at' => $opinion->issued_at,
+                'document_url' => Storage::disk('public')->url($path),
+                'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
+                'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
+            ],
+        ]);
+    }
+
+    public function downloadOpinion(Request $request, Opinion $opinion, DocumentGenerationService $documentService)
+    {
+        $user = $request->user();
+        $opinion->loadMissing('protocol');
+        $protocol = $opinion->protocol;
+
+        if (! $protocol || ! $this->canAccessProtocolDocument($user, $protocol)) {
+            abort(403);
+        }
+
+        if (! $opinion->document_path || ! \Illuminate\Support\Facades\Storage::disk('public')->exists($opinion->document_path)) {
+            $path = $documentService->generateOpinionPdf($opinion);
+            $opinion->update(['document_path' => $path]);
+        }
+
+        $fileName = basename($opinion->document_path);
+        $inline = $request->query('inline') === '1';
+        $headers = [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment') . '; filename="' . $fileName . '"',
+        ];
+
+        if ($inline) {
+            return \Illuminate\Support\Facades\Storage::disk('public')->response($opinion->document_path, $fileName, $headers);
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('public')->download($opinion->document_path, $fileName, $headers);
+    }
+
+    public function downloadEvaluationForm(
+        Request $request,
+        EvaluationForm $form,
+        DocumentGenerationService $documentService
+    ) {
+        $user = $request->user();
+        $form->loadMissing('protocol');
+        $protocol = $form->protocol;
+
+        if (! $protocol || ! $this->canAccessProtocolDocument($user, $protocol)) {
+            abort(403);
+        }
+
+        $path = $documentService->generateEvaluationFormPdf($form);
+        $protocolCode = $protocol->code ?: $protocol->id;
+        $fileName = "ficha-avaliacao-{$protocolCode}-{$form->version}.pdf";
+        $inline = $request->query('inline') === '1';
+        $headers = [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment') . '; filename="' . $fileName . '"',
+        ];
+
+        if ($inline) {
+            return Storage::disk('public')->response($path, $fileName, $headers);
+        }
+
+        return Storage::disk('public')->download($path, $fileName, $headers);
+    }
+
+    public function getForReviewer(Request $request)
+    {
+        $user = $request->user()->load('teacherProfile');
+
+        if (! $user->hasPermission('protocol.evaluate')) {
+            return response()->json([
+                'message' => 'Utilizador não tem permissão para ver avaliações atribuídas.',
+            ], 403);
+        }
+
+        return response()->json([
+            'evaluation_forms' => EvaluationFormResource::collection(
+                $this->evaluationService->listForReviewer($user)
+            ),
+        ]);
+    }
+
+    public function getForSecretary(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user->hasPermission('protocol.assign')) {
+            abort(403);
+        }
+
+        return response()->json([
+            'evaluation_forms' => EvaluationFormResource::collection(
+                $this->evaluationService->listForSecretary($user)
+            ),
+        ]);
+    }
+
+    public function listOpinionsForProtocol(Request $request, string $protocol)
+    {
+        $user = $request->user();
+
+        $protocol = \Modules\Protocol\app\Models\Protocol::query()->findOrFail($protocol);
+
+        if (! $this->canAccessProtocolDocument($user, $protocol)) {
+            abort(403);
+        }
+
+        $opinions = Opinion::query()
+            ->where('protocol_id', $protocol->id)
+            ->with('issuedBy:id,name,email')
+            ->latest('issued_at')
+            ->get()
+            ->map(fn($o) => [
+                'id' => $o->id,
+                'version' => $o->version,
+                'organ' => $o->organ,
+                'decision' => $o->decision,
+                'observations' => $o->observations,
+                'issued_at' => $o->issued_at,
+                'issued_by' => $o->issuedBy ? [
+                    'id' => $o->issuedBy->id,
+                    'name' => $o->issuedBy->name,
+                ] : null,
+                'document_url' => $o->document_path ? Storage::disk('public')->url($o->document_path) : null,
+                'download_url' => url("api/v1/opinions/{$o->id}/download"),
+                'evaluation_form_download_url' => $o->evaluation_form_id
+                    ? url("api/v1/evaluation-forms/{$o->evaluation_form_id}/download")
+                    : null,
+            ]);
+
+        return response()->json([
+            'opinions' => $opinions,
+        ]);
+    }
+}

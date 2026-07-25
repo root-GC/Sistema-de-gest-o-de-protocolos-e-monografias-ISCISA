@@ -1,46 +1,31 @@
 <?php
 
-namespace Modules\Protocol\Providers;
+namespace Modules\Protocol\app\Providers;
 
-use Nwidart\Modules\Support\ModuleServiceProvider;
-use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\ServiceProvider;
+use Modules\Protocol\app\Models\EvaluationForm;
+use Modules\Protocol\app\Models\Topic;
+use Modules\Protocol\app\Policies\EvaluationFormPolicy;
+use Modules\Protocol\app\Policies\TopicPolicy;
+use Modules\Protocol\app\Services\EvaluationService;
+use Modules\Protocol\app\Services\TopicService;
 
-class ProtocolServiceProvider extends ModuleServiceProvider
+class ProtocolServiceProvider extends ServiceProvider
 {
-    /**
-     * The name of the module.
-     */
-    protected string $name = 'Protocol';
+    public function register(): void
+    {
+        $this->app->bind(TopicService::class);
+        $this->app->bind(EvaluationService::class);
+    }
 
-    /**
-     * The lowercase version of the module name.
-     */
-    protected string $nameLower = 'protocol';
+    public function boot(): void
+    {
+        $this->loadRoutesFrom(__DIR__ . "/../../routes/api.php");
+        $this->loadMigrationsFrom(__DIR__ . "/../../database/migrations");
+        $this->loadViewsFrom(__DIR__ . "/../../resources/views", 'protocol');
 
-    /**
-     * Command classes to register.
-     *
-     * @var string[]
-     */
-    // protected array $commands = [];
-
-    /**
-     * Provider classes to register.
-     *
-     * @var string[]
-     */
-    protected array $providers = [
-        EventServiceProvider::class,
-        RouteServiceProvider::class,
-    ];
-
-    /**
-     * Define module schedules.
-     * 
-     * @param $schedule
-     */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
+        Gate::policy(Topic::class, TopicPolicy::class);
+        Gate::policy(EvaluationForm::class, EvaluationFormPolicy::class);
+    }
 }
