@@ -140,7 +140,6 @@ export default function SpreadsheetPage() {
         <StatCard icon="inventory_2" label="Total" value={rows.length} color="var(--primary)" bg="var(--primary-container)" />
         <StatCard icon="hourglass_top" label="Em Revisão" value={reviewing} color="var(--tertiary)" bg="var(--tertiary-container)" />
         <StatCard icon="verified" label="Aprovados" value={approved} color="#5d4037" bg="#efebe9" />
-        <StatCard icon="cancel" label="Reprovados" value={rejected} color="#b71c1c" bg="#fce4ec" />
       </div>
 
       {/* ── Filters ── */}
