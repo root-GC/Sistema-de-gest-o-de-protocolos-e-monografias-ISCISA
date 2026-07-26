@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Http\Requests\DecideEvaluationRequest;
+use Modules\Protocol\app\Http\Requests\HarmonizeEvaluationRequest;
 use Modules\Protocol\app\Http\Requests\SubmitCriterionReviewRequest;
 use Modules\Protocol\app\Http\Requests\SubmitEvaluationRequest;
 use Modules\Protocol\app\Http\Resources\EvaluationFormResource;
@@ -102,13 +103,95 @@ class EvaluationFormController extends Controller
         $result = $this->evaluationService->submitEvaluation(
             $form,
             $request->user(),
-            $request->input('recommendation'),
+            $request->input('decision'),
+            $request->boolean('needs_deliberation'),
             $request->input('overall_comment')
         );
 
-        return response()->json([
+        $response = [
             'message' => 'Avaliação submetida com sucesso.',
-            'reviewer_evaluation' => $result,
+            'reviewer_evaluation' => $result['reviewer_evaluation'],
+            'auto_approved' => $result['auto_approved'],
+            'evaluation_form' => EvaluationFormResource::make($result['form']),
+        ];
+
+        if ($result['harmonization_form']) {
+            $response['harmonization_form'] = EvaluationFormResource::make($result['harmonization_form']);
+            $response['message'] = 'Avaliação submetida. É necessário harmonizar as decisões.';
+        }
+
+        if ($result['opinion']) {
+            $opinion = $result['opinion'];
+            $protocol = $opinion->protocol;
+
+            $path = app(DocumentGenerationService::class)->generateOpinionPdf($opinion);
+            $opinion->update(['document_path' => $path]);
+
+            $messages = [
+                Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
+                Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
+                Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
+                Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado pelo Núcleo Científico.',
+                Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado pelo Comité Científico.',
+                Protocol::STATUS_REJECTED_BIOETICA => 'Protocolo não aprovado pelo Comité de Bioética.',
+                Protocol::STATUS_REJECTED_FINAL => 'Protocolo não aprovado.',
+            ];
+
+            $response['message'] = $messages[$protocol->status] ?? 'Protocolo actualizado.';
+            $response['opinion'] = [
+                'id' => $opinion->id,
+                'decision' => $opinion->decision,
+                'issued_at' => $opinion->issued_at,
+                'document_url' => Storage::disk('public')->url($path),
+                'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
+                'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
+            ];
+        }
+
+        return response()->json($response);
+    }
+
+    public function harmonize(
+        HarmonizeEvaluationRequest $request,
+        EvaluationForm $form,
+        DocumentGenerationService $documentService
+    ) {
+        $this->authorize('submitEvaluation', $form);
+
+        $result = $this->evaluationService->harmonize(
+            $form,
+            $request->user(),
+            $request->input('decision'),
+            $request->input('conclusion_summary')
+        );
+
+        $opinion = $result['opinion'];
+        $path = $documentService->generateOpinionPdf($opinion);
+        $opinion->update(['document_path' => $path]);
+
+        $protocol = $result['evaluation_form']->protocol;
+        $messages = [
+            Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo harmonizado e encaminhado ao Comité Científico.',
+            Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo harmonizado e encaminhado ao Comité de Bioética.',
+            Protocol::STATUS_APPROVED_FINAL => 'Protocolo harmonizado e aprovado definitivamente.',
+            Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado pelo Núcleo Científico.',
+            Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado pelo Comité Científico.',
+            Protocol::STATUS_REJECTED_BIOETICA => 'Protocolo não aprovado pelo Comité de Bioética.',
+            Protocol::STATUS_REJECTED_FINAL => 'Protocolo não aprovado.',
+        ];
+
+        return response()->json([
+            'message' => $messages[$protocol->status] ?? 'Protocolo actualizado após harmonização.',
+            'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
+            'harmonization_form' => EvaluationFormResource::make($result['harmonization_form']),
+            'opinion' => [
+                'id' => $opinion->id,
+                'decision' => $opinion->decision,
+                'issued_at' => $opinion->issued_at,
+                'document_url' => Storage::disk('public')->url($path),
+                'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
+                'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
+            ],
         ]);
     }
 
@@ -132,10 +215,13 @@ class EvaluationFormController extends Controller
 
         $protocol = $result['evaluation_form']->protocol;
         $messages = [
-            \Modules\Protocol\app\Models\Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
-            \Modules\Protocol\app\Models\Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
-            \Modules\Protocol\app\Models\Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
-            \Modules\Protocol\app\Models\Protocol::STATUS_REJECTED_FINAL => 'Protocolo reprovado.',
+            Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
+            Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
+            Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
+            Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado.',
+            Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado.',
+            Protocol::STATUS_REJECTED_BIOETICA => 'Protocolo não aprovado.',
+            Protocol::STATUS_REJECTED_FINAL => 'Protocolo não aprovado.',
         ];
 
         return response()->json([
@@ -162,7 +248,7 @@ class EvaluationFormController extends Controller
             abort(403);
         }
 
-        if (! $opinion->document_path || ! \Illuminate\Support\Facades\Storage::disk('public')->exists($opinion->document_path)) {
+        if (! $opinion->document_path || ! Storage::disk('public')->exists($opinion->document_path)) {
             $path = $documentService->generateOpinionPdf($opinion);
             $opinion->update(['document_path' => $path]);
         }
@@ -175,10 +261,10 @@ class EvaluationFormController extends Controller
         ];
 
         if ($inline) {
-            return \Illuminate\Support\Facades\Storage::disk('public')->response($opinion->document_path, $fileName, $headers);
+            return Storage::disk('public')->response($opinion->document_path, $fileName, $headers);
         }
 
-        return \Illuminate\Support\Facades\Storage::disk('public')->download($opinion->document_path, $fileName, $headers);
+        return Storage::disk('public')->download($opinion->document_path, $fileName, $headers);
     }
 
     public function downloadEvaluationForm(
@@ -246,7 +332,7 @@ class EvaluationFormController extends Controller
     {
         $user = $request->user();
 
-        $protocol = \Modules\Protocol\app\Models\Protocol::query()->findOrFail($protocol);
+        $protocol = Protocol::query()->findOrFail($protocol);
 
         if (! $this->canAccessProtocolDocument($user, $protocol)) {
             abort(403);

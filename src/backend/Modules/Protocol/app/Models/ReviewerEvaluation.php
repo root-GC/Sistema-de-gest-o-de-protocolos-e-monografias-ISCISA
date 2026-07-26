@@ -10,6 +10,9 @@ class ReviewerEvaluation extends Model
 {
     use SoftDeletes;
 
+    public const DECISION_APPROVED = 'approved';
+    public const DECISION_NOT_APPROVED = 'not_approved';
+
     public const STATUS_PENDING = 'pending';
     public const STATUS_IN_PROGRESS = 'in_progress';
     public const STATUS_SUBMITTED = 'submitted';
@@ -19,13 +22,15 @@ class ReviewerEvaluation extends Model
         'protocol_review_assignment_id',
         'reviewer_id',
         'overall_comment',
-        'recommendation',
+        'decision',
+        'needs_deliberation',
         'status',
         'submitted_at',
     ];
 
     protected $casts = [
         'submitted_at' => 'datetime',
+        'needs_deliberation' => 'boolean',
     ];
 
     public function evaluationForm()

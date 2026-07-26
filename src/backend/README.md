@@ -1,58 +1,295 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Fluxo de Avaliação de Protocolos — Núcleo Científico
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Visão Geral
 
-## About Laravel
+A avaliação de protocolos no Núcleo segue um fluxo em que **dois revisores** analisam o protocolo de forma independente e, se necessário, harmonizam as suas decisões.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Cada revisor submete:
+- **decision**: `approved` | `not_approved`
+- **needs_deliberation**: `true` | `false` (checkbox que indica se o revisor acha necessário discutir com o outro revisor)
+- **criterion_reviews**: pontuações e comentários para cada critério (28 critérios em 3 grupos)
+Cada revisor submete:
+- **decision**: `approved` | `not_approved`
+- **needs_deliberation**: `true` | `false` (checkbox que indica se o revisor acha necessário discutir com o outro revisor)
+- **criterion_reviews**: comentários para cada critério (28 critérios em 3 grupos). Observação: o campo `score` NÃO é persistido no backend por enquanto (ver seção "Notas").
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+O backend decide automaticamente o próximo passo após ambos os revisores submeterem.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## Decisão Automática (checkEvaluationCompletion)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Quando o segundo revisor submete, o sistema avalia:
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| Condição                                                   | Resultado                                                   |
+| ---------------------------------------------------------- | ----------------------------------------------------------- |
+| Ambos `approved` E nenhum marcou `needs_deliberation=true` | **Auto-Approve** — gera parecer favorável, avança protocolo |
+| Qualquer outro caso                                        | **Cria ficha de Harmonização** — ambos revisores ajustam    |
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+---
 
-## Agentic Development
+## Endpoints
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### 1. Submeter Avaliação Individual
 
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+POST /api/v1/evaluation-forms/{form}/submit
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+**Payload (exemplo):**
+```json
+{
+  "reviewer_id": 42,
+  "decision": "approved",
+  "needs_deliberation": false,
+  "criterion_reviews": {
+    "103": { "comment": "Bem estruturado" },
+    "104": { "comment": "Adequado" }
+  }
+}
+```
 
-## Contributing
+**Resposta (auto-approve):**
+```json
+{
+  "message": "Avaliacao submetida com sucesso.",
+  "form": {
+    "id": 1,
+    "form_type": "evaluation",
+    "status": "approved",
+    "auto_approved": true,
+    "needs_harmonization": false,
+    "harmonization_form": null,
+    "protocol": { ... },
+    "reviews": [ ... ]
+  }
+}
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+**Resposta (harmonização necessária):**
+```json
+{
+  "message": "Avaliacao submetida. Harmonizacao necessaria.",
+  "form": {
+    "id": 1,
+    "form_type": "evaluation",
+    "status": "pending_harmonization",
+    "auto_approved": false,
+    "needs_harmonization": true,
+    "harmonization_form": {
+      "id": 2,
+      "form_type": "harmonization",
+      "status": "pending",
+      "reviews": [ ... ]
+    },
+    "reviews": [ ... ]
+  }
+}
+```
 
-## Code of Conduct
+**Resposta (pendente do outro revisor):**
+```json
+{
+  "message": "Avaliacao submetida com sucesso. Aguardando o outro revisor.",
+  "form": {
+    "id": 1,
+    "status": "pending",
+    "auto_approved": false,
+    "needs_harmonization": false,
+    "harmonization_form": null,
+    "reviews": [
+      { "reviewer_id": 42, "submitted_at": "2026-07-25T10:00:00Z", "decision": "approved", ... },
+      { "reviewer_id": 43, "submitted_at": null, "decision": null, ... }
+    ]
+  }
+}
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+### 2. Submeter Harmonização
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```
+POST /api/v1/evaluation-forms/{form}/harmonize
+```
 
-## License
+**Payload:**
+```json
+{
+  "reviewer_id": 42,
+  "decision": "approved",
+  "criterion_reviews": {
+    "103": { "comment": "Bem estruturado (após discussão)" }
+  }
+}
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**Regras:**
+- Ambos os revisores submetem na mesma ficha de harmonização
+- Cada revisor pode alterar os seus próprios comentários
+- A decisão final é aplicada quando ambos submeterem
+- Se algum revisor submeter `not_approved` → o protocolo é rejeitado
+
+**Resposta:**
+```json
+{
+  "message": "Harmonizacao submetida com sucesso.",
+  "form": {
+    "id": 2,
+    "form_type": "harmonization",
+    "status": "approved",
+    "harmonized_decision": "approved",
+    "harmonized_at": "2026-07-25T14:30:00Z",
+    "parent_form": { "id": 1, "form_type": "evaluation" },
+    "reviews": [ ... ]
+  }
+}
+```
+
+---
+
+### 3. Auto-Save de Critérios (Frontend apenas)
+
+```
+POST /api/v1/evaluation-forms/{form}/criteria/{formCriterion}/review
+```
+
+**Payload:**
+```json
+{
+  "reviewer_id": 42,
+  "comment": "Parcial"
+}
+```
+
+**Nota:** Este endpoint é **idempotente** — o frontend pode chamá-lo em cada `onBlur`. O backend persiste mas não acciona qualquer lógica de workflow.
+
+---
+
+### 4. Visualizar Ficha
+
+```
+GET /api/v1/evaluation-forms/{form}
+```
+
+**Query params:** `?reviewer_id=42` (opcional — usado para filtrar dados por role)
+
+A resposta inclui:
+- `auto_approved`, `needs_harmonization`, `harmonization_form`, `parent_form`
+- `reviewer_evaluations[]` com decisões, timestamps e `criterion_reviews`
+
+**Estrutura do `criterion_reviews` (dentro de `reviewer_evaluations[]`):**
+
+```json
+{
+  "reviewer_evaluations": [
+    {
+      "id": 1,
+      "reviewer_id": 42,
+      "status": "submitted",
+      "submitted_at": "2026-07-25T10:00:00Z",
+      "decision": "approved",
+      "needs_deliberation": false,
+      "overall_comment": "Bom trabalho",
+      "criterion_reviews": [
+        {
+          "id": 10,
+          "comment": "Bem estruturado e claro",
+          "reviewer_evaluation_id": 1,
+          "reviewer": {
+            "id": 42,
+            "name": "Dr. Joao Silva"
+          }
+        },
+        {
+          "id": 11,
+          "comment": "Metodologia adequada",
+          "reviewer_evaluation_id": 1,
+          "reviewer": {
+            "id": 42,
+            "name": "Dr. Joao Silva"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Notas:**
+- Cada `criterion_review` inclui o objecto `reviewer` com `id` e `name` do autor — os revisores vêem os comentários uns dos outros etiquetados (formato de diálogo)
+- A secretaria NÃO recebe `decision`, `needs_deliberation`, `overall_comment` nem `criterion_reviews` — apenas `status` e `submitted_at`
+- O campo `score` **não é persistido** no backend (o model `EvaluationCriterionReview` só tem `comment`). Se precisarem de guardar pontuação por critério, é necessário adicionar um campo `score` à migration e ao model.
+
+---
+
+## Regras de Visibilidade
+
+| Role       | Vê decisões individuais?             | Vê comentários do outro revisor? | Vê `needs_deliberation`? |
+| ---------- | ------------------------------------ | -------------------------------- | ------------------------ |
+| Revisor    | Sim                                  | Sim (diálogo aberto)             | Sim                      |
+| Secretaria | Não (vê apenas `submitted` / `null`) | Não                              | Não                      |
+| Estudante  | Não (vê apenas parecer final)        | Não                              | Não                      |
+
+**Implementação:** O resource `ReviewerEvaluationResource` filtra os campos `decision`, `needs_deliberation` e `criterion_reviews` baseado no `reviewer_id` recebido no request. Se o `reviewer_id` corresponde ao revisor, ou se é um revisor da mesma ficha, os dados são incluídos. Caso contrário (secretaria), apenas o status de submissão é exposto.
+
+---
+
+## Formatos de Data
+
+Todos os timestamps são retornados em **ISO 8601** (`YYYY-MM-DDTHH:mm:ssZ`).
+
+---
+
+## Modelo de Dados
+
+### reviewer_evaluations
+
+| Campo                   | Tipo       | Descrição                     |
+| ----------------------- | ---------- | ----------------------------- |
+| id                      | integer    | PK                            |
+| evaluation_form_id      | integer    | FK                            |
+| reviewer_id             | integer    | FK (teacher_profiles)         |
+| decision                | enum       | `approved` ou `not_approved`  |
+| needs_deliberation      | boolean    | Se revisor solicita discussão |
+| submitted_at            | timestamp  | Quando o revisor submeteu     |
+| created_at / updated_at | timestamps |                               |
+
+### evaluation_forms
+
+| Campo               | Tipo      | Descrição                                                  |
+| ------------------- | --------- | ---------------------------------------------------------- |
+| id                  | integer   | PK                                                         |
+| form_type           | enum      | `evaluation` ou `harmonization`                            |
+| parent_form_id      | integer   | FK → evaluation_forms (null para evaluation)               |
+| status              | string    | `pending`, `approved`, `rejected`, `pending_harmonization` |
+| auto_approved       | boolean   | Se foi aprovado automaticamente                            |
+| harmonized_decision | enum      | `approved` ou `not_approved` (preenchido na harmonização)  |
+| harmonized_at       | timestamp | Quando a harmonização foi concluída                        |
+
+---
+
+## Fluxo Completo
+
+```
+Secretaria atribui 2 revisores
+        │
+        ▼
+  Cria ficha de avaliação (form_type=evaluation)
+  Cada revisor avalia e marca necessita_deliberacao?
+        │
+        ▼
+  Ambos submeteram?
+        │
+        ├── Sim ──► Ambos approved E sem deliberação?
+        │               ├── Sim ──► Auto-Approve (parecer, avanço)
+        │               └── Não ──► Cria ficha de harmonização
+        │                              │
+        │                              ▼
+        │                          Ambos harmonizam
+        │                              │
+        │                              ▼
+        │                          Decide (approved / not_approved)
+        │
+        └── Não ──► Aguarda
+```

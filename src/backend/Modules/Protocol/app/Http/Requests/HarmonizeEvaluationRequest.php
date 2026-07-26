@@ -4,7 +4,7 @@ namespace Modules\Protocol\app\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class SubmitEvaluationRequest extends FormRequest
+class HarmonizeEvaluationRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -15,8 +15,7 @@ class SubmitEvaluationRequest extends FormRequest
     {
         return [
             'decision' => 'required|string|in:approved,not_approved',
-            'needs_deliberation' => 'boolean',
-            'overall_comment' => 'nullable|string|max:5000',
+            'conclusion_summary' => 'nullable|string|max:5000',
         ];
     }
 }

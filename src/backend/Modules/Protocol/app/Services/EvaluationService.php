@@ -18,9 +18,9 @@ use Modules\User\app\Models\User;
 
 class EvaluationService
 {
-    public function createForProtocol(Protocol $protocol, array $reviewerIds, User $secretary, string $organ = 'nucleo'): EvaluationForm
+    public function createForProtocol(Protocol $protocol, array $reviewerIds, User $secretary, string $organ = 'nucleo', string $formType = EvaluationForm::FORM_TYPE_EVALUATION): EvaluationForm
     {
-        return DB::transaction(function () use ($protocol, $reviewerIds, $secretary, $organ) {
+        return DB::transaction(function () use ($protocol, $reviewerIds, $secretary, $organ, $formType) {
             $protocol = Protocol::lockForUpdate()->findOrFail($protocol->id);
             $version = $protocol->version ?: '1';
 
@@ -29,8 +29,12 @@ class EvaluationService
                     'protocol_id' => $protocol->id,
                     'version' => $version,
                     'organ' => $organ,
+                    'form_type' => $formType,
                 ],
-                ['status' => EvaluationForm::STATUS_PENDING_REVIEW]
+                [
+                    'status' => EvaluationForm::STATUS_PENDING_REVIEW,
+                    'form_type' => $formType,
+                ]
             );
 
             if (! $form->formCriteria()->exists()) {
@@ -98,17 +102,25 @@ class EvaluationService
     public function getFormWithReviews(EvaluationForm $form, User $user): EvaluationForm
     {
         $teacherProfile = $user->teacherProfile;
+        $isReviewer = $teacherProfile && $form->reviewerEvaluations()
+            ->where('reviewer_id', $teacherProfile->id)
+            ->exists();
 
         $form->load([
             'protocol.topic:id,title,status',
             'protocol.topic.scientificArea:id,name',
             'protocol.topic.course:id,name,code',
+            'protocol.student:id,name,email',
             'formCriteria' => fn($q) => $q->orderBy('order_column'),
             'reviewerEvaluations' => fn($q) => $q->with([
                 'criterionReviews',
                 'reviewer.user:id,name',
             ]),
+            'parentForm.reviewerEvaluations.reviewer.user:id,name',
+            'childForms.reviewerEvaluations.reviewer.user:id,name',
         ]);
+
+        $form->load(['reviewerEvaluations.criterionReviews.formCriterion']);
 
         return $form;
     }
@@ -150,9 +162,9 @@ class EvaluationService
         });
     }
 
-    public function submitEvaluation(EvaluationForm $form, User $reviewer, string $recommendation, ?string $overallComment): ReviewerEvaluation
+    public function submitEvaluation(EvaluationForm $form, User $reviewer, string $decision, bool $needsDeliberation = false, ?string $overallComment = null): array
     {
-        return DB::transaction(function () use ($form, $reviewer, $recommendation, $overallComment) {
+        return DB::transaction(function () use ($form, $reviewer, $decision, $needsDeliberation, $overallComment) {
             $teacherProfile = $reviewer->teacherProfile;
 
             $reviewerEvaluation = $form->reviewerEvaluations()
@@ -181,7 +193,8 @@ class EvaluationService
             }
 
             $reviewerEvaluation->update([
-                'recommendation' => $recommendation,
+                'decision' => $decision,
+                'needs_deliberation' => $needsDeliberation,
                 'overall_comment' => $overallComment,
                 'status' => ReviewerEvaluation::STATUS_SUBMITTED,
                 'submitted_at' => now(),
@@ -189,7 +202,187 @@ class EvaluationService
 
             $form->update(['status' => EvaluationForm::STATUS_IN_REVIEW]);
 
-            return $reviewerEvaluation->load(['criterionReviews.formCriterion']);
+            $form->load(['reviewerEvaluations.criterionReviews.formCriterion']);
+
+            $result = $this->checkEvaluationCompletion($form);
+
+            return [
+                'reviewer_evaluation' => $reviewerEvaluation->load(['criterionReviews.formCriterion']),
+                'auto_approved' => ($result['action'] ?? null) === 'auto-approved',
+                'harmonization_form' => $result['harmonization_form'] ?? null,
+                'opinion' => $result['opinion'] ?? null,
+                'form' => $form->fresh()->load([
+                    'formCriteria',
+                    'reviewerEvaluations.criterionReviews.formCriterion',
+                    'parentForm',
+                    'childForms',
+                ]),
+            ];
+        });
+    }
+
+    private function checkEvaluationCompletion(EvaluationForm $form): array
+    {
+        $form = $form->fresh();
+        $form->loadMissing('reviewerEvaluations');
+
+        if (! $form->hasAllSubmitted()) {
+            return ['action' => 'waiting'];
+        }
+
+        $needsHarmonization = $form->needsHarmonization();
+        $hasAnyNotApproved = $form->hasAnyNotApproved();
+
+        if (! $needsHarmonization && ! $hasAnyNotApproved) {
+            return $this->autoApprove($form);
+        }
+
+        $harmonizationForm = $this->createHarmonizationForm($form);
+
+        return [
+            'action' => 'harmonization_needed',
+            'harmonization_form' => $harmonizationForm,
+        ];
+    }
+
+    private function autoApprove(EvaluationForm $form): array
+    {
+        $firstReviewer = $form->reviewerEvaluations()
+            ->where('status', ReviewerEvaluation::STATUS_SUBMITTED)
+            ->first();
+
+        return $this->processDecision(
+            $form,
+            $firstReviewer?->reviewer?->user,
+            ReviewerEvaluation::DECISION_APPROVED,
+            null
+        );
+    }
+
+    public function createHarmonizationForm(EvaluationForm $parentForm): EvaluationForm
+    {
+        return DB::transaction(function () use ($parentForm) {
+            $parentForm = EvaluationForm::lockForUpdate()->findOrFail($parentForm->id);
+
+            $existingHarmonization = $parentForm->childForms()
+                ->where('form_type', EvaluationForm::FORM_TYPE_HARMONIZATION)
+                ->whereNotIn('status', [EvaluationForm::STATUS_CONCLUDED])
+                ->first();
+
+            if ($existingHarmonization) {
+                return $existingHarmonization->load([
+                    'formCriteria',
+                    'reviewerEvaluations.reviewer.user:id,name',
+                    'reviewerEvaluations.criterionReviews',
+                ]);
+            }
+
+            $harmonizationForm = EvaluationForm::create([
+                'protocol_id' => $parentForm->protocol_id,
+                'version' => $parentForm->version . '-H',
+                'form_type' => EvaluationForm::FORM_TYPE_HARMONIZATION,
+                'parent_form_id' => $parentForm->id,
+                'organ' => $parentForm->organ,
+                'status' => EvaluationForm::STATUS_PENDING_REVIEW,
+            ]);
+
+            $criteria = $parentForm->formCriteria()->orderBy('order_column')->get();
+
+            foreach ($criteria as $criterion) {
+                EvaluationFormCriterion::create([
+                    'evaluation_form_id' => $harmonizationForm->id,
+                    'criterion_id' => $criterion->criterion_id,
+                    'group_name' => $criterion->group_name,
+                    'criterion_name' => $criterion->criterion_name,
+                    'order_column' => $criterion->order_column,
+                ]);
+            }
+
+            $parentReviewers = $parentForm->reviewerEvaluations()
+                ->with('reviewer.user:id,name')
+                ->get();
+
+            foreach ($parentReviewers as $parentReviewer) {
+                ReviewerEvaluation::query()->firstOrCreate(
+                    [
+                        'evaluation_form_id' => $harmonizationForm->id,
+                        'reviewer_id' => $parentReviewer->reviewer_id,
+                    ],
+                    [
+                        'protocol_review_assignment_id' => $parentReviewer->protocol_review_assignment_id,
+                        'status' => ReviewerEvaluation::STATUS_PENDING,
+                    ]
+                );
+            }
+
+            return $harmonizationForm->load([
+                'formCriteria',
+                'reviewerEvaluations.reviewer.user:id,name',
+                'reviewerEvaluations.criterionReviews',
+            ]);
+        });
+    }
+
+    public function harmonize(EvaluationForm $form, User $decider, string $decision, ?string $conclusionSummary): array
+    {
+        return DB::transaction(function () use ($form, $decider, $decision, $conclusionSummary) {
+            $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
+
+            if (! $form->isHarmonization()) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Esta ficha não é de harmonização.'], 422)
+                );
+            }
+
+            if ($form->status === EvaluationForm::STATUS_CONCLUDED) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Esta ficha já foi concluída.'], 422)
+                );
+            }
+
+            $teacherProfile = $decider->teacherProfile;
+
+            if (! $teacherProfile) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Apenas docentes podem harmonizar.'], 403)
+                );
+            }
+
+            $isReviewer = $form->reviewerEvaluations()
+                ->where('reviewer_id', $teacherProfile->id)
+                ->exists();
+
+            if (! $isReviewer) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Apenas um revisor atribuído pode finalizar a harmonização.'], 403)
+                );
+            }
+
+            $form->update([
+                'harmonized_decision' => $decision,
+                'harmonized_at' => now(),
+            ]);
+
+            $result = $this->processDecision(
+                $form->parentForm ?? $form,
+                $decider,
+                $decision,
+                $conclusionSummary
+            );
+
+            $form->update([
+                'status' => EvaluationForm::STATUS_CONCLUDED,
+                'conclusion_summary' => $conclusionSummary,
+            ]);
+
+            return [
+                'evaluation_form' => $result['evaluation_form'],
+                'harmonization_form' => $form->fresh()->load([
+                    'formCriteria',
+                    'reviewerEvaluations.reviewer.user:id,name',
+                ]),
+                'opinion' => $result['opinion'],
+            ];
         });
     }
 
@@ -198,7 +391,6 @@ class EvaluationService
         return DB::transaction(function () use ($form, $decider, $decision, $conclusionSummary) {
             $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
             $teacherProfile = $decider->teacherProfile;
-            $protocol = $form->protocol()->first();
 
             if (! $teacherProfile) {
                 throw new HttpResponseException(
@@ -216,9 +408,7 @@ class EvaluationService
                 );
             }
 
-            $allSubmitted = ! $form->reviewerEvaluations()
-                ->whereNotIn('status', [ReviewerEvaluation::STATUS_SUBMITTED])
-                ->exists();
+            $allSubmitted = $form->hasAllSubmitted();
 
             if (! $allSubmitted) {
                 throw new HttpResponseException(
@@ -232,9 +422,25 @@ class EvaluationService
                 );
             }
 
+            if ($form->isEvaluation() && $form->needsHarmonization()) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Esta avaliação necessita de harmonização. Use o endpoint de harmonização.'], 422)
+                );
+            }
+
+            return $this->processDecision($form, $decider, $decision, $conclusionSummary);
+        });
+    }
+
+    private function processDecision(EvaluationForm $form, ?User $decider, string $decision, ?string $conclusionSummary): array
+    {
+        return DB::transaction(function () use ($form, $decider, $decision, $conclusionSummary) {
+            $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
+            $protocol = $form->protocol()->lockForUpdate()->first();
+
             $form->update([
                 'final_decision' => $decision,
-                'decided_by' => $decider->id,
+                'decided_by' => $decider?->id,
                 'decided_at' => now(),
                 'status' => EvaluationForm::STATUS_CONCLUDED,
                 'conclusion_summary' => $conclusionSummary,
@@ -243,7 +449,7 @@ class EvaluationService
             $protocolUpdates = [];
             $flow = null;
 
-            if ($decision === 'rejected') {
+            if ($decision === ReviewerEvaluation::DECISION_NOT_APPROVED) {
                 $rejectedStatus = match ($form->organ) {
                     Protocol::ORGAN_NUCLEO => Protocol::STATUS_REJECTED_NUCLEO,
                     Protocol::ORGAN_COMITE_CIENTIFICO => Protocol::STATUS_REJECTED_CC,
@@ -290,12 +496,13 @@ class EvaluationService
 
             $protocol->update($protocolUpdates);
 
-            if ($decision === 'approved' && $flow && $flow['next_organ_type']) {
+            if ($decision === ReviewerEvaluation::DECISION_APPROVED && $flow && $flow['next_organ_type']) {
                 $this->createForProtocol(
                     $protocol->fresh(),
                     [],
-                    $decider,
-                    $flow['next_form_organ']
+                    $decider ?? $protocol->supervisor->user,
+                    $flow['next_form_organ'],
+                    EvaluationForm::FORM_TYPE_EVALUATION
                 );
             }
 
@@ -308,7 +515,7 @@ class EvaluationService
                 'organ' => $form->organ,
                 'decision' => $decision,
                 'observations' => $conclusionSummary,
-                'issued_by' => $decider->id,
+                'issued_by' => $decider?->id ?? $protocol->supervisor?->id,
                 'issued_at' => now(),
             ]);
 
@@ -318,6 +525,8 @@ class EvaluationService
                 'protocol',
                 'reviewerEvaluations.criterionReviews.formCriterion',
                 'formCriteria',
+                'childForms',
+                'parentForm',
             ]);
 
             return [
@@ -344,6 +553,8 @@ class EvaluationService
                 'reviewerEvaluations' => fn($q) => $q
                     ->where('reviewer_id', $teacherProfile->id)
                     ->with('criterionReviews.formCriterion'),
+                'childForms.reviewerEvaluations' => fn($q) => $q
+                    ->where('reviewer_id', $teacherProfile->id),
             ])
             ->latest('created_at')
             ->get();
@@ -393,13 +604,19 @@ class EvaluationService
                     ->where('current_organ_id', $organ->id)
             )
             ->where('organ', $formOrgan)
+            ->where('form_type', EvaluationForm::FORM_TYPE_EVALUATION)
             ->with([
                 'protocol.topic:id,title,status,scientific_area_id,supervisor_id',
                 'protocol.topic.scientificArea:id,name,organ_id',
                 'protocol.student:id,name,email',
                 'protocol.supervisor.user:id,name,email',
-                'reviewerEvaluations.reviewer.user:id,name,email',
+                'reviewerEvaluations' => fn($q) => $q->with([
+                    'reviewer.user:id,name,email',
+                ]),
                 'formCriteria',
+                'childForms' => fn($q) => $q->with([
+                    'reviewerEvaluations.reviewer.user:id,name,email',
+                ]),
             ])
             ->latest('created_at')
             ->get();
