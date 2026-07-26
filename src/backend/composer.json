@@ -29,11 +29,8 @@
         "psr-4": {
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
-<<<<<<< Updated upstream
             "Modules\\": "Modules/",
-=======
             "Shared\\": "Shared/",
->>>>>>> Stashed changes
             "Database\\Seeders\\": "database/seeders/"
         }
     },

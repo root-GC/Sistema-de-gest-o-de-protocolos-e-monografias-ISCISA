@@ -35,12 +35,12 @@ class MonographTestSeeder extends Seeder
             return;
         }
 
-        // ── permissões: monograph.endorse (supervisor) e monograph.comment
-        // (supervisor, secretary, coordinator) — a migration só cria a
-        // permissão, a associação à role só pode acontecer aqui porque
-        // 'roles' só está populada depois do RoleSeeder.
-        $this->grantPermission('monograph.endorse', ['supervisor']);
-        $this->grantPermission('monograph.comment', ['supervisor', 'secretary', 'coordinator']);
+        // ── permissões: monograph.endorse (docente) e monograph.comment
+        // (docente, secretaria) — a migration só cria a permissão, a
+        // associação à role só pode acontecer aqui porque 'roles' só
+        // está populada depois do RoleSeeder.
+        $this->grantPermission('monograph.endorse', ['docente']);
+        $this->grantPermission('monograph.comment', ['docente', 'secretaria']);
 
         // ── teacher_profile do supervisor (colunas confirmadas: is_internal)
         DB::table('teacher_profiles')->updateOrInsert(
@@ -122,9 +122,9 @@ class MonographTestSeeder extends Seeder
         $this->command->info('Secretário: secretario@iscisa.ac.mz / password123');
     }
 
-    private function grantPermission(string $code, array $roleNames): void
+    private function grantPermission(string $permissionName, array $roleNames): void
     {
-        $permId = DB::table('permissions')->where('code', $code)->value('id');
+        $permId = DB::table('permissions')->where('name', $permissionName)->value('id');
 
         if (!$permId) {
             return;
@@ -134,9 +134,9 @@ class MonographTestSeeder extends Seeder
             $roleId = DB::table('roles')->where('name', $roleName)->value('id');
 
             if ($roleId) {
-                DB::table('role_permissions')->updateOrInsert(
+                DB::table('role_has_permissions')->updateOrInsert(
                     ['role_id' => $roleId, 'permission_id' => $permId],
-                    ['created_at' => now(), 'updated_at' => now()]
+                    []
                 );
             }
         }

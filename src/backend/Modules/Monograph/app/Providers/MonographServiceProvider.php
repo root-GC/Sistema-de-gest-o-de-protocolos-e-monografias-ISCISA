@@ -1,61 +1,20 @@
 <?php
 
-namespace Modules\Monograph\Providers;
+namespace Modules\Monograph\app\Providers;
 
 use Nwidart\Modules\Support\ModuleServiceProvider;
-use Illuminate\Console\Scheduling\Schedule;
+use Modules\Monograph\app\Providers\EventServiceProvider;
+use Modules\Monograph\app\Providers\RouteServiceProvider;
+use Modules\Monograph\app\Providers\AuthServiceProvider;
 
 class MonographServiceProvider extends ModuleServiceProvider
 {
-<<<<<<< Updated upstream
-    /**
-     * The name of the module.
-     */
     protected string $name = 'Monograph';
-
-    /**
-     * The lowercase version of the module name.
-     */
     protected string $nameLower = 'monograph';
 
-    /**
-     * Command classes to register.
-     *
-     * @var string[]
-     */
-    // protected array $commands = [];
-
-    /**
-     * Provider classes to register.
-     *
-     * @var string[]
-     */
     protected array $providers = [
         EventServiceProvider::class,
         RouteServiceProvider::class,
+        AuthServiceProvider::class,
     ];
-
-    /**
-     * Define module schedules.
-     * 
-     * @param $schedule
-     */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
 }
-=======
-    public function register(): void
-    {
-        $this->app->register(EventServiceProvider::class);
-        $this->app->register(RouteServiceProvider::class);
-        $this->app->register(AuthServiceProvider::class);
-    }
-
-    public function boot(): void
-    {
-        //
-    }
-}
->>>>>>> Stashed changes
