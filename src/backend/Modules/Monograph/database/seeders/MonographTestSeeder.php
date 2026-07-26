@@ -39,9 +39,8 @@ class MonographTestSeeder extends Seeder
         // (docente, secretaria) — a migration só cria a permissão, a
         // associação à role só pode acontecer aqui porque 'roles' só
         // está populada depois do RoleSeeder.
-        $this->grantPermission('monograph.endorse', ['docente']);
-        $this->grantPermission('monograph.comment', ['docente', 'secretaria']);
-
+$this->grantPermission('monograph.endorse', ['supervisor']);
+$this->grantPermission('monograph.comment', ['supervisor', 'secretary', 'coordinator']);
         // ── teacher_profile do supervisor (colunas confirmadas: is_internal)
         DB::table('teacher_profiles')->updateOrInsert(
             ['user_id' => $supervisorUserId],
@@ -122,23 +121,28 @@ class MonographTestSeeder extends Seeder
         $this->command->info('Secretário: secretario@iscisa.ac.mz / password123');
     }
 
-    private function grantPermission(string $permissionName, array $roleNames): void
-    {
-        $permId = DB::table('permissions')->where('name', $permissionName)->value('id');
+ private function grantPermission(string $permissionCode, array $roleNames): void
+{
+    $permId = DB::table('permissions')->where('code', $permissionCode)->value('id');
 
-        if (!$permId) {
-            return;
-        }
+    if (!$permId) {
+        $permId = DB::table('permissions')->insertGetId([
+            'code'        => $permissionCode,
+            'description' => $permissionCode,
+            'created_at'  => now(),
+            'updated_at'  => now(),
+        ]);
+    }
 
-        foreach ($roleNames as $roleName) {
-            $roleId = DB::table('roles')->where('name', $roleName)->value('id');
+    foreach ($roleNames as $roleName) {
+        $roleId = DB::table('roles')->where('name', $roleName)->value('id');
 
-            if ($roleId) {
-                DB::table('role_has_permissions')->updateOrInsert(
-                    ['role_id' => $roleId, 'permission_id' => $permId],
-                    []
-                );
-            }
+        if ($roleId) {
+            DB::table('role_permissions')->updateOrInsert(
+                ['role_id' => $roleId, 'permission_id' => $permId],
+                ['created_at' => now(), 'updated_at' => now()]
+            );
         }
     }
+}
 }

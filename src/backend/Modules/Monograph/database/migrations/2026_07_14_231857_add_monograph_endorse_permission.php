@@ -1,19 +1,26 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Spatie\Permission\Models\Permission;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Permission::firstOrCreate(
-            ['name' => 'monograph.endorse', 'guard_name' => 'web']
-        );
+        $exists = DB::table('permissions')->where('code', 'monograph.endorse')->exists();
+
+        if (!$exists) {
+            DB::table('permissions')->insert([
+                'code'        => 'monograph.endorse',
+                'description' => 'Supervisor aprova ou devolve submissão de monografia',
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]);
+        }
     }
 
     public function down(): void
     {
-        Permission::where('name', 'monograph.endorse')->delete();
+        DB::table('permissions')->where('code', 'monograph.endorse')->delete();
     }
 };
