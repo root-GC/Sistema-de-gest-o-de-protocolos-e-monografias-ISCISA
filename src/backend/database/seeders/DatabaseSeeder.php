@@ -2,26 +2,25 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Modules\Password\database\seeders\PasswordDatabaseSeeder;
+use Modules\Auth\database\seeders\AuthDatabaseSeeder;
+use Modules\Defense\database\seeders\DefenseDatabaseSeeder;
+use Modules\Monograph\database\seeders\MonographDatabaseSeeder;
+use Modules\Organization\database\seeders\OrganizationDatabaseSeeder;
+use Modules\Protocol\database\seeders\ProtocolDatabaseSeeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     public function run(): void
     {
-        User::firstOrCreate(
-            ['email' => 'test@example.com'],
-            ['name' => 'Test User', 'password' => bcrypt('password')]
-        );
-
         $this->call([
-            \Modules\Auth\Database\Seeders\AuthDatabaseSeeder::class,
-            \Modules\Organization\Database\Seeders\OrganizationDatabaseSeeder::class,
-            \Modules\Protocol\Database\Seeders\ProtocolDatabaseSeeder::class,
-            \Modules\Monograph\Database\Seeders\MonographDatabaseSeeder::class,
+            AuthDatabaseSeeder::class,
+            OrganizationDatabaseSeeder::class,
+            PasswordDatabaseSeeder::class,
+            ProtocolDatabaseSeeder::class,
+            MonographDatabaseSeeder::class,
+            DefenseDatabaseSeeder::class,
         ]);
     }
 }

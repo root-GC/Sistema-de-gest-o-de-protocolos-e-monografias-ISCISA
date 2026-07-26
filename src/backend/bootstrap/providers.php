@@ -2,6 +2,10 @@
 
 use App\Providers\AppServiceProvider;
 
+// return [
+//     AppServiceProvider::class,
+// ];
+
 return [
-    AppServiceProvider::class,
+    App\Providers\AppServiceProvider::class,
 ];

@@ -1,27 +1,25 @@
 <?php
 
-namespace Modules\Auth\App\Http\Requests;
+namespace Modules\Auth\app\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
 class ForgotPasswordRequest extends FormRequest
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
+    public function authorize(): bool { return true; }
 
     public function rules(): array
     {
         return [
-            'email' => 'required|email|exists:users,email'
+            'email' => ['required', 'email'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'email.exists' => 'Não existe nenhuma conta com este email.'
+            'email.required' => 'O email é obrigatório.',
+            'email.email'    => 'Formato de email inválido.',
         ];
     }
 }

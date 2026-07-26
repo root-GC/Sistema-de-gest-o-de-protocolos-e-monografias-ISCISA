@@ -3,5 +3,8 @@
     "Protocol": true,
     "Monograph": true,
     "Defense": true,
+    "User": true,
+    "Shared": true,
+    "Password": true,
     "Organization": true
 }

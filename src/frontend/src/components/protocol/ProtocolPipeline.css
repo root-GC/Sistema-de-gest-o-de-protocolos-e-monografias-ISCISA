@@ -1,0 +1,286 @@
+/* =========================================================
+   ProtocolPipeline — visual indicator of multi-organ flow
+   Nucleo → Comite Cientifico → Comite de Bioetica → Final
+   ========================================================= */
+
+.protocol-pipeline {
+  --pipeline-stage-min-width: 180px;
+  --pipeline-icon-size: 56px;
+  --pipeline-gap: 8px;
+
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  padding: 20px 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.protocol-pipeline.is-compact {
+  --pipeline-stage-min-width: 120px;
+  --pipeline-icon-size: 40px;
+  padding: 8px 4px;
+}
+
+.protocol-pipeline-row {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.protocol-pipeline-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: var(--pipeline-stage-min-width);
+  padding: 16px 14px 18px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-xl, 16px);
+  background: var(--surface-container-lowest, #fff);
+  text-align: center;
+  font: inherit;
+  color: var(--on-surface, #1a1c1e);
+  cursor: default;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.protocol-pipeline-stage:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elevation-2, 0 2px 6px rgba(0, 0, 0, 0.08));
+  border-color: var(--primary, #006933);
+}
+
+.protocol-pipeline-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pipeline-icon-size);
+  height: var(--pipeline-icon-size);
+  border-radius: 50%;
+  background: var(--surface-container, #eeeef0);
+  color: var(--on-surface-variant, #3e4a3f);
+  flex: 0 0 auto;
+}
+
+.protocol-pipeline-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.protocol-pipeline-label {
+  font-size: 14px;
+  font-weight: var(--font-semibold, 600);
+  color: var(--on-surface, #1a1c1e);
+  line-height: 1.25;
+}
+
+.protocol-pipeline-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: var(--font-medium, 500);
+  color: var(--on-surface-variant, #3e4a3f);
+}
+
+.protocol-pipeline-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--on-surface-variant, #3e4a3f);
+}
+
+.protocol-pipeline-version {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--surface-container, #eeeef0);
+  color: var(--on-surface-variant, #3e4a3f);
+  font-size: 11px;
+  font-weight: var(--font-semibold, 600);
+  letter-spacing: 0.04em;
+}
+
+.protocol-pipeline-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--on-surface-variant, #3e4a3f);
+  line-height: 1.4;
+  max-width: 200px;
+}
+
+/* ---- Stage states ---- */
+
+.protocol-pipeline-stage.stage-not_started {
+  opacity: 0.7;
+  background: var(--surface-container-low, #f3f3f6);
+}
+
+.protocol-pipeline-stage.stage-not_started .protocol-pipeline-icon {
+  background: var(--surface-container-high, #e8e8ea);
+  color: var(--on-surface-variant, #3e4a3f);
+}
+
+.protocol-pipeline-stage.stage-pending,
+.protocol-pipeline-stage.stage-current,
+.protocol-pipeline-stage.stage-in_review {
+  border-color: var(--tertiary, #735c00);
+  background: var(--tertiary-fixed, #ffe088);
+}
+
+.protocol-pipeline-stage.stage-pending .protocol-pipeline-icon,
+.protocol-pipeline-stage.stage-current .protocol-pipeline-icon,
+.protocol-pipeline-stage.stage-in_review .protocol-pipeline-icon {
+  background: var(--tertiary, #735c00);
+  color: var(--on-tertiary, #fff);
+}
+
+.protocol-pipeline-stage.stage-pending .protocol-pipeline-state-dot,
+.protocol-pipeline-stage.stage-current .protocol-pipeline-state-dot,
+.protocol-pipeline-stage.stage-in_review .protocol-pipeline-state-dot {
+  background: var(--tertiary, #735c00);
+}
+
+.protocol-pipeline-stage.stage-current {
+  box-shadow: 0 0 0 3px var(--tertiary-fixed-dim, #e9c349);
+  animation: pipelinePulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pipelinePulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--tertiary-fixed-dim, #e9c349); }
+  50% { box-shadow: 0 0 0 6px var(--tertiary-fixed, #ffe088); }
+}
+
+.protocol-pipeline-stage.stage-approved {
+  border-color: var(--primary, #006933);
+  background: var(--primary-fixed, #8df9a8);
+}
+
+.protocol-pipeline-stage.stage-approved .protocol-pipeline-icon {
+  background: var(--primary, #006933);
+  color: var(--on-primary, #fff);
+}
+
+.protocol-pipeline-stage.stage-approved .protocol-pipeline-state-dot {
+  background: var(--primary, #006933);
+}
+
+.protocol-pipeline-stage.stage-rejected {
+  border-color: var(--error, #ba1a1a);
+  background: var(--error-container, #ffdad6);
+}
+
+.protocol-pipeline-stage.stage-rejected .protocol-pipeline-icon {
+  background: var(--error, #ba1a1a);
+  color: var(--on-error, #fff);
+}
+
+.protocol-pipeline-stage.stage-rejected .protocol-pipeline-state-dot {
+  background: var(--error, #ba1a1a);
+}
+
+/* ---- Connectors ---- */
+
+.protocol-pipeline-connector {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 40px;
+  height: 4px;
+  margin: 0 4px;
+  position: relative;
+  align-self: center;
+}
+
+.protocol-pipeline-connector .protocol-pipeline-line {
+  flex: 1;
+  height: 3px;
+  background: var(--outline-variant, #bdcabc);
+  border-radius: var(--radius-full, 999px);
+}
+
+.protocol-pipeline-connector .protocol-pipeline-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--outline-variant, #bdcabc);
+}
+
+.protocol-pipeline-connector.connector-done .protocol-pipeline-line {
+  background: var(--primary, #006933);
+}
+.protocol-pipeline-connector.connector-done .protocol-pipeline-arrow {
+  color: var(--primary, #006933);
+}
+
+.protocol-pipeline-connector.connector-in_progress .protocol-pipeline-line {
+  background: linear-gradient(90deg, var(--tertiary, #735c00) 50%, var(--outline-variant, #bdcabc) 50%);
+  background-size: 12px 3px;
+  animation: pipelineDash 1.2s linear infinite;
+}
+
+.protocol-pipeline-connector.connector-in_progress .protocol-pipeline-arrow {
+  color: var(--tertiary, #735c00);
+}
+
+@keyframes pipelineDash {
+  from { background-position: 0 0; }
+  to { background-position: 12px 0; }
+}
+
+.protocol-pipeline-connector.connector-pending .protocol-pipeline-line {
+  background: var(--outline, #6e7a6e);
+}
+
+.protocol-pipeline-connector.connector-failed .protocol-pipeline-line {
+  background: var(--error, #ba1a1a);
+}
+.protocol-pipeline-connector.connector-failed .protocol-pipeline-arrow {
+  color: var(--error, #ba1a1a);
+}
+
+.protocol-pipeline-connector.connector-idle .protocol-pipeline-line {
+  background: var(--surface-container-high, #e8e8ea);
+}
+
+/* ---- Compact variant adjustments ---- */
+
+.protocol-pipeline.is-compact .protocol-pipeline-stage {
+  padding: 10px 8px 12px;
+  gap: 6px;
+}
+
+.protocol-pipeline.is-compact .protocol-pipeline-label {
+  font-size: 12px;
+}
+
+.protocol-pipeline.is-compact .protocol-pipeline-connector {
+  min-width: 24px;
+  margin: 0 2px;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 720px) {
+  .protocol-pipeline {
+    padding: 12px 4px;
+  }
+
+  .protocol-pipeline-stage {
+    min-width: 140px;
+    padding: 12px 10px 14px;
+  }
+
+  .protocol-pipeline-label {
+    font-size: 13px;
+  }
+
+  .protocol-pipeline-connector {
+    min-width: 28px;
+  }
+}

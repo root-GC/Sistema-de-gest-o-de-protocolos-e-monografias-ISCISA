@@ -1,0 +1,12 @@
+{
+    "name": "Password",
+    "alias": "password",
+    "description": "Recuperação e reset de password",
+    "keywords": ["password", "reset"],
+    "priority": 15,
+    "providers": [
+        "Modules\\Password\\app\\Providers\\PasswordServiceProvider"
+    ],
+    "aliases": {},
+    "files": []
+}
