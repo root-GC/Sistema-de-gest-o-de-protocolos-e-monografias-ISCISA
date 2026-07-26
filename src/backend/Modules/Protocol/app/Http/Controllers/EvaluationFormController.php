@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Http\Requests\DecideEvaluationRequest;
-use Modules\Protocol\app\Http\Requests\HarmonizeEvaluationRequest;
 use Modules\Protocol\app\Http\Requests\SubmitCriterionReviewRequest;
 use Modules\Protocol\app\Http\Requests\SubmitEvaluationRequest;
 use Modules\Protocol\app\Http\Resources\EvaluationFormResource;
@@ -104,7 +103,6 @@ class EvaluationFormController extends Controller
             $form,
             $request->user(),
             $request->input('decision'),
-            $request->boolean('needs_deliberation'),
             $request->input('overall_comment')
         );
 
@@ -112,12 +110,12 @@ class EvaluationFormController extends Controller
             'message' => 'Avaliação submetida com sucesso.',
             'reviewer_evaluation' => $result['reviewer_evaluation'],
             'auto_approved' => $result['auto_approved'],
+            'deliberation_pending' => $result['deliberation_pending'] ?? false,
             'evaluation_form' => EvaluationFormResource::make($result['form']),
         ];
 
-        if ($result['harmonization_form']) {
-            $response['harmonization_form'] = EvaluationFormResource::make($result['harmonization_form']);
-            $response['message'] = 'Avaliação submetida. É necessário harmonizar as decisões.';
+        if ($result['deliberation_pending'] ?? false) {
+            $response['message'] = 'Avaliação submetida. Aguardando reunião de deliberação.';
         }
 
         if ($result['opinion']) {
@@ -151,39 +149,61 @@ class EvaluationFormController extends Controller
         return response()->json($response);
     }
 
-    public function harmonize(
-        HarmonizeEvaluationRequest $request,
-        EvaluationForm $form,
-        DocumentGenerationService $documentService
-    ) {
+    public function initDeliberation(EvaluationForm $form)
+    {
+        $user = request()->user();
+
+        if (! $user->hasPermission('protocol.assign')) {
+            return response()->json(['message' => 'Apenas a secretaria pode iniciar uma deliberação.'], 403);
+        }
+
+        if ($form->status !== EvaluationForm::STATUS_DELIBERATION_PENDING) {
+            return response()->json(['message' => 'A ficha não está em estado de deliberação pendente.'], 422);
+        }
+
+        $deliberationForm = $this->evaluationService->createDeliberationForm($form);
+
+        return response()->json([
+            'message' => 'Reunião de deliberação iniciada. Ficha de deliberação criada.',
+            'deliberation_form' => EvaluationFormResource::make($deliberationForm),
+            'evaluation_form' => EvaluationFormResource::make(
+                $form->fresh()->load(['formCriteria', 'reviewerEvaluations', 'childForms'])
+            ),
+        ]);
+    }
+
+    public function submitDeliberation(Request $request, EvaluationForm $form)
+    {
         $this->authorize('submitEvaluation', $form);
 
-        $result = $this->evaluationService->harmonize(
+        $validated = $request->validate([
+            'decision' => 'required|string|in:approved,not_approved',
+            'conclusion_summary' => 'nullable|string|max:5000',
+        ]);
+
+        $result = $this->evaluationService->submitDeliberation(
             $form,
             $request->user(),
-            $request->input('decision'),
-            $request->input('conclusion_summary')
+            $validated['decision'],
+            $validated['conclusion_summary'] ?? null
         );
 
         $opinion = $result['opinion'];
-        $path = $documentService->generateOpinionPdf($opinion);
+        $path = app(DocumentGenerationService::class)->generateOpinionPdf($opinion);
         $opinion->update(['document_path' => $path]);
 
         $protocol = $result['evaluation_form']->protocol;
         $messages = [
-            Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo harmonizado e encaminhado ao Comité Científico.',
-            Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo harmonizado e encaminhado ao Comité de Bioética.',
-            Protocol::STATUS_APPROVED_FINAL => 'Protocolo harmonizado e aprovado definitivamente.',
-            Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado pelo Núcleo Científico.',
+            Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
+            Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
             Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado pelo Comité Científico.',
-            Protocol::STATUS_REJECTED_BIOETICA => 'Protocolo não aprovado pelo Comité de Bioética.',
             Protocol::STATUS_REJECTED_FINAL => 'Protocolo não aprovado.',
         ];
 
         return response()->json([
-            'message' => $messages[$protocol->status] ?? 'Protocolo actualizado após harmonização.',
+            'message' => $messages[$protocol->status] ?? 'Deliberação concluída.',
             'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
-            'harmonization_form' => EvaluationFormResource::make($result['harmonization_form']),
+            'deliberation_form' => EvaluationFormResource::make($result['deliberation_form']),
             'opinion' => [
                 'id' => $opinion->id,
                 'decision' => $opinion->decision,

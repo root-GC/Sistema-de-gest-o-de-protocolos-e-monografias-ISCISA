@@ -32,7 +32,6 @@ class ReviewerEvaluationResource extends JsonResource
         if ($isReviewer || ! $isSecretary) {
             $base['overall_comment'] = $this->overall_comment;
             $base['decision'] = $this->decision;
-            $base['needs_deliberation'] = $this->needs_deliberation;
             $base['criterion_reviews'] = EvaluationCriterionReviewResource::collection(
                 $this->whenLoaded('criterionReviews')
             );

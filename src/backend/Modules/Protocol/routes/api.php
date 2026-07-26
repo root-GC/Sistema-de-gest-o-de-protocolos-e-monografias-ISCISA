@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Protocol\app\Http\Controllers\ComiteCientificoController;
 use Modules\Protocol\app\Http\Controllers\TopicController;
 use Modules\Protocol\app\Http\Controllers\EvaluationFormController;
 use Modules\Protocol\app\Http\Controllers\OnlyOfficeController;
@@ -62,41 +63,55 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::patch('protocols/{protocol}/supervisor-approve', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@approveBySupervisor')->name('protocol.supervisor-approve');
     Route::patch('protocols/{protocol}/supervisor-reject', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@rejectBySupervisor')->name('protocol.supervisor-reject');
 
-    // Secretary operations: list protocols for nucleus, get eligible reviewers, assign reviewers
-    Route::get('secretary/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForSecretary')->name('secretary.protocols.list');
-
-    // === NÚCLEO ===
-    Route::get('nucleo/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersNucleo'])->name('nucleo.protocols.eligible-reviewers');
-    Route::get('nucleo/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersNucleo'])->name('nucleo.protocols.reviewers');
-    Route::post('nucleo/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersNucleo'])->name('nucleo.protocols.assign-reviewers');
-
-    // === COMITÉ CIENTÍFICO (CC) ===
-    Route::get('comite-cientifico/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersCC'])->name('cc.protocols.eligible-reviewers');
-    Route::get('comite-cientifico/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersCC'])->name('cc.protocols.reviewers');
-    Route::post('comite-cientifico/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersCC'])->name('cc.protocols.assign-reviewers');
-
-    // === COMITÉ DE BIOÉTICA ===
-    Route::get('comite-bioetica/protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersBioetica'])->name('bioetica.protocols.eligible-reviewers');
-    Route::get('comite-bioetica/protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersBioetica'])->name('bioetica.protocols.reviewers');
-    Route::post('comite-bioetica/protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersBioetica'])->name('bioetica.protocols.assign-reviewers');
-
-    // Reviewer operations: list assigned protocols for evaluation
-    Route::get('reviewer/protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@getForReviewer')->name('reviewer.protocols.list');
-
     // Document download
     Route::get('protocols/{protocol}/download', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@downloadDocument')->name('protocols.document.download');
-
-    // Evaluation forms
-    Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('evaluation-forms.show');
-    Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('evaluation-forms.criteria.review');
-    Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('evaluation-forms.submit');
-    Route::post('evaluation-forms/{form}/harmonize', [EvaluationFormController::class, 'harmonize'])->name('evaluation-forms.harmonize');
-    Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('evaluation-forms.decide');
-    Route::get('evaluation-forms/{form}/download', [EvaluationFormController::class, 'downloadEvaluationForm'])->name('evaluation-forms.download');
-    Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('reviewer.evaluations.list');
-    Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('secretary.evaluations.list');
 
     // Opinions (pareceres)
     Route::get('opinions/{opinion}/download', [EvaluationFormController::class, 'downloadOpinion'])->name('opinions.download');
     Route::get('protocols/{protocol}/opinions', [EvaluationFormController::class, 'listOpinionsForProtocol'])->name('protocols.opinions.list');
+
+    // Evaluation forms - shared (download PDF)
+    Route::get('evaluation-forms/{form}/download', [EvaluationFormController::class, 'downloadEvaluationForm'])->name('evaluation-forms.download');
+
+    // === NÚCLEO CIENTÍFICO (NC) ===
+    Route::prefix('nucleo')->group(function () {
+        Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('nucleo.evaluation-forms.show');
+        Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('nucleo.evaluation-forms.criteria.review');
+        Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('nucleo.evaluation-forms.submit');
+        Route::post('evaluation-forms/{form}/init-deliberation', [EvaluationFormController::class, 'initDeliberation'])->name('nucleo.evaluation-forms.init-deliberation');
+        Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('nucleo.evaluation-forms.submit-deliberation');
+        Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('nucleo.evaluation-forms.decide');
+
+        Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('nucleo.reviewer.evaluations.list');
+        Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('nucleo.secretary.evaluations.list');
+
+        Route::get('protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersNucleo'])->name('nucleo.protocols.eligible-reviewers');
+        Route::get('protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersNucleo'])->name('nucleo.protocols.reviewers');
+        Route::post('protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersNucleo'])->name('nucleo.protocols.assign-reviewers');
+    });
+
+    // === COMITÉ CIENTÍFICO (CC) ===
+    Route::prefix('comite-cientifico')->group(function () {
+        Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('cc.evaluation-forms.show');
+        Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('cc.evaluation-forms.criteria.review');
+        Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('cc.evaluation-forms.submit');
+        Route::post('evaluation-forms/{form}/init-deliberation', [EvaluationFormController::class, 'initDeliberation'])->name('cc.evaluation-forms.init-deliberation');
+        Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('cc.evaluation-forms.submit-deliberation');
+        Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('cc.evaluation-forms.decide');
+
+        Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('cc.reviewer.evaluations.list');
+        Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('cc.secretary.evaluations.list');
+        Route::get('reviewer/works', [ComiteCientificoController::class, 'reviewerWorks'])->name('cc.reviewer.works');
+
+        Route::get('protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersCC'])->name('cc.protocols.eligible-reviewers');
+        Route::get('protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersCC'])->name('cc.protocols.reviewers');
+        Route::post('protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersCC'])->name('cc.protocols.assign-reviewers');
+    });
+
+    // === COMITÉ DE BIOÉTICA ===
+    Route::prefix('comite-bioetica')->group(function () {
+        Route::get('protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersBioetica'])->name('bioetica.protocols.eligible-reviewers');
+        Route::get('protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersBioetica'])->name('bioetica.protocols.reviewers');
+        Route::post('protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersBioetica'])->name('bioetica.protocols.assign-reviewers');
+    });
 });

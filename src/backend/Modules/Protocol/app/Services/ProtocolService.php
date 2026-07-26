@@ -7,10 +7,13 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\Protocol\app\Models\Document;
+use Modules\Protocol\app\Models\EvaluationForm;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Models\ProtocolReviewAssignment;
-use Modules\Protocol\app\Services\EvaluationService;
+use Modules\Protocol\app\Models\ReviewerEvaluation;
 use Modules\Protocol\app\Models\Topic;
+use Modules\Protocol\app\Models\TopicReviewAssignment;
+use Modules\Protocol\app\Services\EvaluationService;
 use Modules\User\app\Models\User;
 
 class ProtocolService
@@ -415,7 +418,34 @@ class ProtocolService
             ->when($assignedReviewerIds !== [], fn($q) => $q->whereNotIn('teacher_profiles.id', $assignedReviewerIds))
             ->select('teacher_profiles.id', 'users.name', 'users.email')
             ->orderBy('users.name')
-            ->get();
+            ->get()
+            ->map(fn($reviewer) => [
+                'id' => $reviewer->id,
+                'name' => $reviewer->name,
+                'email' => $reviewer->email,
+                'active_works' => $this->countActiveWorksForTeacher($reviewer->id),
+            ]);
+    }
+
+    private function countActiveWorksForTeacher(int $teacherProfileId): int
+    {
+        $topicCount = TopicReviewAssignment::query()
+            ->where('reviewer_id', $teacherProfileId)
+            ->whereHas('topic', fn($q) => $q->whereIn('status', [
+                Topic::STATUS_ASSIGNED,
+                Topic::STATUS_IN_REVIEW,
+            ]))
+            ->count();
+
+        $protocolCount = ReviewerEvaluation::query()
+            ->where('reviewer_id', $teacherProfileId)
+            ->whereHas('evaluationForm', fn($q) => $q->whereIn('status', [
+                EvaluationForm::STATUS_PENDING_REVIEW,
+                EvaluationForm::STATUS_IN_REVIEW,
+            ]))
+            ->count();
+
+        return $topicCount + $protocolCount;
     }
 
     public function getAssignedReviewersForOrgan(Protocol $protocol, int $organId): Collection

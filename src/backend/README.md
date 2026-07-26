@@ -1,30 +1,38 @@
-# Fluxo de Avaliação de Protocolos — Núcleo Científico
+# Núcleo Científico (NC) — Fluxo de Avaliação
 
 ## Visão Geral
 
-A avaliação de protocolos no Núcleo segue um fluxo em que **dois revisores** analisam o protocolo de forma independente e, se necessário, harmonizam as suas decisões.
-
-Cada revisor submete:
+**Dois revisores** analisam o protocolo de forma independente. Cada revisor submete:
 - **decision**: `approved` | `not_approved`
-- **needs_deliberation**: `true` | `false` (checkbox que indica se o revisor acha necessário discutir com o outro revisor)
-- **criterion_reviews**: pontuações e comentários para cada critério (28 critérios em 3 grupos)
-Cada revisor submete:
-- **decision**: `approved` | `not_approved`
-- **needs_deliberation**: `true` | `false` (checkbox que indica se o revisor acha necessário discutir com o outro revisor)
-- **criterion_reviews**: comentários para cada critério (28 critérios em 3 grupos). Observação: o campo `score` NÃO é persistido no backend por enquanto (ver seção "Notas").
+- **criterion_reviews**: comentários para cada critério (28 critérios em 3 grupos)
 
-O backend decide automaticamente o próximo passo após ambos os revisores submeterem.
+Após ambos submeterem, o sistema decide:
+
+| Condição | Resultado |
+|---|---|
+| Ambos `approved` + ninguém marcou `needs_deliberation` | **Auto-Approve** — gera parecer, avança protocolo |
+| Alguém marcou `needs_deliberation` ou `not_approved` | **Deliberation Pending** |
+
+Em caso de deliberação pendente, a secretaria cria uma ficha de deliberação e os revisores decidem após reunião.
 
 ---
 
-## Decisão Automática (checkEvaluationCompletion)
+## Rotas (NC)
 
-Quando o segundo revisor submete, o sistema avalia:
+Todas as rotas de avaliação do Núcleo estão sob `/api/v1/nucleo/`:
 
-| Condição                                                   | Resultado                                                   |
-| ---------------------------------------------------------- | ----------------------------------------------------------- |
-| Ambos `approved` E nenhum marcou `needs_deliberation=true` | **Auto-Approve** — gera parecer favorável, avança protocolo |
-| Qualquer outro caso                                        | **Cria ficha de Harmonização** — ambos revisores ajustam    |
+| Método | Rota | Acção |
+|---|---|---|
+| GET | `evaluation-forms/{form}` | Visualizar ficha |
+| POST | `evaluation-forms/{form}/criteria/{c}/review` | Guardar comentário |
+| POST | `evaluation-forms/{form}/submit` | Submeter avaliação |
+| POST | `evaluation-forms/{form}/init-deliberation` | Criar deliberação (secretaria) |
+| POST | `evaluation-forms/{form}/submit-deliberation` | Submeter deliberação (revisor) |
+| POST | `evaluation-forms/{form}/decide` | Decisão final (secretaria) |
+| GET | `reviewer/evaluations` | Lista do revisor |
+| GET | `secretary/evaluations` | Lista da secretaria |
+| GET | `protocols/{protocol}/eligible-reviewers` | Revisores elegíveis |
+| POST | `protocols/{protocol}/assign-reviewers` | Atribuir revisores |
 
 ---
 
@@ -33,15 +41,14 @@ Quando o segundo revisor submete, o sistema avalia:
 ### 1. Submeter Avaliação Individual
 
 ```
-POST /api/v1/evaluation-forms/{form}/submit
+POST /api/v1/nucleo/evaluation-forms/{form}/submit
 ```
 
-**Payload (exemplo):**
+**Payload:**
 ```json
 {
   "reviewer_id": 42,
   "decision": "approved",
-  "needs_deliberation": false,
   "criterion_reviews": {
     "103": { "comment": "Bem estruturado" },
     "104": { "comment": "Adequado" }
@@ -58,30 +65,25 @@ POST /api/v1/evaluation-forms/{form}/submit
     "form_type": "evaluation",
     "status": "approved",
     "auto_approved": true,
-    "needs_harmonization": false,
-    "harmonization_form": null,
+    "deliberation_pending": false,
+    "deliberation_form": null,
     "protocol": { ... },
     "reviews": [ ... ]
   }
 }
 ```
 
-**Resposta (harmonização necessária):**
+**Resposta (deliberação necessária):**
 ```json
 {
-  "message": "Avaliacao submetida. Harmonizacao necessaria.",
+  "message": "Avaliacao submetida. Deliberacao necessaria.",
   "form": {
     "id": 1,
     "form_type": "evaluation",
-    "status": "pending_harmonization",
+    "status": "deliberation_pending",
     "auto_approved": false,
-    "needs_harmonization": true,
-    "harmonization_form": {
-      "id": 2,
-      "form_type": "harmonization",
-      "status": "pending",
-      "reviews": [ ... ]
-    },
+    "deliberation_pending": true,
+    "deliberation_form": null,
     "reviews": [ ... ]
   }
 }
@@ -95,8 +97,8 @@ POST /api/v1/evaluation-forms/{form}/submit
     "id": 1,
     "status": "pending",
     "auto_approved": false,
-    "needs_harmonization": false,
-    "harmonization_form": null,
+    "deliberation_pending": false,
+    "deliberation_form": null,
     "reviews": [
       { "reviewer_id": 42, "submitted_at": "2026-07-25T10:00:00Z", "decision": "approved", ... },
       { "reviewer_id": 43, "submitted_at": null, "decision": null, ... }
@@ -107,51 +109,48 @@ POST /api/v1/evaluation-forms/{form}/submit
 
 ---
 
-### 2. Submeter Harmonização
+### 2. Iniciar Reunião de Deliberação (Secretaria)
 
 ```
-POST /api/v1/evaluation-forms/{form}/harmonize
+POST /api/v1/nucleo/evaluation-forms/{form}/init-deliberation
+```
+
+Disponível quando a ficha está em `deliberation_pending`.
+
+**Acções:**
+1. Cria ficha de deliberação (`form_type = 'deliberation'`) ligada à ficha original
+2. Copia os 28 critérios para a nova ficha
+3. Copia os comentários do primeiro revisor como base
+4. Cria 2 `ReviewerEvaluation` com conteúdo partilhado
+5. Marca o status para `in_deliberation`
+
+---
+
+### 3. Submeter Deliberação (Revisor)
+
+```
+POST /api/v1/nucleo/evaluation-forms/{form}/submit-deliberation
 ```
 
 **Payload:**
 ```json
 {
-  "reviewer_id": 42,
   "decision": "approved",
-  "criterion_reviews": {
-    "103": { "comment": "Bem estruturado (após discussão)" }
-  }
+  "conclusion_summary": "Após análise e discussão, o Núcleo aprova."
 }
 ```
 
 **Regras:**
-- Ambos os revisores submetem na mesma ficha de harmonização
-- Cada revisor pode alterar os seus próprios comentários
-- A decisão final é aplicada quando ambos submeterem
-- Se algum revisor submeter `not_approved` → o protocolo é rejeitado
-
-**Resposta:**
-```json
-{
-  "message": "Harmonizacao submetida com sucesso.",
-  "form": {
-    "id": 2,
-    "form_type": "harmonization",
-    "status": "approved",
-    "harmonized_decision": "approved",
-    "harmonized_at": "2026-07-25T14:30:00Z",
-    "parent_form": { "id": 1, "form_type": "evaluation" },
-    "reviews": [ ... ]
-  }
-}
-```
+- Conteúdo partilhado — ambos vêem e editam os mesmos comentários
+- Qualquer revisor pode submeter a decisão final
+- Gera parecer PDF automaticamente
 
 ---
 
-### 3. Auto-Save de Critérios (Frontend apenas)
+### 4. Auto-Save de Critérios (Frontend)
 
 ```
-POST /api/v1/evaluation-forms/{form}/criteria/{formCriterion}/review
+POST /api/v1/nucleo/evaluation-forms/{form}/criteria/{formCriterion}/review
 ```
 
 **Payload:**
@@ -162,134 +161,73 @@ POST /api/v1/evaluation-forms/{form}/criteria/{formCriterion}/review
 }
 ```
 
-**Nota:** Este endpoint é **idempotente** — o frontend pode chamá-lo em cada `onBlur`. O backend persiste mas não acciona qualquer lógica de workflow.
+Endpoint idempotente — chamado em cada `onBlur`. O comentário na deliberação é partilhado (guarda no `ReviewerEvaluation` do primeiro revisor).
 
 ---
 
-### 4. Visualizar Ficha
+### 5. Visualizar Ficha
 
 ```
-GET /api/v1/evaluation-forms/{form}
+GET /api/v1/nucleo/evaluation-forms/{form}?reviewer_id=42
 ```
 
-**Query params:** `?reviewer_id=42` (opcional — usado para filtrar dados por role)
+A resposta inclui `auto_approved`, `deliberation_pending`, `deliberation_form`, `reviewer_evaluations[]` com decisões e comentários.
 
-A resposta inclui:
-- `auto_approved`, `needs_harmonization`, `harmonization_form`, `parent_form`
-- `reviewer_evaluations[]` com decisões, timestamps e `criterion_reviews`
+---
 
-**Estrutura do `criterion_reviews` (dentro de `reviewer_evaluations[]`):**
+### 6. Decisão Final (Secretaria)
 
-```json
-{
-  "reviewer_evaluations": [
-    {
-      "id": 1,
-      "reviewer_id": 42,
-      "status": "submitted",
-      "submitted_at": "2026-07-25T10:00:00Z",
-      "decision": "approved",
-      "needs_deliberation": false,
-      "overall_comment": "Bom trabalho",
-      "criterion_reviews": [
-        {
-          "id": 10,
-          "comment": "Bem estruturado e claro",
-          "reviewer_evaluation_id": 1,
-          "reviewer": {
-            "id": 42,
-            "name": "Dr. Joao Silva"
-          }
-        },
-        {
-          "id": 11,
-          "comment": "Metodologia adequada",
-          "reviewer_evaluation_id": 1,
-          "reviewer": {
-            "id": 42,
-            "name": "Dr. Joao Silva"
-          }
-        }
-      ]
-    }
-  ]
-}
+```
+POST /api/v1/nucleo/evaluation-forms/{form}/decide
 ```
 
-**Notas:**
-- Cada `criterion_review` inclui o objecto `reviewer` com `id` e `name` do autor — os revisores vêem os comentários uns dos outros etiquetados (formato de diálogo)
-- A secretaria NÃO recebe `decision`, `needs_deliberation`, `overall_comment` nem `criterion_reviews` — apenas `status` e `submitted_at`
-- O campo `score` **não é persistido** no backend (o model `EvaluationCriterionReview` só tem `comment`). Se precisarem de guardar pontuação por critério, é necessário adicionar um campo `score` à migration e ao model.
+Usado quando a secretaria precisa de intervir manualmente (casos excepcionais).
 
 ---
 
 ## Regras de Visibilidade
 
-| Role       | Vê decisões individuais?             | Vê comentários do outro revisor? | Vê `needs_deliberation`? |
-| ---------- | ------------------------------------ | -------------------------------- | ------------------------ |
-| Revisor    | Sim                                  | Sim (diálogo aberto)             | Sim                      |
-| Secretaria | Não (vê apenas `submitted` / `null`) | Não                              | Não                      |
-| Estudante  | Não (vê apenas parecer final)        | Não                              | Não                      |
-
-**Implementação:** O resource `ReviewerEvaluationResource` filtra os campos `decision`, `needs_deliberation` e `criterion_reviews` baseado no `reviewer_id` recebido no request. Se o `reviewer_id` corresponde ao revisor, ou se é um revisor da mesma ficha, os dados são incluídos. Caso contrário (secretaria), apenas o status de submissão é exposto.
+| Role | Vê decisões individuais? | Vê comentários do outro revisor? |
+|---|---|---|
+| Revisor | Sim | Sim (diálogo aberto) |
+| Secretaria | Não (apenas `submitted` / `null`) | Não |
+| Estudante | Não (apenas parecer final) | Não |
 
 ---
 
-## Formatos de Data
-
-Todos os timestamps são retornados em **ISO 8601** (`YYYY-MM-DDTHH:mm:ssZ`).
-
----
-
-## Modelo de Dados
-
-### reviewer_evaluations
-
-| Campo                   | Tipo       | Descrição                     |
-| ----------------------- | ---------- | ----------------------------- |
-| id                      | integer    | PK                            |
-| evaluation_form_id      | integer    | FK                            |
-| reviewer_id             | integer    | FK (teacher_profiles)         |
-| decision                | enum       | `approved` ou `not_approved`  |
-| needs_deliberation      | boolean    | Se revisor solicita discussão |
-| submitted_at            | timestamp  | Quando o revisor submeteu     |
-| created_at / updated_at | timestamps |                               |
-
-### evaluation_forms
-
-| Campo               | Tipo      | Descrição                                                  |
-| ------------------- | --------- | ---------------------------------------------------------- |
-| id                  | integer   | PK                                                         |
-| form_type           | enum      | `evaluation` ou `harmonization`                            |
-| parent_form_id      | integer   | FK → evaluation_forms (null para evaluation)               |
-| status              | string    | `pending`, `approved`, `rejected`, `pending_harmonization` |
-| auto_approved       | boolean   | Se foi aprovado automaticamente                            |
-| harmonized_decision | enum      | `approved` ou `not_approved` (preenchido na harmonização)  |
-| harmonized_at       | timestamp | Quando a harmonização foi concluída                        |
-
----
-
-## Fluxo Completo
+## Fluxo Completo (NC)
 
 ```
 Secretaria atribui 2 revisores
         │
         ▼
   Cria ficha de avaliação (form_type=evaluation)
-  Cada revisor avalia e marca necessita_deliberacao?
+  Cada revisor avalia (28 critérios + decision)
         │
         ▼
   Ambos submeteram?
         │
-        ├── Sim ──► Ambos approved E sem deliberação?
-        │               ├── Sim ──► Auto-Approve (parecer, avanço)
-        │               └── Não ──► Cria ficha de harmonização
-        │                              │
-        │                              ▼
-        │                          Ambos harmonizam
-        │                              │
-        │                              ▼
-        │                          Decide (approved / not_approved)
+        ├── Não ──► Aguarda
         │
-        └── Não ──► Aguarda
+        └── Sim ──► Ambos approved + sem needs_deliberation?
+                        │
+                        ├── Sim ──► Auto-Approve (parecer, avança)
+                        │
+                        └── Não ──► deliberation_pending
+                                      │
+                                      ▼
+                              Secretaria: init-deliberation
+                                      │
+                                      ▼
+                              in_deliberation
+                                      │
+                                      ▼
+                              Reunião (fora do sistema)
+                                      │
+                                      ▼
+                              Revisor: submit-deliberation
+                                      │
+                                      ├── approved ──► Avança + parecer
+                                      │
+                                      └── not_approved ──► Rejeita + parecer
 ```

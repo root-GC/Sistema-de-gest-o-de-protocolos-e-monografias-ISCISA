@@ -23,14 +23,12 @@ class ReviewerEvaluation extends Model
         'reviewer_id',
         'overall_comment',
         'decision',
-        'needs_deliberation',
         'status',
         'submitted_at',
     ];
 
     protected $casts = [
         'submitted_at' => 'datetime',
-        'needs_deliberation' => 'boolean',
     ];
 
     public function evaluationForm()

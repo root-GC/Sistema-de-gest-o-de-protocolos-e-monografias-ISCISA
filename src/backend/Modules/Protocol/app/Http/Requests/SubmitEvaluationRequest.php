@@ -15,7 +15,6 @@ class SubmitEvaluationRequest extends FormRequest
     {
         return [
             'decision' => 'required|string|in:approved,not_approved',
-            'needs_deliberation' => 'boolean',
             'overall_comment' => 'nullable|string|max:5000',
         ];
     }

@@ -10,11 +10,13 @@ class EvaluationForm extends Model
     use SoftDeletes;
 
     public const FORM_TYPE_EVALUATION = 'evaluation';
-    public const FORM_TYPE_HARMONIZATION = 'harmonization';
+    public const FORM_TYPE_DELIBERATION = 'deliberation';
 
     public const STATUS_PENDING_REVIEW = 'pending_review';
     public const STATUS_IN_REVIEW = 'in_review';
     public const STATUS_CONCLUDED = 'concluded';
+    public const STATUS_DELIBERATION_PENDING = 'deliberation_pending';
+    public const STATUS_IN_DELIBERATION = 'in_deliberation';
 
     protected $fillable = [
         'protocol_id',
@@ -24,8 +26,6 @@ class EvaluationForm extends Model
         'organ',
         'status',
         'final_decision',
-        'harmonized_decision',
-        'harmonized_at',
         'decided_by',
         'decided_at',
         'conclusion_summary',
@@ -33,7 +33,6 @@ class EvaluationForm extends Model
 
     protected $casts = [
         'decided_at' => 'datetime',
-        'harmonized_at' => 'datetime',
     ];
 
     public function protocol()
@@ -76,12 +75,12 @@ class EvaluationForm extends Model
         return $this->form_type === self::FORM_TYPE_EVALUATION;
     }
 
-    public function isHarmonization(): bool
+    public function isDeliberation(): bool
     {
-        return $this->form_type === self::FORM_TYPE_HARMONIZATION;
+        return $this->form_type === self::FORM_TYPE_DELIBERATION;
     }
 
-    public function needsHarmonization(): bool
+    public function needsDeliberation(): bool
     {
         return $this->reviewerEvaluations()
             ->where('needs_deliberation', true)

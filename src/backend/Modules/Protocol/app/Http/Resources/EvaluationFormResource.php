@@ -4,6 +4,7 @@ namespace Modules\Protocol\app\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Modules\Protocol\app\Models\EvaluationForm;
 
 class EvaluationFormResource extends JsonResource
 {
@@ -15,13 +16,11 @@ class EvaluationFormResource extends JsonResource
             ? $this->reviewerEvaluations->contains('reviewer_id', $teacherProfile->id)
             : false;
 
-        $hasHarmonizationForm = $this->relationLoaded('childForms')
-            && $this->childForms
-            && $this->childForms->where('form_type', 'harmonization')->isNotEmpty();
+        $childForms = $this->relationLoaded('childForms') && $this->childForms
+            ? $this->childForms
+            : collect();
 
-        $harmonizationForm = $hasHarmonizationForm
-            ? $this->childForms->where('form_type', 'harmonization')->first()
-            : null;
+        $deliberationForm = $childForms->where('form_type', 'deliberation')->first();
 
         return [
             'id' => $this->id,
@@ -32,16 +31,12 @@ class EvaluationFormResource extends JsonResource
             'organ' => $this->organ,
             'status' => $this->status,
             'final_decision' => $this->final_decision,
-            'harmonized_decision' => $this->harmonized_decision,
-            'harmonized_at' => $this->harmonized_at,
             'decided_by' => $this->decided_by,
             'decided_at' => $this->decided_at,
             'conclusion_summary' => $this->conclusion_summary,
             'created_at' => $this->created_at,
             'auto_approved' => $this->final_decision && $this->decided_by === null,
-            'needs_harmonization' => $this->isEvaluation() && $this->hasAllSubmitted()
-                ? ($this->needsHarmonization() || $this->hasAnyNotApproved())
-                : false,
+            'deliberation_pending' => $this->status === EvaluationForm::STATUS_DELIBERATION_PENDING,
             'protocol' => $this->whenLoaded('protocol', fn() => [
                 'id' => $this->protocol->id,
                 'code' => $this->protocol->code,
@@ -60,12 +55,10 @@ class EvaluationFormResource extends JsonResource
                 'status' => $this->parentForm->status,
                 'final_decision' => $this->parentForm->final_decision,
             ] : null),
-            'harmonization_form' => $harmonizationForm ? [
-                'id' => $harmonizationForm->id,
-                'form_type' => $harmonizationForm->form_type,
-                'status' => $harmonizationForm->status,
-                'harmonized_decision' => $harmonizationForm->harmonized_decision,
-                'harmonized_at' => $harmonizationForm->harmonized_at,
+            'deliberation_form' => $deliberationForm ? [
+                'id' => $deliberationForm->id,
+                'form_type' => $deliberationForm->form_type,
+                'status' => $deliberationForm->status,
             ] : null,
         ];
     }
