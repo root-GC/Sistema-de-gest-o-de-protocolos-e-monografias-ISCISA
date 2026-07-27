@@ -30,6 +30,7 @@ const SupervisorProtocolDetailPage = lazy(() => import('./pages/supervisor/Super
 // Reviewer
 const ReviewsPage            = lazy(() => import('./pages/teacher/ReviewsPage'))
 const EvaluationPage         = lazy(() => import('./pages/teacher/EvaluationPage'))
+const ReviewerMeetingsPage = lazy(() => import('./pages/teacher/ReviewerMeetingsPage'))
 
 // Coordinator
 const AssignPage             = lazy(() => import('./pages/coordinator/AssignPage'))
@@ -132,6 +133,7 @@ export default function App() {
                   <Route path="/reviews/protocols/:protocolId" element={<EvaluationPage />} />
                   <Route path="/reviews/topics/:topicId"     element={<EvaluationPage />} />
                   <Route path="/reviews/:topicId"            element={<EvaluationPage />} />
+                  <Route path="/reviewer/meetings" element={<ReviewerMeetingsPage />} />
                 </Route>
 
                 {/* ── Coordinator ─────────────────────────────── */}

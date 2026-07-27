@@ -202,7 +202,7 @@ export const protocolService = {
 
   // ── Secretary ───────────────────────────────────────
   listForSecretary: () =>
-    req('GET', '/api/v1/secretary/protocols') as Promise<{ protocols: Protocol[] }>,
+    req('GET', '/api/v1/nucleo/secretary/protocols') as Promise<{ protocols: Protocol[] }>,
 
   getEligibleReviewers: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/eligible-reviewers`) as Promise<{
@@ -293,5 +293,5 @@ export const protocolService = {
 
   // ── Reviewer ────────────────────────────────────────
   listForReviewer: () =>
-    req('GET', '/api/v1/reviewer/protocols') as Promise<{ protocols: Protocol[] }>,
+    req('GET', '/api/v1/nucleo/reviewer/protocols') as Promise<{ protocols: Protocol[] }>,
 };

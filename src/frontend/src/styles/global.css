@@ -1470,10 +1470,9 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 32px;
-  max-width: 900px;
-  margin: 0 auto;
+  padding: 32px var(--space-4);
   width: 100%;
+  max-width: none;
   color: var(--on-background);
   font-family: var(--font-family);
 }

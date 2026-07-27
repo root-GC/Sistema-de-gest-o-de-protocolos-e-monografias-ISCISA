@@ -65,18 +65,27 @@ export const menuRegistry = [
     permission: 'workload.view',
     roles: ['teacher', 'supervisor', 'reviewer'],
   },
-  {
-    id: 'reviews',
-    label: 'Revisões',
-    icon: 'ti-eye',
-    route: '/reviews',
-    permission: 'protocol.evaluate',
-    roles: ['reviewer'],
-    children: [
-      { label: 'Atribuídas a mim', route: '/reviews/assigned', permission: 'protocol.evaluate' },
-      { label: 'Concluídas',       route: '/reviews/done',     permission: 'protocol.evaluate' },
-    ],
-  },
+ {
+  id: 'reviews',
+  label: 'Revisões',
+  icon: 'ti-eye',
+  route: '/reviews',
+  permission: 'protocol.evaluate',
+  roles: ['reviewer'],
+  children: [
+    { label: 'Atribuídas a mim', route: '/reviews/assigned', permission: 'protocol.evaluate' },
+    { label: 'Concluídas',       route: '/reviews/done',     permission: 'protocol.evaluate' },
+  ],
+},
+// 🆕 Reuniões de Deliberação (Núcleo)
+{
+  id: 'reviewer_meetings',
+  label: 'Reuniões',
+  icon: 'ti-calendar-event',
+  route: '/reviews/meetings',
+  permission: 'protocol.evaluate',
+  roles: ['reviewer'],
+},
 
   // ── Coordinator ───────────────────────────────────────────────────
   {
@@ -136,7 +145,7 @@ export const menuRegistry = [
     label: 'Marcar Reunião',
     icon: 'ti-calendar-plus',
     route: '/secretary/meeting',
-    permission: 'evaluation.harmonize',
+    permission: 'protocol.view.all',
     roles: ['secretary'],
   },
   // 🆕 Planilha de Protocolos (substitui Revisões Concluídas)

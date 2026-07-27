@@ -638,33 +638,6 @@ export default function TopicPage() {
         </div>
       )}
 
-      {/* Aviso de tema bloqueante */}
-      {hasBlockingTopic && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 'var(--space-2)',
-          padding: 'var(--space-3) var(--space-4)',
-          background: 'var(--tertiary-container)',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--tertiary)',
-          color: 'var(--on-tertiary-container)',
-          fontSize: 'var(--body-md)',
-          marginBottom: 'var(--space-4)'
-        }}>
-          <span className="material-symbols-outlined" style={{
-            fontSize: '24px',
-            color: 'var(--tertiary)',
-            flexShrink: 0
-          }}>
-            hourglass_top
-          </span>
-          <p>
-            Já tens um tema em curso. Aguarda a decisão antes de submeter um novo tema.
-          </p>
-        </div>
-      )}
-
       {/* Formulário de submissão */}
       {canSubmit && (
         <form

@@ -88,7 +88,11 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::get('protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersNucleo'])->name('nucleo.protocols.eligible-reviewers');
         Route::get('protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersNucleo'])->name('nucleo.protocols.reviewers');
         Route::post('protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersNucleo'])->name('nucleo.protocols.assign-reviewers');
+
+        Route::get('reviewer/protocols', [ProtocolApiController::class, 'getForReviewer'])->name('reviewer.protocols.list');
+        Route::get('secretary/protocols', [ProtocolApiController::class, 'getForSecretary'])->name('secretary.protocols.list');
     });
+    
 
     // === COMITÉ CIENTÍFICO (CC) ===
     Route::prefix('comite-cientifico')->group(function () {
@@ -113,5 +117,7 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::get('protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersBioetica'])->name('bioetica.protocols.eligible-reviewers');
         Route::get('protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersBioetica'])->name('bioetica.protocols.reviewers');
         Route::post('protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersBioetica'])->name('bioetica.protocols.assign-reviewers');
+
+
     });
 });

@@ -1,11 +1,17 @@
+// src/services/evaluationService.ts
 import { downloadApiFile, openApiFile, req } from './apiClient';
+
+export type EvaluationOrgan = 'nucleo' | 'comite-cientifico';
 
 export interface EvaluationForm {
   id: number;
   protocol_id: number;
   version: string;
   organ: string;
+  form_type?: 'evaluation' | 'deliberation';
   status: string;
+  auto_approved?: boolean;
+  deliberation_pending?: boolean;
   final_decision?: string | null;
   decided_by?: number | null;
   decided_at?: string | null;
@@ -28,6 +34,8 @@ export interface EvaluationForm {
   };
   form_criteria?: FormCriterion[];
   reviewer_evaluations?: ReviewerEvaluation[];
+  parent_form?: EvaluationForm | null;
+  child_forms?: EvaluationForm[];
 }
 
 export interface FormCriterion {
@@ -44,7 +52,7 @@ export interface ReviewerEvaluation {
   evaluation_form_id: number;
   reviewer_id: number;
   status: string;
-  recommendation?: string | null;
+  decision?: 'approved' | 'not_approved' | null;
   overall_comment?: string | null;
   submitted_at?: string | null;
   reviewer?: { user?: { id: number; name: string } };
@@ -68,29 +76,59 @@ export interface EvaluationOpinionResult {
   evaluation_form_download_url?: string;
 }
 
+export interface SubmitEvaluationResponse {
+  message: string;
+  reviewer_evaluation: ReviewerEvaluation;
+  auto_approved: boolean;
+  deliberation_pending: boolean;
+  evaluation_form: EvaluationForm;
+  opinion?: EvaluationOpinionResult;
+}
+
+/**
+ * Todas as rotas de ficha de avaliação vivem sob /api/v1/{organ}/...
+ * (nucleo, comite-cientifico). Por agora só 'nucleo' está implementado
+ * no backend — o parâmetro já existe para quando 'comite-cientifico' entrar.
+ */
+function organBase(organ: EvaluationOrgan = 'nucleo') {
+  return `/api/v1/${organ}`;
+}
+
 export const evaluationService = {
-  getForm: (formId: number) =>
-    req('GET', `/api/v1/evaluation-forms/${formId}`) as Promise<{
+  getForm: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/evaluation-forms/${formId}`) as Promise<{
       evaluation_form: EvaluationForm;
     }>,
 
-  saveCriterionReview: (formId: number, formCriterionId: number, comment: string | null) =>
-    req('POST', `/api/v1/evaluation-forms/${formId}/criteria/${formCriterionId}/review`, { comment }) as Promise<{
+  saveCriterionReview: (
+    formId: number,
+    formCriterionId: number,
+    comment: string | null,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/criteria/${formCriterionId}/review`, { comment }) as Promise<{
       message: string;
       criterion_review: CriterionReview;
     }>,
 
-  submit: (formId: number, recommendation: string, overallComment?: string | null) =>
-    req('POST', `/api/v1/evaluation-forms/${formId}/submit`, {
-      recommendation,
+  submit: (
+    formId: number,
+    decision: 'approved' | 'not_approved',
+    overallComment?: string | null,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/submit`, {
+      decision,
       overall_comment: overallComment || null,
-    }) as Promise<{
-      message: string;
-      reviewer_evaluation: ReviewerEvaluation;
-    }>,
+    }) as Promise<SubmitEvaluationResponse>,
 
-  decide: (formId: number, decision: string, conclusionSummary?: string | null) =>
-    req('POST', `/api/v1/evaluation-forms/${formId}/decide`, {
+  decide: (
+    formId: number,
+    decision: string,
+    conclusionSummary?: string | null,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/decide`, {
       decision,
       conclusion_summary: conclusionSummary || null,
     }) as Promise<{
@@ -99,12 +137,22 @@ export const evaluationService = {
       opinion: EvaluationOpinionResult;
     }>,
 
-  listForReviewer: () =>
-    req('GET', '/api/v1/reviewer/evaluations') as Promise<{
+  listForReviewer: (organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/reviewer/evaluations`) as Promise<{
       evaluation_forms: EvaluationForm[];
     }>,
 
-  openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
+  listForSecretary: (organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/secretary/evaluations`) as Promise<{
+      evaluation_forms: EvaluationForm[];
+    }>,
 
+  // ── Rotas partilhadas (fora do prefixo de órgão) ──
+  listOpinionsForProtocol: (protocolId: number) =>
+    req('GET', `/api/v1/protocols/${protocolId}/opinions`) as Promise<{
+      opinions: EvaluationOpinionResult[];
+    }>,
+
+  openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
   downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
 };
