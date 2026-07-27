@@ -65,6 +65,9 @@ const VerifyOtpPage      = lazy(() => import('./pages/VerifyOtpPage'))
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
 
+// teste onlyoffice
+const TestOnlyOfficePage  = lazy(() => import('./pages/TestOnlyOfficePage'))
+
 // 🆕 Loader melhorado
 const PageLoader = () => (
   <div className="page-loader">
@@ -80,6 +83,9 @@ export default function App() {
         <GlobalLoader />
         <Suspense fallback={<PageLoader />}>
           <Routes>
+            {/* Onlyoffice */}
+            <Route path="/teste-office" element={<TestOnlyOfficePage />} />
+            
             {/* ── Públicas ─────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/403"   element={<Page403 />} />
