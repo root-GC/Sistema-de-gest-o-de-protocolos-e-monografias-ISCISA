@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Events\TopicReviewersAssigned;
+use Modules\Protocol\app\Events\TopicStatusChanged;
 use Modules\Protocol\app\Models\EvaluationForm;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
@@ -98,6 +99,8 @@ class TopicService
             'course:id,name,code',
             'supervisor.user:id,name,email',
         ]);
+
+        event(new TopicStatusChanged($topic, null, $topic->status, $user));
 
         return [
             'topic' => $topic,
@@ -248,7 +251,7 @@ class TopicService
                 'supervisor_decision_at' => now(),
             ]);
 
-            // Dispara evento para notificações, logs, integrações event(new TopicApprovedBySupervisor($topic));
+            event(new TopicStatusChanged($topic, Topic::STATUS_PENDING_SUPERVISOR, Topic::STATUS_PENDING_NUCLEO, $supervisor));
 
             return $topic->load([
                 'student:id,name,email',
@@ -286,6 +289,8 @@ class TopicService
                 'supervisor_comment' => $comment,
                 'supervisor_decision_at' => now(),
             ]);
+
+            event(new TopicStatusChanged($topic, Topic::STATUS_PENDING_SUPERVISOR, Topic::STATUS_REJECTED_SUPERVISOR, $supervisor));
 
             return $topic->load([
                 'student:id,name,email',
@@ -628,9 +633,14 @@ class TopicService
                     : Topic::STATUS_APPROVED_NUCLEO;
             }
 
+            $oldStatus = $topic->status;
             $topic->update([
                 'status' => $finalDecision ?: Topic::STATUS_IN_REVIEW,
             ]);
+
+            if ($finalDecision) {
+                event(new TopicStatusChanged($topic, $oldStatus, $finalDecision));
+            }
 
             return [
                 'topic' => $topic->load([

@@ -5,6 +5,7 @@ namespace Modules\Protocol\app\Services;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Modules\Protocol\app\Events\ProtocolStatusChanged;
 use Modules\Protocol\app\Models\EvaluationCriterion;
 use Modules\Protocol\app\Models\EvaluationCriterionReview;
 use Modules\Protocol\app\Models\EvaluationForm;
@@ -95,7 +96,6 @@ class EvaluationService
                 );
             }
 
-            return $form->load(['formCriteria', 'reviewerEvaluations']);
         });
     }
 
@@ -130,12 +130,12 @@ class EvaluationService
         return DB::transaction(function () use ($form, $formCriterion, $user, $comment) {
             $teacherProfile = $user->teacherProfile;
 
-            if ($form->isDeliberation()) {
+            if ($form->status === EvaluationForm::STATUS_IN_DELIBERATION) {
                 $reviewerEvaluations = $form->reviewerEvaluations()->get();
 
                 if ($reviewerEvaluations->isEmpty()) {
                     throw new HttpResponseException(
-                        response()->json(['message' => 'Nenhum revisor encontrado nesta ficha de deliberação.'], 403)
+                        response()->json(['message' => 'Nenhum revisor encontrado nesta ficha.'], 403)
                     );
                 }
 
@@ -240,7 +240,6 @@ class EvaluationService
                 'deliberation_pending' => ($result['action'] ?? null) === 'deliberation_pending',
                 'opinion' => $result['opinion'] ?? null,
                 'form' => $form->fresh()->load([
-                    'formCriteria',
                     'reviewerEvaluations.criterionReviews.formCriterion',
                     'parentForm',
                     'childForms',
@@ -258,10 +257,9 @@ class EvaluationService
             return ['action' => 'waiting'];
         }
 
-        // NC auto-approve: ambos approved, nenhum marcou needs_deliberation
+        // NC auto-approve: ambos approved
         if (
             $form->organ === Protocol::ORGAN_NUCLEO
-            && ! $form->needsDeliberation()
             && ! $form->hasAnyNotApproved()
         ) {
             return $this->autoApprove($form);
@@ -286,86 +284,77 @@ class EvaluationService
         );
     }
 
-    public function createDeliberationForm(EvaluationForm $parentForm): EvaluationForm
+    public function scheduleDeliberation(EvaluationForm $form, User $secretary, string $date, string $location): EvaluationForm
     {
-        return DB::transaction(function () use ($parentForm) {
-            $parentForm = EvaluationForm::lockForUpdate()->findOrFail($parentForm->id);
+        return DB::transaction(function () use ($form, $secretary, $date, $location) {
+            $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
 
-            $existingDeliberation = $parentForm->childForms()
-                ->where('form_type', EvaluationForm::FORM_TYPE_DELIBERATION)
-                ->whereNotIn('status', [EvaluationForm::STATUS_CONCLUDED])
-                ->first();
-
-            if ($existingDeliberation) {
-                return $existingDeliberation->load([
-                    'formCriteria',
-                    'reviewerEvaluations.reviewer.user:id,name',
-                    'reviewerEvaluations.criterionReviews',
-                ]);
-            }
-
-            $deliberationForm = EvaluationForm::create([
-                'protocol_id' => $parentForm->protocol_id,
-                'version' => $parentForm->version . '-D',
-                'form_type' => EvaluationForm::FORM_TYPE_DELIBERATION,
-                'parent_form_id' => $parentForm->id,
-                'organ' => $parentForm->organ,
-                'status' => EvaluationForm::STATUS_PENDING_REVIEW,
+            $form->update([
+                'deliberation_date' => $date,
+                'deliberation_location' => $location,
+                'deliberation_scheduled_by' => $secretary->id,
+                'status' => EvaluationForm::STATUS_DELIBERATION_SCHEDULED,
             ]);
 
-            $criteria = $parentForm->formCriteria()->orderBy('order_column')->get();
+            return $form->fresh()->load([
+                'reviewerEvaluations.reviewer.user:id,name',
+            ]);
+        });
+    }
 
-            foreach ($criteria as $criterion) {
-                EvaluationFormCriterion::create([
-                    'evaluation_form_id' => $deliberationForm->id,
-                    'criterion_id' => $criterion->criterion_id,
-                    'group_name' => $criterion->group_name,
-                    'criterion_name' => $criterion->criterion_name,
-                    'order_column' => $criterion->order_column,
-                ]);
-            }
+    public function startDeliberation(EvaluationForm $form, User $reviewer): EvaluationForm
+    {
+        return DB::transaction(function () use ($form, $reviewer) {
+            $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
 
-            $parentReviewers = $parentForm->reviewerEvaluations()
-                ->with('reviewer.user:id,name')
-                ->get();
-
-            foreach ($parentReviewers as $parentReviewer) {
-                ReviewerEvaluation::query()->firstOrCreate(
-                    [
-                        'evaluation_form_id' => $deliberationForm->id,
-                        'reviewer_id' => $parentReviewer->reviewer_id,
-                    ],
-                    [
-                        'protocol_review_assignment_id' => $parentReviewer->protocol_review_assignment_id,
-                        'status' => ReviewerEvaluation::STATUS_PENDING,
-                    ]
+            if ($form->status !== EvaluationForm::STATUS_DELIBERATION_SCHEDULED) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'A deliberação ainda não foi marcada pela secretaria.'], 422)
                 );
             }
 
-            $parentFirst = $parentReviewers->first();
-            if ($parentFirst) {
-                $deliberationFirst = $deliberationForm->reviewerEvaluations()
-                    ->where('reviewer_id', $parentFirst->reviewer_id)
+            $teacherProfile = $reviewer->teacherProfile;
+            $isReviewer = $form->reviewerEvaluations()
+                ->where('reviewer_id', $teacherProfile->id)
+                ->exists();
+
+            if (! $isReviewer) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Apenas um revisor atribuído pode iniciar a deliberação.'], 403)
+                );
+            }
+
+            $reviewerEvaluations = $form->reviewerEvaluations()->get();
+
+            if ($reviewerEvaluations->count() < 2) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'É necessário ter dois revisores atribuídos.'], 422)
+                );
+            }
+
+            $primary = $reviewerEvaluations->first();
+            $secondary = $reviewerEvaluations->last();
+
+            foreach ($primary->criterionReviews as $primaryReview) {
+                $secondaryReview = $secondary->criterionReviews()
+                    ->where('evaluation_form_criterion_id', $primaryReview->evaluation_form_criterion_id)
                     ->first();
 
-                if ($deliberationFirst) {
-                    $parentCriteriaReviews = $parentFirst->criterionReviews()->get();
-                    foreach ($parentCriteriaReviews as $review) {
-                        EvaluationCriterionReview::create([
-                            'reviewer_evaluation_id' => $deliberationFirst->id,
-                            'evaluation_form_criterion_id' => $review->evaluation_form_criterion_id,
-                            'comment' => $review->comment,
-                        ]);
-                    }
+                if ($secondaryReview && $secondaryReview->comment !== $primaryReview->comment) {
+                    $primaryReview->update([
+                        'comment' => $primaryReview->comment . "\n---\n" . $secondaryReview->comment,
+                    ]);
                 }
             }
 
-            $parentForm->update(['status' => EvaluationForm::STATUS_IN_DELIBERATION]);
+            $secondary->criterionReviews()->delete();
 
-            return $deliberationForm->load([
+            $form->update(['status' => EvaluationForm::STATUS_IN_DELIBERATION]);
+
+            return $form->fresh()->load([
                 'formCriteria',
+                'reviewerEvaluations.criterionReviews.formCriterion',
                 'reviewerEvaluations.reviewer.user:id,name',
-                'reviewerEvaluations.criterionReviews',
             ]);
         });
     }
@@ -375,9 +364,9 @@ class EvaluationService
         return DB::transaction(function () use ($form, $decider, $decision, $conclusionSummary) {
             $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
 
-            if (! $form->isDeliberation()) {
+            if ($form->status !== EvaluationForm::STATUS_IN_DELIBERATION) {
                 throw new HttpResponseException(
-                    response()->json(['message' => 'Esta ficha não é de deliberação.'], 422)
+                    response()->json(['message' => 'A deliberação ainda não foi iniciada.'], 422)
                 );
             }
 
@@ -410,20 +399,10 @@ class EvaluationService
                 'submitted_at' => now(),
             ]);
 
-            $parentForm = $form->parentForm ?? $form;
-            $result = $this->processDecision($parentForm, $decider, $decision, $conclusionSummary);
-
-            $form->update([
-                'status' => EvaluationForm::STATUS_CONCLUDED,
-            ]);
+            $result = $this->processDecision($form, $decider, $decision, $conclusionSummary);
 
             return [
                 'evaluation_form' => $result['evaluation_form'],
-                'deliberation_form' => $form->fresh()->load([
-                    'formCriteria',
-                    'reviewerEvaluations.reviewer.user:id,name',
-                    'reviewerEvaluations.criterionReviews',
-                ]),
                 'opinion' => $result['opinion'],
             ];
         });
@@ -531,7 +510,10 @@ class EvaluationService
                 }
             }
 
+            $oldStatus = $protocol->status;
             $protocol->update($protocolUpdates);
+
+            event(new ProtocolStatusChanged($protocol, $oldStatus, $protocol->status, $decider));
 
             if ($decision === ReviewerEvaluation::DECISION_APPROVED && $flow && $flow['next_organ_type']) {
                 $this->createForProtocol(
@@ -561,7 +543,6 @@ class EvaluationService
             $form->load([
                 'protocol',
                 'reviewerEvaluations.criterionReviews.formCriterion',
-                'formCriteria',
                 'childForms',
                 'parentForm',
             ]);
@@ -650,7 +631,6 @@ class EvaluationService
                 'reviewerEvaluations' => fn($q) => $q->with([
                     'reviewer.user:id,name,email',
                 ]),
-                'formCriteria',
                 'childForms' => fn($q) => $q->with([
                     'reviewerEvaluations.reviewer.user:id,name,email',
                 ]),
