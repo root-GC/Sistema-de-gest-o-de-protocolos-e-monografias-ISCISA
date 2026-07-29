@@ -17,7 +17,7 @@ export default function OrganPresidentDashboard() {
   async function loadData() {
     setLoading(true)
     try {
-      // Mock data
+      // ⚠️ Mock data - AINDA NÃO EXISTE ROTA 'my-organ' nem 'stats'
       setOrgan({
         id: 2,
         name: 'Comité Científico',
@@ -61,7 +61,7 @@ export default function OrganPresidentDashboard() {
   return (
     <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
       
-      {/* Cabeçalho do Órgão - SEM DEGRADÊ */}
+      {/* Cabeçalho do Órgão */}
       <div style={{
         background: 'var(--surface-container-low)',
         borderRadius: 'var(--radius-xl)',

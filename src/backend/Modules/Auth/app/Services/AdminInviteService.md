@@ -21,7 +21,7 @@ class AdminInviteService
             $user = User::create([
                 'name'                => $data['name'],
                 'email'               => $data['email'],
-                'password'            => Hash::make(Str::random(32)),
+                'password'            => Hash::make(Str::random(32)), // nunca será usada
                 'status'              => 'pending',
                 'must_reset_password' => true,
             ]);
@@ -35,15 +35,19 @@ class AdminInviteService
             ]);
 
             $user->adminProfile()->create([
-                'access_scope' => 'organ', // imposto aqui, nunca vindo do request
+                'access_scope' => $data['access_scope'], // sempre 'organ' — imposto no controller
                 'organ_id'     => $data['organ_id'],
             ]);
 
             return $user;
         });
 
+        // A partir daqui a transação já fechou (commit). Se algo falhar
+        // abaixo (token ou email), fazemos rollback manual apagando tudo
+        // o que foi criado, para não deixar um user "fantasma" sem convite.
         try {
             $plainToken = $this->passwordService->createToken($user->email);
+
             $link = rtrim(config('app.frontend_url'), '/')
                 . '/reset-password?email=' . urlencode($user->email)
                 . '&token=' . $plainToken;
@@ -54,9 +58,16 @@ class AdminInviteService
                 view('auth::emails.admin-invite', ['name' => $user->name, 'link' => $link, 'ttlMinutes' => 60])->render()
             );
         } catch (\Throwable $e) {
-            Log::error('[AdminInviteService] falha ao enviar convite', ['email' => $user->email, 'error' => $e->getMessage()]);
+            Log::error('[AdminInviteService] falha ao enviar convite — a desfazer criação do utilizador', [
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+
             $this->rollbackUser($user);
-            throw new \RuntimeException('Não foi possível enviar o email de convite. Detalhe: ' . $e->getMessage());
+
+            throw new \RuntimeException(
+                'Não foi possível enviar o email de convite. O administrador não foi criado. Detalhe: ' . $e->getMessage()
+            );
         }
 
         return $user;
@@ -68,7 +79,7 @@ class AdminInviteService
             DB::table('password_reset_tokens')->where('email', $user->email)->delete();
             $user->adminProfile()?->delete();
             DB::table('user_roles')->where('user_id', $user->id)->delete();
-            $user->forceDelete();
+            $user->forceDelete(); // forceDelete, não soft delete — não deve sobrar registo nenhum
         });
     }
 }

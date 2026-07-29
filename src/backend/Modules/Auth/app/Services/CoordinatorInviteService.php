@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\User\app\Models\User;
 
-class AdminInviteService
+class CoordinatorInviteService
 {
     public function __construct(
         private BrevoMailerService $mailer,
@@ -26,17 +26,18 @@ class AdminInviteService
                 'must_reset_password' => true,
             ]);
 
-            $roleId = DB::table('roles')->where('name', 'admin')->value('id');
-            if (! $roleId) throw new \RuntimeException("Role 'admin' não encontrada — corre o RoleSeeder.");
+            $roleId = DB::table('roles')->where('name', 'coordinator')->value('id');
+            if (! $roleId) throw new \RuntimeException("Role 'coordinator' não encontrada — corre o RoleSeeder.");
 
             DB::table('user_roles')->insert([
                 'user_id' => $user->id, 'role_id' => $roleId,
                 'created_at' => now(), 'updated_at' => now(),
             ]);
 
-            $user->adminProfile()->create([
-                'access_scope' => 'organ', // imposto aqui, nunca vindo do request
-                'organ_id'     => $data['organ_id'],
+            $user->coordinatorProfile()->create([
+                'scientific_area_id' => $data['scientific_area_id'],
+                'course_id'          => $data['course_id'],
+                'office'             => $data['office'] ?? null,
             ]);
 
             return $user;
@@ -54,7 +55,7 @@ class AdminInviteService
                 view('auth::emails.admin-invite', ['name' => $user->name, 'link' => $link, 'ttlMinutes' => 60])->render()
             );
         } catch (\Throwable $e) {
-            Log::error('[AdminInviteService] falha ao enviar convite', ['email' => $user->email, 'error' => $e->getMessage()]);
+            Log::error('[CoordinatorInviteService] falha ao enviar convite', ['email' => $user->email, 'error' => $e->getMessage()]);
             $this->rollbackUser($user);
             throw new \RuntimeException('Não foi possível enviar o email de convite. Detalhe: ' . $e->getMessage());
         }
@@ -66,7 +67,7 @@ class AdminInviteService
     {
         DB::transaction(function () use ($user) {
             DB::table('password_reset_tokens')->where('email', $user->email)->delete();
-            $user->adminProfile()?->delete();
+            $user->coordinatorProfile()?->delete();
             DB::table('user_roles')->where('user_id', $user->id)->delete();
             $user->forceDelete();
         });

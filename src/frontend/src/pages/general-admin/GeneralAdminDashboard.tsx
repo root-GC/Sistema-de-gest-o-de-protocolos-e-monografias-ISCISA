@@ -17,7 +17,7 @@ export default function GeneralAdminDashboard() {
   async function loadStats() {
     setLoading(true)
     try {
-      // Mock data enquanto a API não está pronta
+      // ⚠️ Mock data enquanto a API (rota dashboard) não existe
       setStats({
         total_coordinators: 4,
         total_secretaries: 6,
