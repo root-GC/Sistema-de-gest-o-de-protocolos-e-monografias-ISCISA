@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Modules\Protocol\app\Models\Document;
 use Modules\Protocol\app\Models\EvaluationForm;
 use Modules\Protocol\app\Models\Protocol;
+use Modules\Protocol\app\Events\ProtocolReviewersAssigned;
+use Modules\Protocol\app\Events\ProtocolStatusChanged;
 use Modules\Protocol\app\Models\ProtocolReviewAssignment;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
 use Modules\Protocol\app\Models\Topic;
@@ -135,6 +137,8 @@ class ProtocolService
                 'status' => Document::STATUS_ACTIVE,
             ]);
 
+            event(new ProtocolStatusChanged($protocol, null, $protocol->status, $user));
+
             return $protocol->load(['topic:id,title,status', 'supervisor.user:id,name,email', 'documents']);
         });
     }
@@ -235,6 +239,12 @@ class ProtocolService
                     'cb_version' => 0,
                 ]);
             }
+
+            $newStatus = $decision === 'approved'
+                ? Protocol::STATUS_PENDING_NUCLEO
+                : Protocol::STATUS_REJECTED_SUPERVISOR;
+
+            event(new ProtocolStatusChanged($protocol, Protocol::STATUS_PENDING_SUPERVISOR, $newStatus, $supervisor));
 
             return $protocol->load(['topic:id,title,status', 'supervisor.user:id,name,email', 'documents']);
         });
@@ -613,6 +623,8 @@ class ProtocolService
                 $secretary,
                 $formOrgan
             );
+
+            event(new ProtocolReviewersAssigned($protocol, $reviewerIds));
 
             return $protocol->load([
                 'topic:id,title,status,scientific_area_id,supervisor_id',

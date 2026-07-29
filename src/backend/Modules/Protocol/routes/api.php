@@ -10,16 +10,19 @@ use Modules\Protocol\app\Http\Controllers\ProtocolApiController;
 use Modules\Protocol\app\Http\Controllers\DashboardController;
 
 Route::prefix('api')->middleware(['api'])->group(function () {
-  
     Route::get('/onlyoffice/config',
         [OnlyOfficeController::class, 'config']
     );
     Route::post('/protocolo/onlyoffice/callback',
-    [OnlyOfficeController::class, 'callback']
-    
-);
+        [OnlyOfficeController::class, 'callback']
+    );
 });
 
+Route::prefix('api')->middleware(['api', 'auth:sanctum'])->group(function () {
+    Route::get('/onlyoffice/config/{protocol}',
+        [OnlyOfficeController::class, 'configForProtocol']
+    )->name('onlyoffice.config.protocol');
+});
 
 Route::prefix('api')->middleware(['api'])->group(function () {
  Route::middleware('auth:sanctum')
@@ -78,7 +81,8 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('nucleo.evaluation-forms.show');
         Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('nucleo.evaluation-forms.criteria.review');
         Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('nucleo.evaluation-forms.submit');
-        Route::post('evaluation-forms/{form}/init-deliberation', [EvaluationFormController::class, 'initDeliberation'])->name('nucleo.evaluation-forms.init-deliberation');
+        Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('nucleo.evaluation-forms.schedule-deliberation');
+        Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('nucleo.evaluation-forms.start-deliberation');
         Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('nucleo.evaluation-forms.submit-deliberation');
         Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('nucleo.evaluation-forms.decide');
 
@@ -99,7 +103,8 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('cc.evaluation-forms.show');
         Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('cc.evaluation-forms.criteria.review');
         Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('cc.evaluation-forms.submit');
-        Route::post('evaluation-forms/{form}/init-deliberation', [EvaluationFormController::class, 'initDeliberation'])->name('cc.evaluation-forms.init-deliberation');
+        Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('cc.evaluation-forms.schedule-deliberation');
+        Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('cc.evaluation-forms.start-deliberation');
         Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('cc.evaluation-forms.submit-deliberation');
         Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('cc.evaluation-forms.decide');
 

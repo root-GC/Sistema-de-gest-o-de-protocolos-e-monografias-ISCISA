@@ -149,26 +149,50 @@ class EvaluationFormController extends Controller
         return response()->json($response);
     }
 
-    public function initDeliberation(EvaluationForm $form)
+    public function scheduleDeliberation(Request $request, EvaluationForm $form)
     {
-        $user = request()->user();
+        $user = $request->user();
 
         if (! $user->hasPermission('protocol.assign')) {
-            return response()->json(['message' => 'Apenas a secretaria pode iniciar uma deliberação.'], 403);
+            return response()->json(['message' => 'Apenas a secretaria pode marcar a deliberação.'], 403);
         }
 
         if ($form->status !== EvaluationForm::STATUS_DELIBERATION_PENDING) {
             return response()->json(['message' => 'A ficha não está em estado de deliberação pendente.'], 422);
         }
 
-        $deliberationForm = $this->evaluationService->createDeliberationForm($form);
+        $validated = $request->validate([
+            'deliberation_date' => 'required|date',
+            'deliberation_location' => 'required|string|max:500',
+        ]);
+
+        $form = $this->evaluationService->scheduleDeliberation(
+            $form,
+            $user,
+            $validated['deliberation_date'],
+            $validated['deliberation_location']
+        );
 
         return response()->json([
-            'message' => 'Reunião de deliberação iniciada. Ficha de deliberação criada.',
-            'deliberation_form' => EvaluationFormResource::make($deliberationForm),
-            'evaluation_form' => EvaluationFormResource::make(
-                $form->fresh()->load(['formCriteria', 'reviewerEvaluations', 'childForms'])
-            ),
+            'message' => 'Deliberação marcada com sucesso.',
+            'evaluation_form' => EvaluationFormResource::make($form),
+        ]);
+    }
+
+    public function startDeliberation(EvaluationForm $form)
+    {
+        $user = request()->user();
+
+        $teacherProfile = $user->teacherProfile;
+        if (! $teacherProfile || ! $user->hasPermission('protocol.evaluate')) {
+            return response()->json(['message' => 'Apenas revisores podem iniciar a deliberação.'], 403);
+        }
+
+        $form = $this->evaluationService->startDeliberation($form, $user);
+
+        return response()->json([
+            'message' => 'Reunião de deliberação iniciada.',
+            'evaluation_form' => EvaluationFormResource::make($form),
         ]);
     }
 
@@ -194,8 +218,10 @@ class EvaluationFormController extends Controller
 
         $protocol = $result['evaluation_form']->protocol;
         $messages = [
+            Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
             Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
             Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
+            Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado pelo Núcleo Científico.',
             Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado pelo Comité Científico.',
             Protocol::STATUS_REJECTED_FINAL => 'Protocolo não aprovado.',
         ];
@@ -203,7 +229,6 @@ class EvaluationFormController extends Controller
         return response()->json([
             'message' => $messages[$protocol->status] ?? 'Deliberação concluída.',
             'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
-            'deliberation_form' => EvaluationFormResource::make($result['deliberation_form']),
             'opinion' => [
                 'id' => $opinion->id,
                 'decision' => $opinion->decision,

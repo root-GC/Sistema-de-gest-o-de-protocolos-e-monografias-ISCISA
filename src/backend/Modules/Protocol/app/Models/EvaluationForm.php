@@ -16,6 +16,7 @@ class EvaluationForm extends Model
     public const STATUS_IN_REVIEW = 'in_review';
     public const STATUS_CONCLUDED = 'concluded';
     public const STATUS_DELIBERATION_PENDING = 'deliberation_pending';
+    public const STATUS_DELIBERATION_SCHEDULED = 'deliberation_scheduled';
     public const STATUS_IN_DELIBERATION = 'in_deliberation';
 
     protected $fillable = [
@@ -29,10 +30,14 @@ class EvaluationForm extends Model
         'decided_by',
         'decided_at',
         'conclusion_summary',
+        'deliberation_date',
+        'deliberation_location',
+        'deliberation_scheduled_by',
     ];
 
     protected $casts = [
         'decided_at' => 'datetime',
+        'deliberation_date' => 'datetime',
     ];
 
     public function protocol()
@@ -58,6 +63,11 @@ class EvaluationForm extends Model
     public function decidedBy()
     {
         return $this->belongsTo(\Modules\User\app\Models\User::class, 'decided_by');
+    }
+
+    public function deliberationScheduledBy()
+    {
+        return $this->belongsTo(\Modules\User\app\Models\User::class, 'deliberation_scheduled_by');
     }
 
     public function parentForm()
