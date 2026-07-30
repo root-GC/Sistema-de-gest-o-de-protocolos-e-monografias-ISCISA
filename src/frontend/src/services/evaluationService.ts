@@ -12,6 +12,9 @@ export interface EvaluationForm {
   status: string;
   auto_approved?: boolean;
   deliberation_pending?: boolean;
+  deliberation_date?: string | null;
+  deliberation_location?: string | null;
+  in_deliberation?: boolean;
   final_decision?: string | null;
   decided_by?: number | null;
   decided_at?: string | null;
@@ -85,16 +88,31 @@ export interface SubmitEvaluationResponse {
   opinion?: EvaluationOpinionResult;
 }
 
-/**
- * Todas as rotas de ficha de avaliação vivem sob /api/v1/{organ}/...
- * (nucleo, comite-cientifico). Por agora só 'nucleo' está implementado
- * no backend — o parâmetro já existe para quando 'comite-cientifico' entrar.
- */
+export interface SubmitDeliberationResponse {
+  message: string;
+  evaluation_form: EvaluationForm;
+  opinion: EvaluationOpinionResult;
+}
+
+export interface StartDeliberationResponse {
+  message: string;
+  evaluation_form: EvaluationForm;
+}
+
+export interface ScheduleDeliberationResponse {
+  message: string;
+  evaluation_form: EvaluationForm;
+}
+
 function organBase(organ: EvaluationOrgan = 'nucleo') {
   return `/api/v1/${organ}`;
 }
 
 export const evaluationService = {
+  // ═══════════════════════════════════════════════
+  // FICHA DE AVALIAÇÃO
+  // ═══════════════════════════════════════════════
+
   getForm: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
     req('GET', `${organBase(organ)}/evaluation-forms/${formId}`) as Promise<{
       evaluation_form: EvaluationForm;
@@ -122,6 +140,35 @@ export const evaluationService = {
       overall_comment: overallComment || null,
     }) as Promise<SubmitEvaluationResponse>,
 
+  // ═══════════════════════════════════════════════
+  // DELIBERAÇÃO
+  // ═══════════════════════════════════════════════
+
+  scheduleDeliberation: (
+    formId: number,
+    deliberationDate: string,
+    deliberationLocation: string,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/schedule-deliberation`, {
+      deliberation_date: deliberationDate,
+      deliberation_location: deliberationLocation,
+    }) as Promise<ScheduleDeliberationResponse>,
+
+  startDeliberation: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/start-deliberation`) as Promise<StartDeliberationResponse>,
+
+  submitDeliberation: (
+    formId: number,
+    decision: 'approved' | 'not_approved',
+    conclusionSummary?: string | null,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/submit-deliberation`, {
+      decision,
+      conclusion_summary: conclusionSummary || null,
+    }) as Promise<SubmitDeliberationResponse>,
+
   decide: (
     formId: number,
     decision: string,
@@ -137,6 +184,10 @@ export const evaluationService = {
       opinion: EvaluationOpinionResult;
     }>,
 
+  // ═══════════════════════════════════════════════
+  // LISTAGENS
+  // ═══════════════════════════════════════════════
+
   listForReviewer: (organ: EvaluationOrgan = 'nucleo') =>
     req('GET', `${organBase(organ)}/reviewer/evaluations`) as Promise<{
       evaluation_forms: EvaluationForm[];
@@ -147,11 +198,24 @@ export const evaluationService = {
       evaluation_forms: EvaluationForm[];
     }>,
 
-  // ── Rotas partilhadas (fora do prefixo de órgão) ──
+  // ═══════════════════════════════════════════════
+  // ROTAS PARTILHADAS
+  // ═══════════════════════════════════════════════
+
   listOpinionsForProtocol: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/opinions`) as Promise<{
       opinions: EvaluationOpinionResult[];
     }>,
+
+  downloadOpinion: (opinionId: number) =>
+    downloadApiFile(`/api/v1/opinions/${opinionId}/download`),
+
+  downloadEvaluationForm: (formId: number) =>
+    downloadApiFile(`/api/v1/evaluation-forms/${formId}/download`),
+
+  // ═══════════════════════════════════════════════
+  // UTILITÁRIOS
+  // ═══════════════════════════════════════════════
 
   openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
   downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),

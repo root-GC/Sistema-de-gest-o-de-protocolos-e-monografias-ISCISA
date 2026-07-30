@@ -17,7 +17,8 @@ use Modules\Protocol\app\Models\Topic;
 use Modules\Protocol\app\Models\TopicReviewAssignment;
 use Modules\Protocol\app\Services\EvaluationService;
 use Modules\User\app\Models\User;
-
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 class ProtocolService
 {
     public function submit(User $user, Topic $topic, UploadedFile $document, string $protocolType): Protocol
@@ -117,13 +118,39 @@ class ProtocolService
                 $protocol->update(['code' => $code]);
             }
 
+            Log::info('Upload recebido', [
+                'original_name' => $document->getClientOriginalName(),
+                'mime' => $document->getMimeType(),
+                'size' => $document->getSize(),
+                'valid' => $document->isValid(),
+                'error' => $document->getError(),
+            ]);
+
+            Log::info('Storage check', [
+                'disk_root' => storage_path('app/public'),
+                'exists' => Storage::disk('public')->exists('protocols'),
+            ]);
+
+
             // Guardar ficheiro e gerar caminho (uma pasta por protocolo, nome por submissao)
             $submissionNumber = (int) $protocol->submission_number;
-            $path = $document->storeAs(
-                'protocols/' . $protocol->id,
-                'protocol-' . $protocol->id . '-S' . $submissionNumber . '.docx',
-                'public'
-            );
+            try {
+                $path = $document->storeAs(
+                    'protocols/' . $protocol->id,
+                    'protocol-' . $protocol->id . '-S' . $submissionNumber . '.docx',
+                    'public'
+                );
+
+                Log::info('Store result', [
+                    'path' => $path,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Erro no storeAs', [
+                    'message' => $e->getMessage(),
+                ]);
+
+                throw $e;
+            }
 
             // Criar documento na tabela documents (versionado por submissao)
             Document::create([
@@ -137,6 +164,23 @@ class ProtocolService
                 'status' => Document::STATUS_ACTIVE,
             ]);
 
+    //  $createdDocument = Document::create([
+    //     'submited_by' => $user->id,
+    //     'protocol_id' => $protocol->id,
+    //     'document_type' => $protocolType,
+    //     'file_name' => 'protocol-' . $protocol->id . '-S' . $submissionNumber . '.docx',
+    //     'file_path' => $path,
+    //     'pages' => null,
+    //     'version' => $submissionNumber,
+    //     'status' => Document::STATUS_ACTIVE,
+    // ]);
+
+    // Log::info('Documento criado no submit', [
+    //     'id' => $createdDocument->id,
+    //     'file_name' => $createdDocument->file_name,
+    //     'file_path' => $createdDocument->file_path,
+    //     'real_path' => $path,
+    // ]);
             event(new ProtocolStatusChanged($protocol, null, $protocol->status, $user));
 
             return $protocol->load(['topic:id,title,status', 'supervisor.user:id,name,email', 'documents']);

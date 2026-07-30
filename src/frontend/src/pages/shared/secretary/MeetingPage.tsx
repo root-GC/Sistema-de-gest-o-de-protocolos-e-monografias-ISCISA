@@ -68,15 +68,17 @@ export default function MeetingPage() {
       })
 
       setMeetings(prev => [meeting, ...prev])
-      setSuccess(`Reunião agendada para ${new Date(meetingDate).toLocaleDateString('pt-PT')} às ${meetingTime}. Fichas de deliberação criadas.`)
+      setSuccess(`Reunião agendada para ${new Date(meetingDate).toLocaleDateString('pt-PT')} às ${meetingTime}. ${selectedFormIds.length} protocolo(s) incluído(s).`)
 
+      // Limpar formulário
       setMeetingDate('')
       setMeetingTime('10:00')
       setMeetingNotes('')
       setSelectedFormIds([])
       setShowNewMeeting(false)
 
-      await loadData() // remove da lista de pendentes os que já entraram em deliberação
+      // Recarregar para remover da lista de pendentes
+      await loadData()
       setTimeout(() => setSuccess(null), 5000)
     } catch (e) {
       setError((e as Error).message)
@@ -109,6 +111,88 @@ export default function MeetingPage() {
       {success && <Alert type="success">{success}</Alert>}
       {error && <Alert type="error">{error}</Alert>}
 
+      {/* Lista de protocolos pendentes (sempre visível) */}
+      {!showNewMeeting && (
+        <div style={{ marginBottom: 'var(--space-4)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
+            <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>pending_actions</span>
+              Protocolos Pendentes de Deliberação
+            </h2>
+            {pendingForms.length > 0 && (
+              <span style={{ 
+                fontSize: 'var(--body-sm)', 
+                padding: '4px 12px', 
+                borderRadius: 'var(--radius-full)', 
+                background: 'var(--tertiary-container)', 
+                color: 'var(--on-tertiary-container)',
+                fontWeight: 'var(--font-bold)'
+              }}>
+                {pendingForms.length} protocolo(s)
+              </span>
+            )}
+          </div>
+
+          {pendingForms.length === 0 ? (
+            <EmptyState message="Nenhum protocolo pendente de deliberação." icon="inbox" />
+          ) : (
+            <div style={{ 
+              border: '1px solid var(--outline-variant)', 
+              borderRadius: 'var(--radius-lg)', 
+              background: 'var(--surface-container-lowest)',
+              overflow: 'hidden'
+            }}>
+              {pendingForms.map(form => (
+                <div key={form.id} style={{
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 'var(--space-3)', 
+                  padding: '14px 16px',
+                  borderBottom: '1px solid var(--outline-variant)',
+                }}>
+                  <div style={{ 
+                    width: '40px', 
+                    height: '40px', 
+                    borderRadius: 'var(--radius-lg)', 
+                    background: 'var(--tertiary-container)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <span className="material-symbols-outlined" style={{ color: 'var(--on-tertiary-container)', fontSize: '20px' }}>
+                      description
+                    </span>
+                  </div>
+                  
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 'var(--font-bold)', fontSize: '13px', fontFamily: 'monospace', marginBottom: '2px' }}>
+                      {form.protocol?.code || `Protocolo #${form.protocol_id}`}
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--on-surface-variant)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {form.protocol?.topic?.title || 'Sem título'}
+                    </div>
+                  </div>
+
+                  <span style={{
+                    fontSize: '11px',
+                    padding: '4px 10px',
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--error-container)',
+                    color: 'var(--on-error-container)',
+                    fontWeight: 'var(--font-bold)',
+                    flexShrink: 0
+                  }}>
+                    Aguarda Reunião
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Formulário de nova reunião */}
       {showNewMeeting && (
         <form onSubmit={handleCreateMeeting} className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
           <h3 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
@@ -128,21 +212,43 @@ export default function MeetingPage() {
           </div>
 
           <div style={{ marginBottom: 'var(--space-3)' }}>
-            <label style={labelStyle}>Notas / Observações</label>
-            <textarea value={meetingNotes} onChange={e => setMeetingNotes(e.target.value)} rows={2} placeholder="Notas sobre a reunião..." style={{ ...inputStyle, resize: 'vertical' }} />
+            <label style={labelStyle}>Local</label>
+            <input 
+              type="text" 
+              value={ORGAN} 
+              readOnly 
+              style={{ ...inputStyle, background: 'var(--surface-container)', color: 'var(--on-surface-variant)' }} 
+            />
           </div>
 
           <div style={{ marginBottom: 'var(--space-3)' }}>
+            <label style={labelStyle}>Notas / Observações</label>
+            <textarea 
+              value={meetingNotes} 
+              onChange={e => setMeetingNotes(e.target.value)} 
+              rows={2} 
+              placeholder="Notas sobre a reunião..." 
+              style={{ ...inputStyle, resize: 'vertical' }} 
+            />
+          </div>
+
+          <div style={{ marginBottom: 'var(--space-4)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
               <label style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)' }}>
-                Protocolos em deliberação pendente * ({selectedFormIds.length} selecionados)
+                Protocolos para esta reunião ({selectedFormIds.length} selecionados)
               </label>
               <button type="button" onClick={selectAll} className="btn btn-sm btn-outline">
                 {selectedFormIds.length === pendingForms.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
               </button>
             </div>
 
-            <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-container-lowest)' }}>
+            <div style={{ 
+              maxHeight: '300px', 
+              overflowY: 'auto', 
+              border: '1px solid var(--outline-variant)', 
+              borderRadius: 'var(--radius-lg)', 
+              background: 'var(--surface-container-lowest)' 
+            }}>
               {pendingForms.length === 0 ? (
                 <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--on-surface-variant)' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: '32px', display: 'block', marginBottom: 'var(--space-1)' }}>inbox</span>
@@ -151,28 +257,30 @@ export default function MeetingPage() {
               ) : (
                 pendingForms.map(form => {
                   const isSelected = selectedFormIds.includes(form.id)
-                  const decisions = (form.reviewer_evaluations || []).map(re => re.decision).filter(Boolean)
-                  const hasDivergence = decisions.length === 2 && decisions[0] !== decisions[1]
 
                   return (
                     <label key={form.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '12px 14px',
-                      borderBottom: '1px solid var(--outline-variant)', cursor: 'pointer',
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 'var(--space-2)', 
+                      padding: '12px 14px',
+                      borderBottom: '1px solid var(--outline-variant)', 
+                      cursor: 'pointer',
                       background: isSelected ? 'var(--primary-container)' : 'transparent',
+                      transition: 'background 0.2s',
                     }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleFormSelection(form.id)}
-                        style={{ accentColor: 'var(--primary)', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }} />
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected} 
+                        onChange={() => toggleFormSelection(form.id)}
+                        style={{ accentColor: 'var(--primary)', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }} 
+                      />
                       <span style={{ fontWeight: 'var(--font-bold)', fontSize: '13px', minWidth: '85px', flexShrink: 0, fontFamily: 'monospace' }}>
                         {form.protocol?.code || `#${form.protocol_id}`}
                       </span>
                       <span style={{ flex: 1, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {form.protocol?.topic?.title || '—'}
                       </span>
-                      {hasDivergence && (
-                        <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', fontWeight: 'var(--font-bold)', flexShrink: 0 }}>
-                          Divergência
-                        </span>
-                      )}
                     </label>
                   )
                 })
@@ -180,28 +288,38 @@ export default function MeetingPage() {
             </div>
           </div>
 
-          <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={submitting || !meetingDate || selectedFormIds.length === 0}>
-            {submitting ? 'A agendar e a criar fichas de deliberação...' : (
-              <><span className="material-symbols-outlined">event_available</span> Agendar Reunião</>
+          <button 
+            type="submit" 
+            className="btn btn-primary btn-lg btn-block" 
+            disabled={submitting || !meetingDate || selectedFormIds.length === 0}
+          >
+            {submitting ? (
+              'A agendar reunião...'
+            ) : (
+              <><span className="material-symbols-outlined">event_available</span> Agendar Reunião com {selectedFormIds.length} Protocolo(s)</>
             )}
           </button>
         </form>
       )}
 
+      {/* Reuniões agendadas */}
       <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
         <span className="material-symbols-outlined">list_alt</span>
         Reuniões Agendadas ({meetings.length})
       </h2>
 
       {meetings.length === 0 ? (
-        <EmptyState message="Nenhuma reunião agendada." />
+        <EmptyState message="Nenhuma reunião agendada." icon="event_busy" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {meetings.map(meeting => {
             const isExpanded = expandedId === meeting.id
             return (
               <div key={meeting.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)' }}>
-                <div onClick={() => setExpandedId(isExpanded ? null : meeting.id)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div 
+                  onClick={() => setExpandedId(isExpanded ? null : meeting.id)} 
+                  style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
                   <div>
                     <h3 style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-semibold)', margin: 0 }}>
                       {new Date(meeting.date).toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
@@ -216,10 +334,18 @@ export default function MeetingPage() {
                   <div style={{ marginTop: 'var(--space-2)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--outline-variant)' }}>
                     {meeting.deliberationForms.map(df => (
                       <div key={df.id} style={{ fontSize: '13px', padding: '6px 0', color: 'var(--on-surface-variant)' }}>
-                        {df.protocol?.code || `#${df.protocol_id}`} — Ficha de deliberação #{df.id}
+                        <span style={{ fontWeight: 'var(--font-bold)', fontFamily: 'monospace' }}>
+                          {df.protocol?.code || `#${df.protocol_id}`}
+                        </span>
+                        {' — '}
+                        {df.protocol?.topic?.title || 'Sem título'}
                       </div>
                     ))}
-                    {meeting.notes && <p style={{ fontStyle: 'italic', marginTop: 'var(--space-2)' }}>"{meeting.notes}"</p>}
+                    {meeting.notes && (
+                      <p style={{ fontStyle: 'italic', marginTop: 'var(--space-2)', color: 'var(--on-surface-variant)' }}>
+                        "{meeting.notes}"
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -231,8 +357,23 @@ export default function MeetingPage() {
   )
 }
 
-const labelStyle: React.CSSProperties = { display: 'block', fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)', marginBottom: 'var(--space-1)' }
-const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', background: 'var(--surface-container-lowest)', color: 'var(--on-surface)' }
+const labelStyle: React.CSSProperties = { 
+  display: 'block', 
+  fontSize: 'var(--body-md)', 
+  fontWeight: 'var(--font-medium)', 
+  marginBottom: 'var(--space-1)' 
+}
+
+const inputStyle: React.CSSProperties = { 
+  width: '100%', 
+  padding: '10px 12px', 
+  border: '1px solid var(--outline-variant)', 
+  borderRadius: 'var(--radius-lg)', 
+  fontSize: 'var(--body-md)', 
+  fontFamily: 'var(--font-family)', 
+  background: 'var(--surface-container-lowest)', 
+  color: 'var(--on-surface)' 
+}
 
 function Loader() {
   return (
@@ -245,17 +386,36 @@ function Loader() {
 
 function Alert({ type, children }: { type: 'error' | 'success'; children: React.ReactNode }) {
   return (
-    <div style={{ padding: 'var(--space-2) var(--space-3)', marginBottom: 'var(--space-4)', borderRadius: 'var(--radius-lg)', background: type === 'error' ? 'var(--error-container)' : 'var(--primary-container)', color: type === 'error' ? 'var(--on-error-container)' : 'var(--on-primary-container)', fontSize: 'var(--body-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+    <div style={{ 
+      padding: 'var(--space-2) var(--space-3)', 
+      marginBottom: 'var(--space-4)', 
+      borderRadius: 'var(--radius-lg)', 
+      background: type === 'error' ? 'var(--error-container)' : 'var(--primary-container)', 
+      color: type === 'error' ? 'var(--on-error-container)' : 'var(--on-primary-container)', 
+      fontSize: 'var(--body-md)', 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: 'var(--space-2)' 
+    }}>
       <span className="material-symbols-outlined">{type === 'error' ? 'error' : 'check_circle'}</span>
       {children}
     </div>
   )
 }
 
-function EmptyState({ message }: { message: string }) {
+function EmptyState({ message, icon }: { message: string; icon?: string }) {
   return (
-    <div style={{ textAlign: 'center', padding: 'var(--space-5)', color: 'var(--on-surface-variant)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-xl)', border: '1px dashed var(--outline-variant)' }}>
-      <span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>event_busy</span>
+    <div style={{ 
+      textAlign: 'center', 
+      padding: 'var(--space-5)', 
+      color: 'var(--on-surface-variant)', 
+      background: 'var(--surface-container-low)', 
+      borderRadius: 'var(--radius-xl)', 
+      border: '1px dashed var(--outline-variant)' 
+    }}>
+      <span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>
+        {icon || 'inbox'}
+      </span>
       <p>{message}</p>
     </div>
   )

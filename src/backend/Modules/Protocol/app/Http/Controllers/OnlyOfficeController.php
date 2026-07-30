@@ -44,7 +44,7 @@ class OnlyOfficeController extends Controller
         }
 
         $version = $document->version;
-        $key = "protocol_{$protocolId}_v{$version}";
+        $key = "protocol_{$protocolId}_v{$version}_" . time();
         $user = auth()->user();
 
         if (! $this->canAccess($user, $protocol)) {
@@ -52,6 +52,17 @@ class OnlyOfficeController extends Controller
         }
 
         $mode = $this->resolveMode($user, $protocol);
+
+           // COLOCA AQUI
+        Log::info('Documento enviado ao ONLYOFFICE', [
+            'id' => $document->id,
+            'file_name' => $document->file_name,
+            'file_path' => $document->file_path,
+            'version' => $document->version,
+            'key' => $key,
+            'mode' => $mode,
+        ]);
+
 
         $config = [
             "documentType" => "word",
@@ -66,7 +77,7 @@ class OnlyOfficeController extends Controller
                 "mode" => $mode,
                 "customization" => [
                     "review" => [
-                        "reviewMode" => ($mode === 'edit'),
+                        "reviewMode" => in_array($mode, ['edit', 'review']),
                         "showReviewChanges" => ($mode === 'review' || $mode === 'edit'),
                         "trackChanges" => true,
                     ],
@@ -77,6 +88,7 @@ class OnlyOfficeController extends Controller
                     "id" => (string) $user->id,
                     "name" => $user->name,
                 ],
+                "forcesave" => true,
             ],
         ];
 
@@ -145,7 +157,7 @@ class OnlyOfficeController extends Controller
                 ->exists();
 
             if ($isReviewer) {
-                return 'comment';
+                return 'review';
             }
         }
 
@@ -153,75 +165,100 @@ class OnlyOfficeController extends Controller
     }
 
     public function callback(Request $request)
-    {
-        $data = $request->all();
+{
+    $data = $request->all();
 
-        Log::info('ONLYOFFICE callback:', [
-            'status' => $data['status'] ?? 'unknown',
-            'key' => $data['key'] ?? 'unknown',
+    Log::info('ONLYOFFICE callback recebido', $data);
+
+    Log::info('ONLYOFFICE callback resumo', [
+        'status' => $data['status'] ?? 'unknown',
+        'key' => $data['key'] ?? 'unknown',
+        'url' => $data['url'] ?? null,
+        'users' => $data['users'] ?? [],
+        'actions' => $data['actions'] ?? [],
+        'history' => isset($data['history']),
+    ]);
+
+    $status = (int) ($data['status'] ?? 0);
+
+    if (! in_array($status, [2, 6], true)) {
+        Log::info('ONLYOFFICE callback ignorado', [
+            'status' => $status,
         ]);
 
-        $status = (int) ($data['status'] ?? 0);
-
-        if (! in_array($status, [1, 6], true)) {
-            return response()->json(['error' => 0]);
-        }
-
-        $key = $data['key'] ?? '';
-
-        preg_match('/protocol_(\d+)_v(\d+)/', $key, $matches);
-
-        if (empty($matches)) {
-            Log::warning('ONLYOFFICE callback: key invalida', ['key' => $key]);
-
-            return response()->json(['error' => 1]);
-        }
-
-        $protocolId = (int) $matches[1];
-        $downloadUrl = $data['url'] ?? null;
-
-        if (! $downloadUrl) {
-            Log::warning('ONLYOFFICE callback: URL do documento nao fornecida');
-
-            return response()->json(['error' => 1]);
-        }
-
-        try {
-            $docContent = file_get_contents($downloadUrl);
-
-            if ($docContent === false) {
-                throw new \Exception("Falha ao baixar documento de: {$downloadUrl}");
-            }
-
-            $document = Document::where('protocol_id', $protocolId)
-                ->where('status', Document::STATUS_ACTIVE)
-                ->first();
-
-            if (! $document) {
-                Log::warning('ONLYOFFICE callback: nenhum documento activo encontrado', [
-                    'protocol_id' => $protocolId,
-                ]);
-
-                return response()->json(['error' => 1]);
-            }
-
-            Storage::disk('public')->put($document->file_path, $docContent);
-
-            $document->touch();
-
-            Log::info('ONLYOFFICE callback: documento actualizado com sucesso', [
-                'protocol_id' => $protocolId,
-                'path' => $document->file_path,
-            ]);
-
-            return response()->json(['error' => 0]);
-        } catch (\Exception $e) {
-            Log::error('ONLYOFFICE callback: erro ao salvar documento', [
-                'error' => $e->getMessage(),
-                'protocol_id' => $protocolId,
-            ]);
-
-            return response()->json(['error' => 1]);
-        }
+        return response()->json(['error' => 0]);
     }
+
+    $key = $data['key'] ?? '';
+
+    preg_match('/protocol_(\d+)_v(\d+)/', $key, $matches);
+
+    if (empty($matches)) {
+        Log::warning('ONLYOFFICE callback: key inválida', [
+            'key' => $key,
+        ]);
+
+        return response()->json(['error' => 1]);
+    }
+
+    $protocolId = (int) $matches[1];
+    $downloadUrl = $data['url'] ?? null;
+
+    if (! $downloadUrl) {
+        Log::warning('ONLYOFFICE callback: URL do documento não fornecida');
+
+        return response()->json(['error' => 1]);
+    }
+
+    try {
+        Log::info('A descarregar documento', [
+            'url' => $downloadUrl,
+        ]);
+
+        $docContent = file_get_contents($downloadUrl);
+
+        if ($docContent === false) {
+            throw new \Exception("Falha ao baixar documento de: {$downloadUrl}");
+        }
+
+        $document = Document::where('protocol_id', $protocolId)
+            ->where('status', Document::STATUS_ACTIVE)
+            ->first();
+
+        if (! $document) {
+            Log::warning('ONLYOFFICE callback: nenhum documento activo encontrado', [
+                'protocol_id' => $protocolId,
+            ]);
+
+            return response()->json(['error' => 1]);
+        }
+
+        Log::info('Documento encontrado', [
+            'id' => $document->id,
+            'file_name' => $document->file_name,
+            'file_path' => $document->file_path,
+            'version' => $document->version,
+        ]);
+
+        Storage::disk('public')->put($document->file_path, $docContent);
+
+        $document->touch();
+
+        Log::info('ONLYOFFICE callback: documento actualizado com sucesso', [
+            'protocol_id' => $protocolId,
+            'path' => $document->file_path,
+            'size' => strlen($docContent),
+        ]);
+
+        return response()->json(['error' => 0]);
+    } catch (\Throwable $e) {
+        Log::error('ONLYOFFICE callback: erro ao salvar documento', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'protocol_id' => $protocolId,
+        ]);
+
+        return response()->json(['error' => 1]);
+    }
+}
 }

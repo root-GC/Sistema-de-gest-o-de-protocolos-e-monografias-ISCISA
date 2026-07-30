@@ -95,6 +95,8 @@ class EvaluationService
                     ]
                 );
             }
+            //Não tinha
+            return $form;
 
         });
     }

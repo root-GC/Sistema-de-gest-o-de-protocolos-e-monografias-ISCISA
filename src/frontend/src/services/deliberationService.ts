@@ -2,7 +2,8 @@
 //
 // Camada dedicada ao fluxo de "Reunião de Deliberação" do Núcleo Científico.
 // Constrói-se em cima dos endpoints reais já existentes no EvaluationFormController:
-//   POST /api/v1/nucleo/evaluation-forms/{form}/init-deliberation
+//   POST /api/v1/nucleo/evaluation-forms/{form}/schedule-deliberation
+//   POST /api/v1/nucleo/evaluation-forms/{form}/start-deliberation
 //   POST /api/v1/nucleo/evaluation-forms/{form}/submit-deliberation
 //
 // ⚠️ NOTA IMPORTANTE (assumpção a validar com o backend):
@@ -49,34 +50,43 @@ export const deliberationService = {
   /**
    * Protocolos do Núcleo cuja ficha de avaliação está em `deliberation_pending`
    * — candidatos a entrar numa reunião de deliberação.
-   *
-   * NOTA: EvaluationService::listForSecretary no backend filtra hoje pelo status
-   * do PROTOCOLO (pending_nucleo, in_review_nucleo). Um protocolo em deliberação
-   * mantém-se com status de protocolo `in_review_nucleo`, então deve continuar a
-   * aparecer nessa listagem — aqui filtramos adicionalmente pelo status da FICHA
-   * (`deliberation_pending`). Se o backend deixar de devolver estes casos nesta
-   * rota, ajustar o filtro lá em vez de aqui.
+   * 
+   * FLUXO: Se ambos revisores aprovam → auto-approve.
+   *        Se algum revisor rejeita → deliberation_pending → reunião obrigatória.
+   * 
+   * Usa a rota existente da secretaria e filtra por status.
    */
   async listPendingForMeeting(): Promise<EvaluationForm[]> {
-    const { evaluation_forms } = await req<{ evaluation_forms: EvaluationForm[] }>(
-      'GET',
-      '/api/v1/nucleo/secretary/evaluations'
-    );
-    return evaluation_forms.filter(f => f.status === 'deliberation_pending');
+    try {
+      const { evaluation_forms } = await req<{ evaluation_forms: EvaluationForm[] }>(
+        'GET',
+        '/api/v1/nucleo/secretary/evaluations'
+      );
+      
+      // Todos os formulários em deliberation_pending precisam de reunião
+      const pending = evaluation_forms.filter(f => f.status === 'deliberation_pending');
+      
+      console.log('📋 Formulários pendentes de deliberação:', pending.length, 
+        pending.map(f => ({
+          id: f.id,
+          code: f.protocol?.code,
+          status: f.status,
+          title: f.protocol?.topic?.title?.substring(0, 50)
+        }))
+      );
+      
+      return pending;
+    } catch (error) {
+      console.error('Erro ao carregar formulários pendentes:', error);
+      throw error;
+    }
   },
-
-  /** Cria a ficha de deliberação para um protocolo específico (acção real de backend). */
-  initDeliberation: (formId: number) =>
-    req('POST', `/api/v1/nucleo/evaluation-forms/${formId}/init-deliberation`) as Promise<{
-      message: string;
-      deliberation_form: EvaluationForm;
-      evaluation_form: EvaluationForm;
-    }>,
 
   /**
    * Agenda uma reunião para um conjunto de protocolos em `deliberation_pending`.
-   * Dispara um init-deliberation por protocolo e agrupa os resultados localmente
-   * sob uma única reunião com data/hora/notas.
+   * 
+   * Passo 1: Marca a deliberação (schedule-deliberation) para cada formulário
+   * Passo 2: Agrupa os resultados localmente sob uma única reunião
    */
   async scheduleMeeting(params: {
     date: string;
@@ -85,8 +95,14 @@ export const deliberationService = {
     notes?: string;
     formIds: number[];
   }): Promise<DeliberationMeeting> {
-    const results = await Promise.all(
-      params.formIds.map(formId => this.initDeliberation(formId))
+    // Agenda a deliberação para cada formulário selecionado
+    const scheduledForms = await Promise.all(
+      params.formIds.map(formId => 
+        req('POST', `/api/v1/nucleo/evaluation-forms/${formId}/schedule-deliberation`, {
+          deliberation_date: `${params.date} ${params.time}`,
+          deliberation_location: params.organ,
+        })
+      )
     );
 
     const meeting: DeliberationMeeting = {
@@ -96,7 +112,7 @@ export const deliberationService = {
       organ: params.organ,
       notes: params.notes,
       createdAt: new Date().toISOString(),
-      deliberationForms: results.map(r => r.deliberation_form),
+      deliberationForms: scheduledForms.map((r: any) => r.evaluation_form),
     };
 
     const meetings = loadStoredMeetings();
