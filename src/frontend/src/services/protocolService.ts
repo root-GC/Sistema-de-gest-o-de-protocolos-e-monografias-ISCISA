@@ -138,6 +138,16 @@ export const protocolService = {
     }>;
   },
 
+  // 🆕 Submeter documento ao Comité Científico
+  submitToComiteCientifico: (protocolId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('document', file);
+    return reqFormData('POST', `/api/v1/protocols/${protocolId}/submit-to-cc`, formData) as Promise<{
+      message: string;
+      protocol: Protocol;
+    }>;
+  },
+
   // ── Listagem e consulta ─────────────────────────────
   list: () => req('GET', '/api/v1/protocols') as Promise<{ protocols: Protocol[] }>,
 
@@ -152,40 +162,29 @@ export const protocolService = {
   downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
 
   // ── Upload de documento revisado pelo revisor ───────
-  /**
-   * Faz upload do documento revisado (.docx) que o revisor 
-   * editou localmente e quer anexar à sua avaliação.
-   */
   uploadReviewedDocument: (protocolId: number, file: File) => {
     const formData = new FormData();
     formData.append('document', file);
     formData.append('protocol_id', String(protocolId));
-    formData.append('type', 'reviewed'); // Para o backend saber que é documento revisado
-
+    formData.append('type', 'reviewed');
     return reqFormData('POST', `/api/v1/protocols/${protocolId}/upload-reviewed`, formData) as Promise<{
       message: string;
       document: ReviewedDocument;
     }>;
   },
 
-  /**
-   * Remove um documento revisado que foi enviado anteriormente.
-   */
   removeReviewedDocument: (protocolId: number, documentId: number) =>
     req('DELETE', `/api/v1/protocols/${protocolId}/reviewed-documents/${documentId}`) as Promise<{
       message: string;
     }>,
 
-  /**
-   * Lista documentos revisados anexados ao protocolo.
-   */
   listReviewedDocuments: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/reviewed-documents`) as Promise<{
       documents: ReviewedDocument[];
     }>,
 
   // ── Supervisor ──────────────────────────────────────
-  listForSupervisor: () => 
+  listForSupervisor: () =>
     req('GET', '/api/v1/supervisor/protocols') as Promise<{ protocols: Protocol[] }>,
 
   approveBySupervisor: (protocolId: number) =>
