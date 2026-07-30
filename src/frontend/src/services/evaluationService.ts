@@ -1,122 +1,142 @@
 // src/services/evaluationService.ts
-import { downloadApiFile, openApiFile, req } from './apiClient';
+import { req } from './apiClient'
 
-export type EvaluationOrgan = 'nucleo' | 'comite-cientifico';
+// ═══════════════════════════════════════════════
+// TIPOS
+// ═══════════════════════════════════════════════
 
-export interface EvaluationForm {
-  id: number;
-  protocol_id: number;
-  version: string;
-  organ: string;
-  form_type?: 'evaluation' | 'deliberation';
-  status: string;
-  auto_approved?: boolean;
-  deliberation_pending?: boolean;
-  deliberation_date?: string | null;
-  deliberation_location?: string | null;
-  in_deliberation?: boolean;
-  final_decision?: string | null;
-  decided_by?: number | null;
-  decided_at?: string | null;
-  conclusion_summary?: string | null;
-  created_at: string;
-  protocol?: {
-    id: number;
-    code: string;
-    version: string;
-    status: string;
-    status_label: string;
-    submitted_at: string;
-    topic?: {
-      id: number;
-      title: string;
-      status: string;
-      scientific_area?: { id: number; name: string };
-      course?: { id: number; name: string; code: string };
-    };
-  };
-  form_criteria?: FormCriterion[];
-  reviewer_evaluations?: ReviewerEvaluation[];
-  parent_form?: EvaluationForm | null;
-  child_forms?: EvaluationForm[];
+export type EvaluationOrgan = 'nucleo' | 'comite-cientifico'
+
+function organBase(organ: EvaluationOrgan = 'nucleo'): string {
+  return `/api/v1/${organ}`
 }
 
 export interface FormCriterion {
-  id: number;
-  evaluation_form_id: number;
-  criterion_id: number;
-  group_name: string;
-  criterion_name: string;
-  order_column: number;
-}
-
-export interface ReviewerEvaluation {
-  id: number;
-  evaluation_form_id: number;
-  reviewer_id: number;
-  status: string;
-  decision?: 'approved' | 'not_approved' | null;
-  overall_comment?: string | null;
-  submitted_at?: string | null;
-  reviewer?: { user?: { id: number; name: string } };
-  criterion_reviews?: CriterionReview[];
+  id: number
+  evaluation_form_id: number
+  criterion_name: string
+  group_name: string | null
+  description: string | null
+  max_score: number
+  weight: number
+  sort_order: number
 }
 
 export interface CriterionReview {
-  id: number;
-  reviewer_evaluation_id: number;
-  evaluation_form_criterion_id: number;
-  comment?: string | null;
-  form_criterion?: FormCriterion;
+  id: number
+  reviewer_evaluation_id: number
+  evaluation_form_criterion_id: number
+  comment: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ReviewerEvaluation {
+  id: number
+  evaluation_form_id: number
+  reviewer: {
+    id: number
+    user: {
+      id: number
+      name: string
+      email: string
+    }
+  }
+  status: string
+  decision: string | null
+  deliberation_submitted?: boolean
+  submitted_at: string | null
+  criterion_reviews?: CriterionReview[]
+}
+
+export interface EvaluationForm {
+  id: number
+  protocol_id: number
+  topic_id?: number
+  version: number
+  form_type: 'evaluation' | 'deliberation'
+  parent_form_id: number | null
+  organ: string
+  status: string
+  final_decision: string | null
+  decided_by: number | null
+  decided_at: string | null
+  conclusion_summary: string | null
+  deliberation_date: string | null
+  deliberation_location: string | null
+  deliberation_scheduled_by: number | null
+  created_at: string
+  updated_at: string
+  protocol?: {
+    id: number
+    code: string
+    version: string
+    topic?: {
+      id: number
+      title: string
+    }
+    student?: {
+      id: number
+      name: string
+    }
+    latest_document?: {
+      id: number
+      file_name: string
+      download_url: string
+      view_url?: string
+    }
+  }
+  topic?: {
+    id: number
+    title: string
+  }
+  form_criteria?: FormCriterion[]
+  reviewer_evaluations?: ReviewerEvaluation[]
+  child_forms?: EvaluationForm[]
 }
 
 export interface EvaluationOpinionResult {
-  id: number;
-  decision: string;
-  issued_at: string;
-  document_url?: string;
-  download_url?: string;
-  evaluation_form_download_url?: string;
+  id: number
+  decision: string
+  issued_at: string
+  document_url?: string
+  download_url?: string
+  evaluation_form_download_url?: string
 }
 
-export interface SubmitEvaluationResponse {
-  message: string;
-  reviewer_evaluation: ReviewerEvaluation;
-  auto_approved: boolean;
-  deliberation_pending: boolean;
-  evaluation_form: EvaluationForm;
-  opinion?: EvaluationOpinionResult;
-}
-
-export interface SubmitDeliberationResponse {
-  message: string;
-  evaluation_form: EvaluationForm;
-  opinion: EvaluationOpinionResult;
-}
-
-export interface StartDeliberationResponse {
-  message: string;
-  evaluation_form: EvaluationForm;
-}
-
-export interface ScheduleDeliberationResponse {
-  message: string;
-  evaluation_form: EvaluationForm;
-}
-
-function organBase(organ: EvaluationOrgan = 'nucleo') {
-  return `/api/v1/${organ}`;
-}
+// ═══════════════════════════════════════════════
+// SERVICE
+// ═══════════════════════════════════════════════
 
 export const evaluationService = {
-  // ═══════════════════════════════════════════════
-  // FICHA DE AVALIAÇÃO
-  // ═══════════════════════════════════════════════
+  // ── Listagens ──────────────────────────────────────
+
+  listForReviewer: (organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/reviewer/evaluations`) as Promise<{
+      evaluation_forms: EvaluationForm[]
+    }>,
+
+  listForSecretary: (organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/secretary/evaluations`) as Promise<{
+      evaluation_forms: EvaluationForm[]
+    }>,
+
+  /**
+   * Lista fichas com status 'deliberated' — aguardando decisão final.
+   */
+  listPendingFinalDecision: (organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/final-decisions`) as Promise<{
+      evaluation_forms: EvaluationForm[]
+    }>,
+
+  // ── Detalhe ────────────────────────────────────────
 
   getForm: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
     req('GET', `${organBase(organ)}/evaluation-forms/${formId}`) as Promise<{
-      evaluation_form: EvaluationForm;
+      evaluation_form: EvaluationForm
     }>,
+
+  // ── Critérios ──────────────────────────────────────
 
   saveCriterionReview: (
     formId: number,
@@ -124,10 +144,11 @@ export const evaluationService = {
     comment: string | null,
     organ: EvaluationOrgan = 'nucleo'
   ) =>
-    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/criteria/${formCriterionId}/review`, { comment }) as Promise<{
-      message: string;
-      criterion_review: CriterionReview;
-    }>,
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/criteria/${formCriterionId}/review`, {
+      comment,
+    }) as Promise<{ message: string }>,
+
+  // ── Submissão da Avaliação Individual ──────────────
 
   submit: (
     formId: number,
@@ -138,25 +159,32 @@ export const evaluationService = {
     req('POST', `${organBase(organ)}/evaluation-forms/${formId}/submit`, {
       decision,
       overall_comment: overallComment || null,
-    }) as Promise<SubmitEvaluationResponse>,
+    }) as Promise<{
+      message: string
+      evaluation_form: EvaluationForm
+    }>,
 
-  // ═══════════════════════════════════════════════
-  // DELIBERAÇÃO
-  // ═══════════════════════════════════════════════
+  // ── Deliberação ────────────────────────────────────
 
   scheduleDeliberation: (
     formId: number,
-    deliberationDate: string,
-    deliberationLocation: string,
+    date: string,
+    location: string,
     organ: EvaluationOrgan = 'nucleo'
   ) =>
     req('POST', `${organBase(organ)}/evaluation-forms/${formId}/schedule-deliberation`, {
-      deliberation_date: deliberationDate,
-      deliberation_location: deliberationLocation,
-    }) as Promise<ScheduleDeliberationResponse>,
+      deliberation_date: date,
+      deliberation_location: location,
+    }) as Promise<{
+      message: string
+      evaluation_form: EvaluationForm
+    }>,
 
   startDeliberation: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
-    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/start-deliberation`) as Promise<StartDeliberationResponse>,
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/start-deliberation`) as Promise<{
+      message: string
+      evaluation_form: EvaluationForm
+    }>,
 
   submitDeliberation: (
     formId: number,
@@ -167,11 +195,30 @@ export const evaluationService = {
     req('POST', `${organBase(organ)}/evaluation-forms/${formId}/submit-deliberation`, {
       decision,
       conclusion_summary: conclusionSummary || null,
-    }) as Promise<SubmitDeliberationResponse>,
+    }) as Promise<{
+      message: string
+      evaluation_form: EvaluationForm
+      opinion?: EvaluationOpinionResult
+    }>,
+
+  /**
+   * Encerra a reunião de deliberação.
+   * O backend decide automaticamente:
+   * - 'deliberated' se ambos os revisores submeteram a mesma decisão
+   * - 'not_deliberated' se as decisões divergem
+   * O resultado vem diretamente no evaluation_form.status.
+   */
+  closeMeeting: (formId: number, result: 'deliberated' | 'not_deliberated', organ: EvaluationOrgan = 'nucleo') =>
+  req('POST', `${organBase(organ)}/evaluation-forms/${formId}/close-meeting`, {
+    result,
+  }) as Promise<{
+    message: string
+    evaluation_form: EvaluationForm
+  }>,
 
   decide: (
     formId: number,
-    decision: string,
+    decision: 'approved' | 'not_approved',
     conclusionSummary?: string | null,
     organ: EvaluationOrgan = 'nucleo'
   ) =>
@@ -179,44 +226,41 @@ export const evaluationService = {
       decision,
       conclusion_summary: conclusionSummary || null,
     }) as Promise<{
-      message: string;
-      evaluation_form: EvaluationForm;
-      opinion: EvaluationOpinionResult;
+      message: string
+      evaluation_form: EvaluationForm
+      opinion?: EvaluationOpinionResult
     }>,
 
-  // ═══════════════════════════════════════════════
-  // LISTAGENS
-  // ═══════════════════════════════════════════════
+  // ── Ficheiros ──────────────────────────────────────
 
-  listForReviewer: (organ: EvaluationOrgan = 'nucleo') =>
-    req('GET', `${organBase(organ)}/reviewer/evaluations`) as Promise<{
-      evaluation_forms: EvaluationForm[];
-    }>,
+  openFile: async (url: string, filename?: string) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, '_blank')
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+    } catch (error) {
+      console.error('Erro ao abrir ficheiro:', error)
+      window.open(url, '_blank')
+    }
+  },
 
-  listForSecretary: (organ: EvaluationOrgan = 'nucleo') =>
-    req('GET', `${organBase(organ)}/secretary/evaluations`) as Promise<{
-      evaluation_forms: EvaluationForm[];
-    }>,
-
-  // ═══════════════════════════════════════════════
-  // ROTAS PARTILHADAS
-  // ═══════════════════════════════════════════════
-
-  listOpinionsForProtocol: (protocolId: number) =>
-    req('GET', `/api/v1/protocols/${protocolId}/opinions`) as Promise<{
-      opinions: EvaluationOpinionResult[];
-    }>,
-
-  downloadOpinion: (opinionId: number) =>
-    downloadApiFile(`/api/v1/opinions/${opinionId}/download`),
-
-  downloadEvaluationForm: (formId: number) =>
-    downloadApiFile(`/api/v1/evaluation-forms/${formId}/download`),
-
-  // ═══════════════════════════════════════════════
-  // UTILITÁRIOS
-  // ═══════════════════════════════════════════════
-
-  openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
-  downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
-};
+  downloadFile: async (url: string, filename?: string) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename || 'documento'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+    } catch (error) {
+      console.error('Erro ao descarregar ficheiro:', error)
+      window.open(url, '_blank')
+    }
+  },
+}

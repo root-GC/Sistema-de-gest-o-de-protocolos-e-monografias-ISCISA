@@ -250,6 +250,55 @@ class EvaluationService
         });
     }
 
+
+
+
+
+
+
+//##########################################################################################
+//REVENDO LOGICA DE CHECK EVALUATION COMPLETION, POIS NAO ESTAVA FUNCIONANDO COMO ESPERADO##
+//##########################################################################################
+    // private function checkEvaluationCompletion(EvaluationForm $form): array
+    // {
+    //     $form = $form->fresh();
+    //     $form->loadMissing('reviewerEvaluations');
+
+    //     if (! $form->hasAllSubmitted()) {
+    //         return ['action' => 'waiting'];
+    //     }
+
+    //     // NC auto-approve: ambos approved
+    //     if (
+    //         $form->organ === Protocol::ORGAN_NUCLEO
+    //         && ! $form->hasAnyNotApproved()
+    //     ) {
+    //         return $this->autoApprove($form);
+    //     }
+
+    //     // NC com needs_deliberation ou not_approved, ou CC sempre → deliberation_pending
+    //     $form->update(['status' => EvaluationForm::STATUS_DELIBERATION_PENDING]);
+    //     return ['action' => 'deliberation_pending'];
+    // }
+
+    // private function autoApprove(EvaluationForm $form): array
+    // {
+    //     $firstReviewer = $form->reviewerEvaluations()
+    //         ->where('status', ReviewerEvaluation::STATUS_SUBMITTED)
+    //         ->first();
+
+    //     return $this->processDecision(
+    //         $form,
+    //         $firstReviewer?->reviewer?->user,
+    //         ReviewerEvaluation::DECISION_APPROVED,
+    //         null
+    //     );
+    // }
+    //              |
+    //              |
+    //              |
+    //              |
+    //          |ABORDAGEM ACTUAL|
     private function checkEvaluationCompletion(EvaluationForm $form): array
     {
         $form = $form->fresh();
@@ -259,19 +308,27 @@ class EvaluationService
             return ['action' => 'waiting'];
         }
 
-        // NC auto-approve: ambos approved
-        if (
-            $form->organ === Protocol::ORGAN_NUCLEO
-            && ! $form->hasAnyNotApproved()
-        ) {
-            return $this->autoApprove($form);
-        }
+        // Nota: a via de auto-approve (Núcleo com ambos "approved") fica
+        // preservada em autoApprove(), mas deixou de ser chamada aqui.
+        // Ambos submetidos, seja qual for a decisão, passam sempre por
+        // deliberação — os revisores encontram-se e usam track changes
+        // no mesmo documento antes da decisão final.
+        //
+        // if ($form->organ === Protocol::ORGAN_NUCLEO && ! $form->hasAnyNotApproved()) {
+        //     return $this->autoApprove($form);
+        // }
 
-        // NC com needs_deliberation ou not_approved, ou CC sempre → deliberation_pending
         $form->update(['status' => EvaluationForm::STATUS_DELIBERATION_PENDING]);
+
         return ['action' => 'deliberation_pending'];
     }
 
+
+    /**
+     * Auto-aprova a ficha quando ambos os revisores do Núcleo aprovam,
+     * saltando a deliberação. Não é chamado no fluxo actual (ver
+     * checkEvaluationCompletion) — mantido para eventual reactivação.
+     */
     private function autoApprove(EvaluationForm $form): array
     {
         $firstReviewer = $form->reviewerEvaluations()
@@ -284,7 +341,7 @@ class EvaluationService
             ReviewerEvaluation::DECISION_APPROVED,
             null
         );
-    }
+    }        
 
     public function scheduleDeliberation(EvaluationForm $form, User $secretary, string $date, string $location): EvaluationForm
     {
@@ -414,8 +471,16 @@ class EvaluationService
     {
         return DB::transaction(function () use ($form, $decider, $decision, $conclusionSummary) {
             $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
+
+            if ($form->status !== EvaluationForm::STATUS_DELIBERATED) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'A ficha ainda não está pronta para decisão final (reunião não foi encerrada com deliberação).'], 422)
+                );
+            }
+            
             $teacherProfile = $decider->teacherProfile;
 
+            
             if (! $teacherProfile) {
                 throw new HttpResponseException(
                     response()->json(['message' => 'Apenas docentes podem decidir.'], 403)
@@ -640,4 +705,80 @@ class EvaluationService
             ->latest('created_at')
             ->get();
     }
+
+    public function closeMeeting(EvaluationForm $form, User $user): EvaluationForm
+{
+    return DB::transaction(function () use ($form, $user) {
+        $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
+
+        if ($form->status !== EvaluationForm::STATUS_IN_DELIBERATION) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'A reunião não está em andamento.'], 422)
+            );
+        }
+
+        if (! $form->hasAllSubmitted()) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'Ambos os revisores devem submeter a decisão antes de encerrar a reunião.'], 422)
+            );
+        }
+
+        $teacherProfile = $user->teacherProfile;
+        $isReviewer = $teacherProfile && $form->reviewerEvaluations()
+            ->where('reviewer_id', $teacherProfile->id)
+            ->exists();
+
+        if (! $isReviewer) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'Apenas um revisor atribuído pode encerrar a reunião.'], 403)
+            );
+        }
+
+        $decisions = $form->reviewerEvaluations()->pluck('decision')->filter()->unique();
+        $deliberated = $decisions->count() === 1; // ambos submeteram a mesma decisão
+
+        if ($deliberated) {
+            // Houve consenso: fecha a reunião, liberta para a aba de decisão final.
+            $form->update(['status' => EvaluationForm::STATUS_DELIBERATED]);
+        } else {
+            // Sem consenso: volta ao ponto de partida para nova marcação pela secretaria.
+            $form->update([
+                'status' => EvaluationForm::STATUS_NOT_DELIBERATED,
+                'deliberation_date' => null,
+                'deliberation_location' => null,
+            ]);
+
+            $form->reviewerEvaluations()->update([
+                'decision' => null,
+                'overall_comment' => null,
+                'status' => ReviewerEvaluation::STATUS_PENDING,
+                'submitted_at' => null,
+            ]);
+        }
+
+        return $form->fresh()->load([
+            'reviewerEvaluations.reviewer.user:id,name',
+            'protocol',
+        ]);
+    });
+}
+
+public function listPendingFinalDecision(User $user): Collection
+{
+    $teacherProfile = $user->teacherProfile;
+    if (! $teacherProfile) return collect();
+
+    return EvaluationForm::query()
+        ->where('status', EvaluationForm::STATUS_DELIBERATED) // já não é 'deliberation_concluded'
+        ->whereHas('reviewerEvaluations', fn($q) => $q->where('reviewer_id', $teacherProfile->id))
+        ->with([
+            'protocol.topic:id,title,status',
+            'protocol.student:id,name,email',
+            'reviewerEvaluations.reviewer.user:id,name',
+        ])
+        ->latest('created_at')
+        ->get();
+}
+
+
 }

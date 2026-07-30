@@ -410,4 +410,41 @@ class EvaluationFormController extends Controller
             'opinions' => $opinions,
         ]);
     }
+
+// Function to close the deliberation meeting, setting the status to either deliberated or not deliberated based on the outcome
+    public function closeMeeting(Request $request, EvaluationForm $form)
+{
+    $this->authorize('submitEvaluation', $form);
+
+    $form = $this->evaluationService->closeMeeting($form, $request->user());
+
+    $message = $form->status === EvaluationForm::STATUS_DELIBERATED
+        ? 'Reunião encerrada com deliberação. Aguardando decisão final.'
+        : 'Reunião encerrada sem consenso. Aguardando agendamento de nova reunião pela secretaria.';
+
+    return response()->json([
+        'message' => $message,
+        'evaluation_form' => EvaluationFormResource::make($form),
+    ]);
+}
+
+
+public function getPendingFinalDecision(Request $request)
+{
+    $user = $request->user();
+
+    if (! $user->hasPermission('protocol.evaluate')) {
+        return response()->json(['message' => 'Sem permissão para ver decisões pendentes.'], 403);
+    }
+
+    // Detecta o órgão pelo prefixo da rota, tal como os outros métodos partilhados já devem fazer
+    $organ = $request->routeIs('nucleo.*') ? 'nucleo' : 'comite_cientifico';
+
+    return response()->json([
+        'evaluation_forms' => EvaluationFormResource::collection(
+            $this->evaluationService->listPendingFinalDecision($user, $organ)
+        ),
+    ]);
+}
+
 }

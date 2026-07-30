@@ -1,114 +1,115 @@
-// src/pages/reviewer/EvaluationPage.tsx
+// src/pages/reviewer/ReviewerMeetingsPage.tsx
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import {
-  topicService,
-  type Topic,
-  type TopicReviewComment,
-} from '../../services/topicService'
+import { useParams, Link } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
-import { evaluationService, type EvaluationForm, type EvaluationOpinionResult, type FormCriterion, type ReviewerEvaluation } from '../../services/evaluationService'
+import { evaluationService, type EvaluationForm, type FormCriterion } from '../../services/evaluationService'
 import { useAuth } from '../../context/AuthContext'
-import TopicJustification from '../../components/TopicJustification'
+import OnlyOfficeEditor from '../../components/OnlyOfficeEditor/OnlyOfficeEditor'
 import '../../styles/global.css'
 
 // ── Helpers ────────────────────────────────────────────
-function isTopicClosed(status?: string) {
-  return status === 'topic_approved_nucleo' || status === 'topic_rejected_nucleo' || status === 'topic_rejected'
+function getMeetingState(evaluationForm: EvaluationForm | null): {
+  label: string
+  className: string
+  description: string
+} {
+  if (!evaluationForm) return { label: 'Carregando...', className: 'is-pending', description: '' }
+  
+  const status = evaluationForm.status
+  
+  switch (status) {
+    case 'deliberation_scheduled':
+      return {
+        label: 'Agendada',
+        className: 'is-deliberation-scheduled',
+        description: `Reunião marcada para ${formatDate(evaluationForm.deliberation_date)} em ${evaluationForm.deliberation_location || 'local a definir'}.`,
+      }
+    
+    case 'in_deliberation':
+      return {
+        label: 'Em Deliberação',
+        className: 'is-deliberation-active',
+        description: 'Reunião em andamento. Registe o resultado da deliberação.',
+      }
+    
+    case 'deliberated':
+      return {
+        label: 'Reunião Encerrada',
+        className: 'is-deliberated',
+        description: 'Houve deliberação. Aguardando decisão final na aba de Decisões Pendentes.',
+      }
+    
+    case 'not_deliberated':
+      return {
+        label: 'Sem Consenso',
+        className: 'is-not-deliberated',
+        description: 'A reunião não chegou a consenso. Aguardando a secretaria agendar nova reunião.',
+      }
+    
+    case 'deliberation_pending':
+      return {
+        label: 'Por Agendar',
+        className: 'is-pending',
+        description: 'Aguardando a secretaria agendar a reunião de deliberação.',
+      }
+    
+    case 'concluded':
+      return {
+        label: evaluationForm.final_decision === 'approved' ? 'Aprovado' : 'Reprovado',
+        className: evaluationForm.final_decision === 'approved' ? 'is-concluded' : 'is-rejected',
+        description: evaluationForm.conclusion_summary || 'Processo concluído.',
+      }
+    
+    default:
+      return { label: status, className: 'is-pending', description: '' }
+  }
 }
 
-function decisionLabel(decision: 'approved' | 'rejected' | null | undefined) {
-  if (decision === 'approved') return 'Aprovado'
-  if (decision === 'rejected') return 'Não aprovado'
-  return 'Pendente'
-}
-
-function evaluationStatusMessage(topic: Topic): string {
-  if (topic.status === 'topic_approved_nucleo') return 'Este tema foi aprovado pelo Núcleo Científico.'
-  if (topic.status === 'topic_rejected_nucleo') return 'Este tema foi rejeitado pelo Núcleo Científico.'
-  return ''
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return 'data não definida'
+  try {
+    return new Date(dateStr).toLocaleDateString('pt-PT', {
+      day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    })
+  } catch { return dateStr }
 }
 
 type ExpandedPanel = 'both' | 'document' | 'form'
-type FormTab = 'my-evaluation' | 'other-evaluation' | 'comparison'
 
 const MIN_PANEL_WIDTH = 300
 const DEFAULT_SPLIT = 50
 
-interface ImportedDocument {
-  file: File
-  name: string
-  size: number
-  url: string
-  uploadedAt: Date
-}
-
 // ── Componente Principal ──────────────────────────────
-export default function EvaluationPage() {
-  const { topicId, protocolId } = useParams<{ topicId: string; protocolId: string }>()
-  const navigate = useNavigate()
+export default function ReviewerMeetingsPage() {
+  const { protocolId } = useParams<{ protocolId: string }>()
   const { user } = useAuth()
-  const isProtocol = !!protocolId
-  const id = Number(protocolId || topicId)
+  const id = Number(protocolId)
 
-  // ── Topic state ──
-  const [topic, setTopic] = useState<Topic | null>(null)
-  const [comments, setComments] = useState<TopicReviewComment[]>([])
-  const [newComment, setNewComment] = useState('')
-  const [decision, setDecision] = useState<'approved' | 'rejected' | ''>('')
-  const [myDecision, setMyDecision] = useState<'approved' | 'rejected' | null>(null)
-  const [evaluationDone, setEvaluationDone] = useState(false)
-
-  // ── Protocol state ──
+  // ── Protocol & Form state ──
   const [protocol, setProtocol] = useState<Protocol | null>(null)
   const [evaluationForm, setEvaluationForm] = useState<EvaluationForm | null>(null)
   const [criterionReviews, setCriterionReviews] = useState<Record<number, string>>({})
-  const [recommendation, setRecommendation] = useState<'approved' | 'rejected' | ''>('')
-  const [needsDeliberation, setNeedsDeliberation] = useState(false)
-  const [overallComment, setOverallComment] = useState('')
-  const [formConcluded, setFormConcluded] = useState(false)
-  const [myEvaluationSubmitted, setMyEvaluationSubmitted] = useState(false)
-  const [allReviewersSubmitted, setAllReviewersSubmitted] = useState(false)
-  const [protocolDecision, setProtocolDecision] = useState<string | null>(null)
-  const [opinionResult, setOpinionResult] = useState<EvaluationOpinionResult | null>(null)
-  const [finalDecision, setFinalDecision] = useState<'approved' | 'rejected' | ''>('')
-  const [conclusionSummary, setConclusionSummary] = useState('')
+  const [finalDecision, setFinalDecision] = useState<string | null>(null)
+
+  // ── Deliberation state ──
+  const [deliberationSummary, setDeliberationSummary] = useState('')
+  const [isStartingDeliberation, setIsStartingDeliberation] = useState(false)
+  const [isClosingMeeting, setIsClosingMeeting] = useState(false)
+  const [closingResult, setClosingResult] = useState<'deliberated' | 'not_deliberated' | null>(null)
 
   // ── Shared state ──
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // ── Document Viewer state ──
-  const [documentUrl, setDocumentUrl] = useState<string | null>(null)
-  const [documentLoading, setDocumentLoading] = useState(false)
-  const [documentError, setDocumentError] = useState<string | null>(null)
-
-  // ── Imported Document state ──
-  const [importedDocument, setImportedDocument] = useState<ImportedDocument | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [isDraggingOver, setIsDraggingOver] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const dropZoneRef = useRef<HTMLDivElement>(null)
+  // ── OnlyOffice state ──
+  const [onlyOfficeFullscreen, setOnlyOfficeFullscreen] = useState(false)
+  const [onlyOfficeKey, setOnlyOfficeKey] = useState(0)
 
   // ── Panel state ──
   const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>('both')
   const [splitPosition, setSplitPosition] = useState(DEFAULT_SPLIT)
   const [isDragging, setIsDragging] = useState(false)
-
-  // ── Form Tab state ──
-  const [activeFormTab, setActiveFormTab] = useState<FormTab>('my-evaluation')
-
-  // ── Other Reviewer state ──
-  const [otherReviewerEval, setOtherReviewerEval] = useState<ReviewerEvaluation | null>(null)
-  const [otherReviewerCriterionReviews, setOtherReviewerCriterionReviews] = useState<Record<number, string>>({})
 
   // ── Refs ──
   const containerRef = useRef<HTMLDivElement>(null)
@@ -127,25 +128,23 @@ export default function EvaluationPage() {
     if (!isDragging) return
     function handleMouseMove(e: MouseEvent) {
       if (!containerRef.current) return
-      const containerRect = containerRef.current.getBoundingClientRect()
-      const containerWidth = containerRect.width
-      const mouseX = e.clientX - containerRect.left
-      let newSplitPercent = (mouseX / containerWidth) * 100
-      const leftPanelPx = (newSplitPercent / 100) * containerWidth
-      const rightPanelPx = containerWidth - leftPanelPx
-      if (leftPanelPx < MIN_PANEL_WIDTH) newSplitPercent = (MIN_PANEL_WIDTH / containerWidth) * 100
-      else if (rightPanelPx < MIN_PANEL_WIDTH) newSplitPercent = ((containerWidth - MIN_PANEL_WIDTH) / containerWidth) * 100
-      newSplitPercent = Math.max(20, Math.min(80, newSplitPercent))
-      setSplitPosition(newSplitPercent)
+      const r = containerRef.current.getBoundingClientRect()
+      const w = r.width
+      const mx = e.clientX - r.left
+      let p = (mx / w) * 100
+      if ((p / 100) * w < MIN_PANEL_WIDTH) p = (MIN_PANEL_WIDTH / w) * 100
+      else if (((100 - p) / 100) * w < MIN_PANEL_WIDTH) p = ((w - MIN_PANEL_WIDTH) / w) * 100
+      p = Math.max(20, Math.min(80, p))
+      setSplitPosition(p)
     }
-    function handleMouseUp() { setIsDragging(false) }
+    function up() { setIsDragging(false) }
     document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
+    document.addEventListener('mouseup', up)
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('mouseup', up)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
@@ -174,447 +173,564 @@ export default function EvaluationPage() {
     }
   }
 
+  function toggleOnlyOfficeFullscreen() {
+    setOnlyOfficeFullscreen(prev => !prev)
+  }
+
+  function reloadOnlyOffice() {
+    setOnlyOfficeKey(-1)
+    setTimeout(() => { setOnlyOfficeKey(prev => Math.abs(prev) + 1) }, 150)
+  }
+
+  // Keyboard shortcuts
   useEffect(() => {
-    function handleKeyboard(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === '\\') { e.preventDefault(); toggleDocumentFullscreen() }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '\\') { e.preventDefault(); toggleFormFullscreen() }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '0') { e.preventDefault(); setSplitPosition(DEFAULT_SPLIT); setExpandedPanel('both') }
+    function k(e: KeyboardEvent) {
+      if (e.key === 'Escape' && onlyOfficeFullscreen) {
+        setOnlyOfficeFullscreen(false)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+        e.preventDefault()
+        toggleDocumentFullscreen()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '\\') {
+        e.preventDefault()
+        toggleFormFullscreen()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '0') {
+        e.preventDefault()
+        setSplitPosition(DEFAULT_SPLIT)
+        setExpandedPanel('both')
+      }
     }
-    window.addEventListener('keydown', handleKeyboard)
-    return () => window.removeEventListener('keydown', handleKeyboard)
-  }, [expandedPanel, splitPosition])
-
-  // ═══════════════════════════════════════════════
-  // IMPORT / UPLOAD + DRAG & DROP
-  // ═══════════════════════════════════════════════
-  function processFile(file: File) {
-    const allowedExtensions = ['.docx', '.doc', '.pdf']
-    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
-    if (!allowedExtensions.includes(fileExtension)) {
-      setError('Formato não suportado. Use .docx, .doc ou .pdf')
-      setTimeout(() => setError(null), 4000)
-      return
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      setError('Arquivo muito grande. Máximo 50MB.')
-      setTimeout(() => setError(null), 4000)
-      return
-    }
-    setIsUploading(true)
-    setError(null)
-    try {
-      const objectUrl = URL.createObjectURL(file)
-      if (importedDocument?.url) URL.revokeObjectURL(importedDocument.url)
-      setImportedDocument({ file, name: file.name, size: file.size, url: objectUrl, uploadedAt: new Date() })
-      setSuccess(`Documento "${file.name}" importado com sucesso!`)
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (e) {
-      setError('Erro ao importar arquivo.')
-      setTimeout(() => setError(null), 4000)
-    } finally {
-      setIsUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
-  function handleImportClick() { fileInputRef.current?.click() }
-
-  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    processFile(file)
-  }
-
-  function handleDragOver(e: React.DragEvent) { e.preventDefault(); e.stopPropagation(); if (!formConcluded && !myEvaluationSubmitted) setIsDraggingOver(true) }
-  function handleDragLeave(e: React.DragEvent) { e.preventDefault(); e.stopPropagation(); setIsDraggingOver(false) }
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault(); e.stopPropagation(); setIsDraggingOver(false)
-    if (formConcluded || myEvaluationSubmitted) return
-    const file = e.dataTransfer.files?.[0]
-    if (!file) return
-    processFile(file)
-  }
-
-  function handleRemoveImported() {
-    if (importedDocument?.url) URL.revokeObjectURL(importedDocument.url)
-    setImportedDocument(null)
-    setSuccess('Documento importado removido.')
-    setTimeout(() => setSuccess(null), 2000)
-  }
-
-  useEffect(() => { return () => { if (importedDocument?.url) URL.revokeObjectURL(importedDocument.url) } }, [])
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [expandedPanel, splitPosition, onlyOfficeFullscreen])
 
   // ═══════════════════════════════════════════════
   // LIFECYCLE
   // ═══════════════════════════════════════════════
-  useEffect(() => { if (isProtocol && id) loadProtocolEvaluation(); else if (id) loadTopicEvaluation() }, [id, isProtocol])
-  useEffect(() => { if (protocol?.latest_document?.download_url) loadDocumentForViewer(protocol.latest_document.download_url) }, [protocol])
+  useEffect(() => {
+    if (id) loadMeetingData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
-  async function loadDocumentForViewer(downloadUrl: string) {
-    setDocumentLoading(true); setDocumentError(null)
-    try { setDocumentUrl(`https://docs.google.com/viewer?url=${encodeURIComponent(downloadUrl)}&embedded=true`) }
-    catch (e) { setDocumentError((e as Error).message); setDocumentUrl(null) }
-    finally { setDocumentLoading(false) }
-  }
-
-  async function loadTopicEvaluation() {
+  async function loadMeetingData() {
     setLoading(true)
-    try {
-      const topicsData = await topicService.listForReviewer()
-      const currentTopic = topicsData.topics.find(t => t.id === id)
-      if (!currentTopic) throw new Error('Tema não encontrado.')
-      setTopic(currentTopic)
-      const currentDecision = currentTopic.my_assignment?.evaluation?.decision ?? null
-      const isClosed = isTopicClosed(currentTopic.status)
-      setMyDecision(currentDecision); setEvaluationDone(Boolean(currentDecision) || isClosed); setDecision('')
-      if (currentDecision) setSuccess(`Avaliação já registada: ${decisionLabel(currentDecision)}.`)
-      else if (isClosed) setSuccess('Processo de revisão concluído.')
-      else setSuccess(null)
-      const response = await topicService.getComments(id)
-      setComments(response.comments || [])
-      setError(null)
-    } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
-  }
-
-  async function addComment(e: React.FormEvent) {
-    e.preventDefault()
-    if (!newComment.trim() || evaluationDone) return
-    setSubmitting(true); setError(null)
-    try { await topicService.submitComment(id, newComment); setNewComment(''); setSuccess('Comentário adicionado!'); await loadTopicEvaluation(); setTimeout(() => setSuccess(null), 3000) }
-    catch (e) { setError((e as Error).message) } finally { setSubmitting(false) }
-  }
-
-  async function submitDecision() {
-    if (!decision || evaluationDone) return
-    setSubmitting(true); setError(null)
-    try { await topicService.submitEvaluation(id, decision); setMyDecision(decision); setSuccess(`Tema ${decision === 'approved' ? 'aprovado' : 'rejeitado'}!`); setEvaluationDone(true); setDecision(''); await loadTopicEvaluation(); setTimeout(() => { navigate('/reviews') }, 2000) }
-    catch (e) { setError((e as Error).message) } finally { setSubmitting(false) }
-  }
-
-  async function loadProtocolEvaluation() {
-    setLoading(true)
+    setError(null)
+    
     try {
       const data = await protocolService.listForReviewer()
-      const currentProtocol = data.protocols.find(p => p.id === id)
-      if (!currentProtocol) throw new Error('Protocolo não encontrado.')
+      const currentProtocol = data.protocols?.find(p => p.id === id)
+      
+      if (!currentProtocol) {
+        setError('Protocolo não encontrado.')
+        setLoading(false)
+        return
+      }
+      
       setProtocol(currentProtocol)
 
       const formsData = await evaluationService.listForReviewer()
-      const form = formsData.evaluation_forms.find(f => f.protocol_id === id)
-      if (!form) throw new Error('Ficha de avaliação não encontrada.')
+      const form = formsData.evaluation_forms?.find(f => f.protocol_id === id)
+      
+      if (!form) {
+        setError('Ficha de avaliação não encontrada.')
+        setLoading(false)
+        return
+      }
 
       const fullForm = await evaluationService.getForm(form.id)
-      setEvaluationForm(fullForm.evaluation_form)
-
-      const allEvals = fullForm.evaluation_form.reviewer_evaluations || []
-      const currentUserId = user?.id ? Number(user.id) : null
-      const myEval = allEvals.find(re => currentUserId !== null && re.reviewer?.user?.id === currentUserId)
-      const mySubmitStatus = myEval?.status === 'submitted'
-      const allSubmitted = allEvals.length > 0 && allEvals.every(re => re.status === 'submitted')
-      const concluded = fullForm.evaluation_form.status === 'concluded'
-
-      setFormConcluded(concluded)
-      setMyEvaluationSubmitted(mySubmitStatus)
-      setAllReviewersSubmitted(allSubmitted)
-      setProtocolDecision(fullForm.evaluation_form.final_decision || myEval?.decision || null)
-      setRecommendation(''); setNeedsDeliberation(false); setOverallComment(''); setFinalDecision('')
-      setConclusionSummary(fullForm.evaluation_form.conclusion_summary || '')
-      setCriterionReviews({}); setOpinionResult(null)
-
-      const otherEval = allEvals.find(re => currentUserId !== null && re.reviewer?.user?.id !== currentUserId)
-      if (otherEval) {
-        setOtherReviewerEval(otherEval)
-        const otherReviews: Record<number, string> = {}
-        if (otherEval.criterion_reviews) otherEval.criterion_reviews.forEach(cr => { if (cr.evaluation_form_criterion_id && cr.comment) otherReviews[cr.evaluation_form_criterion_id] = cr.comment })
-        setOtherReviewerCriterionReviews(otherReviews)
-      } else { setOtherReviewerEval(null); setOtherReviewerCriterionReviews({}) }
-
-      if (myEval?.criterion_reviews) {
-        const reviews: Record<number, string> = {}
-        myEval.criterion_reviews.forEach(cr => { if (cr.evaluation_form_criterion_id && cr.comment) reviews[cr.evaluation_form_criterion_id] = cr.comment })
-        setCriterionReviews(reviews)
+      const formData = fullForm.evaluation_form
+      
+      if (!formData) {
+        setError('Dados da ficha não encontrados.')
+        setLoading(false)
+        return
       }
 
-      if (concluded) setSuccess('Protocolo já avaliado.')
-      else if (mySubmitStatus) setSuccess('Avaliação submetida. Aguarde conclusão.')
-      else setSuccess(null)
+      setEvaluationForm(formData)
+      setFinalDecision(formData.final_decision || null)
+      setDeliberationSummary(formData.conclusion_summary || '')
+      setClosingResult(null)
 
-      try {
-        const { opinions } = await protocolService.listOpinions(id)
-        const latestOpinion = opinions[0]
-        if (latestOpinion) setOpinionResult({ id: latestOpinion.id, decision: latestOpinion.decision, issued_at: latestOpinion.issued_at, document_url: latestOpinion.document_url || undefined, download_url: latestOpinion.download_url || undefined, evaluation_form_download_url: latestOpinion.evaluation_form_download_url || undefined })
-      } catch { setOpinionResult(null) }
+      const allEvals = formData.reviewer_evaluations || []
+      const reviews: Record<number, string> = {}
+      allEvals.forEach(rev => {
+        ;(rev.criterion_reviews || []).forEach(cr => {
+          if (cr.evaluation_form_criterion_id && cr.comment) {
+            if (!reviews[cr.evaluation_form_criterion_id]) {
+              reviews[cr.evaluation_form_criterion_id] = cr.comment
+            }
+          }
+        })
+      })
+      setCriterionReviews(reviews)
 
-      setError(null)
-    } catch (e) { setError((e as Error).message) } finally { setLoading(false) }
-  }
-
-  async function handleSaveCriterionReview(formCriterionId: number) {
-    if (!evaluationForm || myEvaluationSubmitted || formConcluded) return
-    setError(null)
-    try { await evaluationService.saveCriterionReview(evaluationForm.id, formCriterionId, criterionReviews[formCriterionId] || null); setSuccess('Comentário guardado!'); setTimeout(() => setSuccess(null), 2000) }
-    catch (e) { setError((e as Error).message) }
-  }
-
-  async function openFile(url: string | null | undefined, fallbackFilename?: string) { if (!url) return; try { await evaluationService.openFile(url, fallbackFilename) } catch (e) { setError((e as Error).message) } }
-  async function downloadFile(url: string | null | undefined, fallbackFilename?: string) { if (!url) return; try { await evaluationService.downloadFile(url, fallbackFilename) } catch (e) { setError((e as Error).message) } }
-
-  // ═══════════════════════════════════════════════
-  // SUBMETER AVALIAÇÃO (CORRIGIDO)
-  // ═══════════════════════════════════════════════
-  async function handleSubmitEvaluation() {
-    if (!evaluationForm || !recommendation || myEvaluationSubmitted || formConcluded) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      // 1. Upload do documento revisado (se existir)
-      if (importedDocument?.file) {
-        await protocolService.uploadReviewedDocument(id, importedDocument.file)
-      }
-
-      // 2. Submeter avaliação com o payload correto: decision + overall_comment
-      const result = await evaluationService.submit(
-        evaluationForm.id,
-        recommendation === 'approved' ? 'approved' : 'not_approved',
-        overallComment || null
-      )
-
-      setSuccess(result.message || 'Avaliação submetida com sucesso!')
-      setMyEvaluationSubmitted(true)
-      await loadProtocolEvaluation()
     } catch (e: any) {
-      console.error('Erro ao submeter avaliação:', e)
-      setError(e?.message || e?.response?.data?.message || 'Erro ao submeter avaliação.')
+      setError(e?.message || 'Erro ao carregar dados da reunião.')
     } finally {
-      setSubmitting(false)
+      setLoading(false)
     }
   }
 
-  async function handleDecide() {
-    if (!evaluationForm || formConcluded || !finalDecision) return
-    setSubmitting(true); setError(null)
-    try { const result = await evaluationService.decide(evaluationForm.id, finalDecision, conclusionSummary || null); setSuccess(result.message); setFormConcluded(true); setProtocolDecision(finalDecision); if (result.opinion) setOpinionResult(result.opinion) }
-    catch (e) { setError((e as Error).message) } finally { setSubmitting(false) }
+  async function handleStartDeliberation() {
+    if (!evaluationForm) return
+    setIsStartingDeliberation(true)
+    setError(null)
+    try {
+      await evaluationService.startDeliberation(evaluationForm.id)
+      setSuccess('Reunião de deliberação iniciada.')
+      await loadMeetingData()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setIsStartingDeliberation(false)
+    }
   }
 
-  // ═══════════════════════════════════════════════
-  // RENDER HELPERS
-  // ═══════════════════════════════════════════════
-  function renderCriterionRow(criterion: FormCriterion, isReadOnly: boolean = false) {
-    const myComment = criterionReviews[criterion.id] || ''
-    const otherComment = otherReviewerCriterionReviews[criterion.id] || ''
-    const showComparison = activeFormTab === 'comparison' && otherReviewerEval
-    return (
-      <div key={criterion.id} className="criterion-item">
-        <div className="criterion-header">
-          <label htmlFor={`criterion-${criterion.id}`}>{criterion.criterion_name}</label>
-          <div className="criterion-rating">
-            {[1, 2, 3, 4, 5].map(score => (
-              <button key={score} type="button" className={`rating-dot ${myComment?.startsWith(`Nota ${score}`) ? 'is-active' : ''}`}
-                onClick={() => { if (myEvaluationSubmitted || formConcluded || isReadOnly) return; const c = myComment?.replace(/^Nota \d\/5 - /, '') || ''; setCriterionReviews(prev => ({ ...prev, [criterion.id]: `Nota ${score}/5 - ${c}` })) }}
-                disabled={myEvaluationSubmitted || formConcluded || isReadOnly} title={`Nota ${score}`}>{score}</button>
-            ))}
-          </div>
-        </div>
-        <div className={showComparison ? 'criterion-comparison' : ''}>
-          <div className="criterion-review-block">
-            {showComparison && <div className="criterion-review-label criterion-review-label--mine"><span className="material-symbols-outlined">person</span>Minha avaliação</div>}
-            <textarea id={`criterion-${criterion.id}`} value={myComment?.replace(/^Nota \d\/5 - /, '') || ''}
-              onChange={e => setCriterionReviews(prev => ({ ...prev, [criterion.id]: e.target.value }))}
-              onBlur={() => !isReadOnly && handleSaveCriterionReview(criterion.id)}
-              placeholder="Observações sobre este critério..." rows={showComparison ? 2 : 3}
-              disabled={myEvaluationSubmitted || formConcluded || isReadOnly} />
-          </div>
-          {showComparison && otherReviewerEval && (
-            <div className="criterion-review-block criterion-review-block--other">
-              <div className="criterion-review-label criterion-review-label--other">
-                <span className="material-symbols-outlined">group</span>
-                {otherReviewerEval.reviewer?.user?.name || 'Outro Revisor'}
-                {otherReviewerEval.status === 'submitted' ? <span className="other-review-badge submitted">Submetido</span> : <span className="other-review-badge pending">Pendente</span>}
-              </div>
-              {otherComment ? <div className="other-review-content">{otherComment.replace(/^Nota \d\/5 - /, '')}</div> : <div className="other-review-empty"><span className="material-symbols-outlined">hourglass_empty</span><span>Aguardando...</span></div>}
-            </div>
-          )}
-        </div>
-      </div>
-    )
+  async function handleCloseMeeting(result: 'deliberated' | 'not_deliberated') {
+    if (!evaluationForm) return
+    setIsClosingMeeting(true)
+    setClosingResult(result)
+    setError(null)
+    try {
+      const { message } = await evaluationService.closeMeeting(evaluationForm.id, result)
+      setSuccess(message)
+      await loadMeetingData()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setIsClosingMeeting(false)
+      setClosingResult(null)
+    }
+  }
+
+  async function openFile(url: string | null | undefined) {
+    if (!url) return
+    try { await evaluationService.openFile(url) } catch (e) {}
+  }
+  
+  async function downloadFile(url: string | null | undefined) {
+    if (!url) return
+    try { await evaluationService.downloadFile(url) } catch (e) {}
   }
 
   // ═══════════════════════════════════════════════
   // LOADING
   // ═══════════════════════════════════════════════
-  if (loading) return <div className="page-loader"><div className="page-loader__spinner" /><span className="page-loader__text">A carregar avaliação...</span></div>
+  if (loading) return (
+    <div className="page-loader">
+      <div className="page-loader__spinner" />
+      <span className="page-loader__text">A carregar reunião de deliberação...</span>
+    </div>
+  )
 
   // ═══════════════════════════════════════════════
-  // TOPIC EVALUATION
+  // ERROR STATE
   // ═══════════════════════════════════════════════
-  if (!isProtocol && topic) {
-    return (
-      <div className="evaluation-topic-page">
-        <header className="evaluation-topic-header">
-          <div>
-            <div className="evaluation-title-row"><Link to="/reviews" className="evaluation-back"><span className="material-symbols-outlined">arrow_back</span></Link><h1>Avaliação do tema #{id}</h1></div>
-            <p className="evaluation-topic-title">{topic.title}</p>
-            {topic.status_label && <span className={`badge ${topic.status === 'topic_approved_nucleo' ? 'badge-success' : topic.status === 'topic_rejected_nucleo' ? 'badge-error' : 'badge-warning'}`}>{topic.status_label}</span>}
-          </div>
-        </header>
-        {topic && <TopicJustification justification={topic.justification} showEmpty />}
-        {success && <div role="status" className="eval-notice eval-notice--success"><span className="material-symbols-outlined">check_circle</span>{success}</div>}
-        {error && <div role="alert" className="eval-notice eval-notice--error"><span className="material-symbols-outlined">error</span>{error}</div>}
-        {evaluationDone && <div className="evaluation-done-banner"><span className="material-symbols-outlined">task_alt</span><div><strong>Processo concluído</strong><p>{evaluationStatusMessage(topic)}</p></div></div>}
-        <section className="card">
-          <h2 className="section-title"><span className="material-symbols-outlined">chat</span>Comentários ({comments.length})</h2>
-          {comments.length === 0 ? <div className="empty-state"><span className="material-symbols-outlined">forum</span>Nenhum comentário ainda.</div> : <div className="comments-list">{comments.map(comment => <div key={comment.id} className="comment-item"><div className="comment-header"><span className="comment-author">{comment.user?.name || 'Anônimo'}</span><span className="comment-date">{new Date(comment.created_at).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div><p>{comment.content}</p></div>)}</div>}
-        </section>
-        {!evaluationDone && <form onSubmit={addComment} className="card"><label htmlFor="comment">Adicionar comentário</label><textarea id="comment" value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Escreva o seu comentário..." rows={4} /><button type="submit" className="btn btn-primary" disabled={submitting || !newComment.trim()}>{submitting ? 'A enviar...' : 'Comentar'}</button></form>}
-        {!evaluationDone && <section className="card decision-card"><h2 className="section-title"><span className="material-symbols-outlined">gavel</span>Decisão final</h2><div className="decision-options"><label className={`decision-option ${decision === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="decision" checked={decision === 'approved'} onChange={() => setDecision('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovado</label><label className={`decision-option ${decision === 'rejected' ? 'is-rejected' : ''}`}><input type="radio" name="decision" checked={decision === 'rejected'} onChange={() => setDecision('rejected')} /><span className="material-symbols-outlined">cancel</span>Não Aprovado</label></div><button onClick={submitDecision} className="btn btn-primary btn-block" disabled={!decision || submitting}>{submitting ? 'A processar...' : 'Confirmar decisão'}</button></section>}
-        {evaluationDone && <Link to="/reviews" className="btn btn-outline back-link"><span className="material-symbols-outlined">arrow_back</span>Voltar</Link>}
-      </div>
-    )
-  }
+  if (error && !evaluationForm) return (
+    <div className="page-loader">
+      <span className="material-symbols-outlined" style={{ fontSize: 48, marginBottom: 16 }}>error_outline</span>
+      <p>{error}</p>
+      <Link to="/reviewer/meetings" className="btn btn-outline" style={{ marginTop: 16 }}>Voltar</Link>
+    </div>
+  )
 
   // ═══════════════════════════════════════════════
-  // PROTOCOL EVALUATION (SPLIT-VIEW)
+  // RENDER
   // ═══════════════════════════════════════════════
-  if (isProtocol && protocol) {
-    const finalProtocolDecision = evaluationForm?.final_decision || protocolDecision
-    const protocolEvaluationState = formConcluded ? 'Concluído' : myEvaluationSubmitted ? 'Submetido' : 'Pendente'
+  if (protocol && evaluationForm) {
+    const state = getMeetingState(evaluationForm)
+    const isInDeliberation = evaluationForm?.status === 'in_deliberation'
+    const isScheduled = evaluationForm?.status === 'deliberation_scheduled'
+    const isConcluded = evaluationForm?.status === 'concluded'
+    const isDeliberated = evaluationForm?.status === 'deliberated'
+    const isNotDeliberated = evaluationForm?.status === 'not_deliberated'
+    
     const protocolCode = protocol.code || `ISC-P-${id}`
     const docFileName = protocol.latest_document?.file_name || `${protocolCode}.docx`
 
+    const criteriaMap = (evaluationForm?.form_criteria || []).reduce<Record<string, FormCriterion[]>>((g, c) => {
+      const k = c.group_name || 'Outros'
+      if (!g[k]) g[k] = []
+      g[k].push(c)
+      return g
+    }, {})
+
+    const criteriaComments: Record<number, { reviewer_name: string; comment: string }[]> = {}
+    ;(evaluationForm?.reviewer_evaluations || []).forEach(rev => {
+      const reviewerName = rev.reviewer?.user?.name || 'Revisor'
+      ;(rev.criterion_reviews || []).forEach(cr => {
+        if (cr.evaluation_form_criterion_id && cr.comment) {
+          if (!criteriaComments[cr.evaluation_form_criterion_id]) criteriaComments[cr.evaluation_form_criterion_id] = []
+          const exists = criteriaComments[cr.evaluation_form_criterion_id].some(c => c.reviewer_name === reviewerName)
+          if (!exists) criteriaComments[cr.evaluation_form_criterion_id].push({ reviewer_name: reviewerName, comment: cr.comment })
+        }
+      })
+    })
+
     return (
-      <div className={`evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
-        
-        {/* LEFT: DOCUMENT VIEWER */}
-        <section className="doc-viewer-pane" style={{
-          width: expandedPanel === 'document' ? '100%' : expandedPanel === 'form' ? '0%' : `${splitPosition}%`,
-          minWidth: expandedPanel === 'document' ? '100%' : expandedPanel === 'form' ? '0px' : `${MIN_PANEL_WIDTH}px`,
-          opacity: expandedPanel === 'form' ? 0 : 1,
-          pointerEvents: expandedPanel === 'form' ? 'none' : 'auto',
-        }}>
-          <div className="doc-toolbar">
-            <div className="doc-toolbar-left">
-              <button className="panel-toggle-btn" onClick={toggleDocumentFullscreen} title={expandedPanel === 'document' ? 'Restaurar (Ctrl+\\)' : 'Expandir (Ctrl+\\)'}>
-                <span className="material-symbols-outlined">{expandedPanel === 'document' ? 'collapse_content' : 'expand_content'}</span>
-              </button>
-              <span className="doc-filename" title={docFileName}>{docFileName}</span>
-              <span className="doc-file-type-badge">DOCX</span>
-            </div>
-            <div className="doc-toolbar-right">
-              <button onClick={() => openFile(protocol.latest_document?.download_url, docFileName)} title="Abrir em nova aba">
-                <span className="material-symbols-outlined">open_in_new</span>
-              </button>
-            </div>
-          </div>
-
-          <div className={`doc-content-area ${isDraggingOver ? 'doc-content-area--drag-over' : ''}`}
-            onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} ref={dropZoneRef}>
-            {isDraggingOver && <div className="doc-drop-overlay"><span className="material-symbols-outlined">cloud_upload</span><p>Solte o arquivo aqui para importar</p><span className="doc-drop-formats">.docx, .doc, .pdf (máx. 50MB)</span></div>}
-            {documentLoading ? <div className="doc-state-loading"><div className="doc-spinner" /><p>A carregar documento...</p></div> : 
-             documentError ? <div className="doc-state-error"><span className="material-symbols-outlined">error_outline</span><p>{documentError}</p></div> : 
-             !documentUrl ? <div className="doc-state-empty"><span className="material-symbols-outlined">description</span><p>Nenhum documento disponível</p></div> : 
-             <div className="doc-viewer-iframe-wrapper"><iframe src={documentUrl} className="doc-viewer-iframe" title="Documento do Protocolo" sandbox="allow-scripts allow-same-origin allow-popups allow-forms" /></div>}
-          </div>
-
-          <div className="doc-bottom-bar">
-            <div className="doc-bottom-bar-left">
-              <span className="material-symbols-outlined">description</span>
-              <span className="doc-bottom-filename">{docFileName}</span>
-              <span className="doc-bottom-filesize">{protocol.latest_document?.version ? `v${protocol.latest_document.version}` : ''}</span>
-            </div>
-            <div className="doc-bottom-bar-right">
-              <button className="doc-bottom-btn doc-bottom-btn--download" onClick={() => downloadFile(protocol.latest_document?.download_url, docFileName)} title="Baixar documento original">
-                <span className="material-symbols-outlined">download</span><span>Download</span>
-              </button>
-              <div className="doc-bottom-divider" />
-              <input ref={fileInputRef} type="file" accept=".docx,.doc,.pdf" onChange={handleFileSelected} style={{ display: 'none' }} />
-              {importedDocument ? (
-                <div className="doc-imported-preview">
-                  <div className="doc-imported-preview-icon"><span className="material-symbols-outlined">description</span></div>
-                  <div className="doc-imported-preview-info"><span className="doc-imported-preview-name">{importedDocument.name}</span><span className="doc-imported-preview-size">{formatFileSize(importedDocument.size)}</span></div>
-                  <div className="doc-imported-preview-actions"><button className="doc-imported-preview-replace" onClick={handleImportClick} title="Substituir"><span className="material-symbols-outlined">swap_horiz</span></button><button className="doc-imported-preview-remove" onClick={handleRemoveImported} title="Remover"><span className="material-symbols-outlined">close</span></button></div>
-                </div>
-              ) : (
-                <button className="doc-bottom-btn doc-bottom-btn--import" onClick={handleImportClick} disabled={isUploading || formConcluded || myEvaluationSubmitted} title="Importar documento revisado do computador">
-                  <span className="material-symbols-outlined">{isUploading ? 'hourglass_top' : 'upload_file'}</span><span>{isUploading ? 'Importando...' : 'Importar'}</span>
+      <>
+        {/* ── ONLYOFFICE FULLSCREEN OVERLAY ── */}
+        {onlyOfficeFullscreen && (
+          <div className="onlyoffice-fullscreen-overlay">
+            <div className="onlyoffice-fullscreen-toolbar">
+              <div className="onlyoffice-fullscreen-toolbar-left">
+                <span className="onlyoffice-fullscreen-title">{docFileName}</span>
+              </div>
+              <div className="onlyoffice-fullscreen-toolbar-right">
+                <button className="onlyoffice-fullscreen-btn" onClick={reloadOnlyOffice} title="Recarregar editor">
+                  <span className="material-symbols-outlined">refresh</span>
                 </button>
-              )}
-              {importedDocument && <span className="doc-imported-badge"><span className="material-symbols-outlined">check_circle</span>Pronto para enviar</span>}
-            </div>
-          </div>
-        </section>
-
-        {/* DIVIDER */}
-        <div ref={dividerRef} className={`split-pane-divider ${isDragging ? 'is-dragging' : ''}`} onMouseDown={handleMouseDown} title="Arraste para redimensionar">
-          <div className="split-pane-divider-handle"><span className="material-symbols-outlined">drag_indicator</span></div>
-        </div>
-
-        {/* RIGHT: FICHA DE AVALIAÇÃO */}
-        <section className="evaluation-form-pane" style={{
-          width: expandedPanel === 'form' ? '100%' : expandedPanel === 'document' ? '0%' : `${100 - splitPosition}%`,
-          minWidth: expandedPanel === 'form' ? '100%' : expandedPanel === 'document' ? '0px' : `${MIN_PANEL_WIDTH}px`,
-          opacity: expandedPanel === 'document' ? 0 : 1,
-          pointerEvents: expandedPanel === 'document' ? 'none' : 'auto',
-        }}>
-          <div className="evaluation-form-header">
-            <span className="material-symbols-outlined">fact_check</span>
-            <div className="form-tabs">
-              <button className={`form-tab ${activeFormTab === 'my-evaluation' ? 'is-active' : ''}`} onClick={() => setActiveFormTab('my-evaluation')}><span className="material-symbols-outlined">edit_note</span>Minha Avaliação</button>
-              {otherReviewerEval && <button className={`form-tab ${activeFormTab === 'other-evaluation' ? 'is-active' : ''}`} onClick={() => setActiveFormTab('other-evaluation')}><span className="material-symbols-outlined">visibility</span>{otherReviewerEval.reviewer?.user?.name || 'Outro Revisor'}{otherReviewerEval.status === 'submitted' && <span className="tab-status-dot tab-status-dot--submitted" />}</button>}
-              {otherReviewerEval && <button className={`form-tab ${activeFormTab === 'comparison' ? 'is-active' : ''}`} onClick={() => setActiveFormTab('comparison')}><span className="material-symbols-outlined">compare_arrows</span>Comparar</button>}
-            </div>
-            <button className="panel-toggle-btn panel-toggle-btn--form" onClick={toggleFormFullscreen} title={expandedPanel === 'form' ? 'Restaurar (Ctrl+Shift+\\)' : 'Expandir (Ctrl+Shift+\\)'}><span className="material-symbols-outlined">{expandedPanel === 'form' ? 'collapse_content' : 'expand_content'}</span></button>
-          </div>
-
-          <div className="evaluation-form-content">
-            <div className="eval-info-card"><div className="eval-info-header"><span className="eval-info-label">Estado Atual</span><span className={`eval-info-badge ${formConcluded ? 'is-concluded' : myEvaluationSubmitted ? 'is-submitted' : 'is-pending'}`}>{protocolEvaluationState}</span></div><h4>Ficha de Avaliação Científica</h4><p>{protocolCode} — {protocol.topic?.title || protocol.version}</p></div>
-            {success && <div role="status" className="eval-notice eval-notice--success"><span className="material-symbols-outlined">check_circle</span>{success}</div>}
-            {error && <div role="alert" className="eval-notice eval-notice--error"><span className="material-symbols-outlined">error</span>{error}</div>}
-            {formConcluded && <div className={`eval-outcome-banner ${finalProtocolDecision === 'approved' ? 'is-approved' : 'is-rejected'}`}><span className="material-symbols-outlined">{finalProtocolDecision === 'approved' ? 'check_circle' : 'cancel'}</span><div><strong>{finalProtocolDecision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Reprovado'}</strong><p>{evaluationForm?.conclusion_summary || 'Processo concluído.'}</p></div></div>}
-            {evaluationForm && <div className="eval-reviewer-status"><h3><span className="material-symbols-outlined">group</span>Estado dos Revisores</h3><div className="reviewer-chips-list">{(evaluationForm.reviewer_evaluations || []).map((re, idx) => { const isCurrentUser = user?.id && re.reviewer?.user?.id === Number(user.id); return <span key={re.id} className={`reviewer-chip ${re.status === 'submitted' ? 'is-submitted' : ''} ${isCurrentUser ? 'is-you' : ''}`}>{re.reviewer?.user?.name || `Revisor #${idx + 1}`}{isCurrentUser ? ' (você)' : ''}: {re.status === 'submitted' ? 'Submetido' : 'Pendente'}</span> })}</div></div>}
-            
-            {/* Critérios */}
-            {activeFormTab === 'my-evaluation' && evaluationForm && (
-              <>
-                <div className="eval-criteria-section">
-                  {Object.entries((evaluationForm.form_criteria || []).reduce<Record<string, FormCriterion[]>>((groups, c) => { const group = c.group_name || 'Outros'; if (!groups[group]) groups[group] = []; groups[group].push(c); return groups }, {}))
-                    .map(([groupName, criteria]) => <div key={groupName} className="criteria-group-block"><h3 className="criteria-group-title"><span className="material-symbols-outlined">checklist</span>{groupName}</h3>{criteria.map(criterion => renderCriterionRow(criterion, false))}</div>)}
-                </div>
-                {!formConcluded && !myEvaluationSubmitted && (
-                  <div className="eval-recommendation-section">
-                    <h3><span className="material-symbols-outlined">rate_review</span>Conclusão</h3>
-                    <div className="eval-field"><label htmlFor="overall-comment">Resumo / Parecer</label><textarea id="overall-comment" value={overallComment} onChange={e => setOverallComment(e.target.value)} placeholder="Resumo da sua avaliação..." rows={3} /></div>
-                    <div className="recommendation-choices">
-                      <label className={`recommendation-choice ${recommendation === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="recommendation" checked={recommendation === 'approved'} onChange={() => setRecommendation('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovar protocolo</label>
-                      <label className={`recommendation-choice ${recommendation === 'rejected' ? 'is-rejected' : ''}`}><input type="radio" name="recommendation" checked={recommendation === 'rejected'} onChange={() => setRecommendation('rejected')} /><span className="material-symbols-outlined">cancel</span>Reprovar protocolo</label>
-                    </div>
-                    <button className="btn btn-primary btn-block btn-lg" onClick={handleSubmitEvaluation} disabled={!recommendation || submitting}>
-                      {submitting ? 'A submeter...' : importedDocument ? 'Enviar Avaliação + Documento' : 'Submeter Avaliação'}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-
-            {evaluationForm && !formConcluded && allReviewersSubmitted && (
-              <div className="eval-final-decision"><h3><span className="material-symbols-outlined">gavel</span>Decisão Final</h3><p>Todos os revisores submeteram.</p><div className="eval-field"><label htmlFor="conclusion-summary">Resumo</label><textarea id="conclusion-summary" value={conclusionSummary} onChange={e => setConclusionSummary(e.target.value)} placeholder="Resumo..." rows={3} /></div><div className="recommendation-choices"><label className={`recommendation-choice ${finalDecision === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="final-decision" checked={finalDecision === 'approved'} onChange={() => setFinalDecision('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovar</label><label className={`recommendation-choice ${finalDecision === 'rejected' ? 'is-rejected' : ''}`}><input type="radio" name="final-decision" checked={finalDecision === 'rejected'} onChange={() => setFinalDecision('rejected')} /><span className="material-symbols-outlined">cancel</span>Reprovar</label></div><button className="btn btn-primary btn-block btn-lg" onClick={handleDecide} disabled={!finalDecision || submitting}>{submitting ? 'A confirmar...' : 'Confirmar Decisão Final'}</button></div>
-            )}
-            <div style={{ height: '40px' }} />
-          </div>
-
-          {!formConcluded && evaluationForm && (
-            <div className="eval-form-footer">
-              <div className="eval-footer-left"><Link to="/reviews" className="btn btn-outline btn-sm"><span className="material-symbols-outlined">arrow_back</span>Voltar</Link></div>
-              <div className="eval-footer-right">
-                {!myEvaluationSubmitted && <><button className="btn btn-outline btn-sm" onClick={() => setRecommendation('rejected')}><span className="material-symbols-outlined">cancel</span>Rejeitar</button><button className="btn btn-outline btn-sm"><span className="material-symbols-outlined">edit_note</span>Pedir Correções</button><button className="btn btn-primary" onClick={handleSubmitEvaluation} disabled={!recommendation || submitting}><span className="material-symbols-outlined">check_circle</span>{importedDocument ? 'Enviar com Revisão' : 'Aprovar Protocolo'}</button></>}
-                {allReviewersSubmitted && !formConcluded && <button className="btn btn-primary" onClick={handleDecide} disabled={!finalDecision || submitting}><span className="material-symbols-outlined">gavel</span>Decidir</button>}
+                <button className="onlyoffice-fullscreen-close" onClick={toggleOnlyOfficeFullscreen} title="Sair (Esc)">
+                  <span className="material-symbols-outlined">close_fullscreen</span>
+                  <span>Sair</span>
+                </button>
               </div>
             </div>
+            <div className="onlyoffice-fullscreen-content">
+              {protocol.latest_document && onlyOfficeKey >= 0 ? (
+                <OnlyOfficeEditor key={onlyOfficeKey} protocolId={protocol.id} height="100%" />
+              ) : (
+                <div className="onlyoffice-loading">
+                  <div className="onlyoffice-loading-content">
+                    <div className="onlyoffice-spinner" />
+                    <span>Recarregando editor...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── SPLIT VIEW ── */}
+        <div className={`evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
+          
+          {/* LEFT: ONLYOFFICE EDITOR */}
+          <section className="doc-viewer-pane" style={{
+            width: expandedPanel === 'document' ? '100%' : expandedPanel === 'form' ? '0%' : `${splitPosition}%`,
+            minWidth: expandedPanel === 'document' ? '100%' : expandedPanel === 'form' ? '0px' : `${MIN_PANEL_WIDTH}px`,
+            opacity: expandedPanel === 'form' ? 0 : 1,
+            pointerEvents: expandedPanel === 'form' ? 'none' : 'auto',
+          }}>
+            <div className="doc-toolbar">
+              <div className="doc-toolbar-left">
+                <button className="doc-toolbar-btn" onClick={toggleDocumentFullscreen}>
+                  <span className="material-symbols-outlined">{expandedPanel === 'document' ? 'collapse_content' : 'expand_content'}</span>
+                </button>
+                <span className="doc-filename">{docFileName}</span>
+                <span className="doc-file-type-badge">DOCX</span>
+              </div>
+              <div className="doc-toolbar-right">
+                <button className="doc-toolbar-btn" onClick={reloadOnlyOffice} title="Recarregar editor">
+                  <span className="material-symbols-outlined">refresh</span>
+                </button>
+                <button className="doc-toolbar-btn" onClick={toggleOnlyOfficeFullscreen} title="Tela cheia">
+                  <span className="material-symbols-outlined">fullscreen</span>
+                </button>
+                <button className="doc-toolbar-btn" onClick={() => openFile(protocol.latest_document?.download_url)} title="Abrir em nova aba">
+                  <span className="material-symbols-outlined">open_in_new</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="doc-content-area">
+              {!protocol.latest_document ? (
+                <div className="doc-state-empty"><span className="material-symbols-outlined">description</span><p>Nenhum documento disponível</p></div>
+              ) : onlyOfficeKey >= 0 ? (
+                <OnlyOfficeEditor key={onlyOfficeKey} protocolId={protocol.id} height="100%" />
+              ) : (
+                <div className="onlyoffice-loading"><div className="onlyoffice-loading-content"><div className="onlyoffice-spinner" /><span>Recarregando editor...</span></div></div>
+              )}
+            </div>
+
+            <div className="doc-bottom-bar">
+              <div className="doc-bottom-bar-left">
+                <span className="material-symbols-outlined">description</span>
+                <span className="doc-bottom-filename">{docFileName}</span>
+              </div>
+              <div className="doc-bottom-bar-right">
+                <button className="doc-bottom-btn doc-bottom-btn--download" onClick={() => downloadFile(protocol.latest_document?.download_url)}>
+                  <span className="material-symbols-outlined">download</span><span>Download</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* DIVIDER */}
+          {expandedPanel === 'both' && (
+            <div ref={dividerRef} className={`split-pane-divider ${isDragging ? 'is-dragging' : ''}`} onMouseDown={handleMouseDown}>
+              <div className="split-pane-divider-handle"><span className="material-symbols-outlined">drag_indicator</span></div>
+            </div>
           )}
-        </section>
-      </div>
+
+          {/* RIGHT: REUNIÃO DE DELIBERAÇÃO */}
+          <section className="evaluation-form-pane" style={{
+            width: expandedPanel === 'form' ? '100%' : expandedPanel === 'document' ? '0%' : `${100 - splitPosition}%`,
+            minWidth: expandedPanel === 'form' ? '100%' : expandedPanel === 'document' ? '0px' : `${MIN_PANEL_WIDTH}px`,
+            opacity: expandedPanel === 'document' ? 0 : 1,
+            pointerEvents: expandedPanel === 'document' ? 'none' : 'auto',
+          }}>
+            <div className="evaluation-form-header">
+              <span className="material-symbols-outlined">groups</span>
+              <span className="evaluation-form-header-title">Reunião de Deliberação</span>
+              <button className="doc-toolbar-btn" onClick={toggleFormFullscreen}>
+                <span className="material-symbols-outlined">{expandedPanel === 'form' ? 'collapse_content' : 'expand_content'}</span>
+              </button>
+            </div>
+
+            <div className="evaluation-form-content">
+              {/* Info Card com Estado */}
+              <div className="eval-info-card">
+                <div className="eval-info-header">
+                  <span className="eval-info-label">Estado da Reunião</span>
+                  <span className={`eval-info-badge ${state.className}`}>{state.label}</span>
+                </div>
+                <h4>{protocolCode}</h4>
+                <p>{protocol.topic?.title || protocol.version}</p>
+                {state.description && (
+                  <div className="eval-state-description"><span className="material-symbols-outlined">info</span><p>{state.description}</p></div>
+                )}
+              </div>
+
+              {success && <div className="eval-notice eval-notice--success"><span className="material-symbols-outlined">check_circle</span>{success}</div>}
+              {error && <div className="eval-notice eval-notice--error"><span className="material-symbols-outlined">error</span>{error}</div>}
+
+              {/* ── Agendada ── */}
+              {isScheduled && (
+                <div className="deliberation-info-banner">
+                  <span className="material-symbols-outlined">event</span>
+                  <div>
+                    <strong>Reunião Agendada</strong>
+                    <p>{formatDate(evaluationForm.deliberation_date)} — {evaluationForm.deliberation_location || 'Local não definido'}</p>
+                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={handleStartDeliberation} disabled={isStartingDeliberation}>
+                    {isStartingDeliberation ? 'A iniciar...' : 'Iniciar Reunião'}
+                  </button>
+                </div>
+              )}
+
+              {/* ── Em Deliberação ── */}
+              {isInDeliberation && (
+                <div className="deliberation-active-banner">
+                  <span className="material-symbols-outlined">groups</span>
+                  <div>
+                    <strong>Reunião em Andamento</strong>
+                    <p>Documento partilhado para edição conjunta. Registe o resultado da deliberação.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Deliberado ── */}
+              {isDeliberated && (
+                <div className="deliberation-info-banner" style={{ borderColor: 'var(--primary)', background: 'var(--primary-container)' }}>
+                  <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>task_alt</span>
+                  <div>
+                    <strong>Reunião Encerrada com Deliberação</strong>
+                    <p>A ficha segue para a aba de Decisões Pendentes para decisão final.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Sem Consenso ── */}
+              {isNotDeliberated && (
+                <div className="deliberation-pending-banner">
+                  <span className="material-symbols-outlined">warning</span>
+                  <div>
+                    <strong>Reunião sem Consenso</strong>
+                    <p>A reunião não chegou a consenso. Aguardando a secretaria agendar nova reunião.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Resultado Final ── */}
+              {isConcluded && (
+                <div className={`eval-outcome-banner ${finalDecision === 'approved' ? 'is-approved' : 'is-rejected'}`}>
+                  <span className="material-symbols-outlined">{finalDecision === 'approved' ? 'check_circle' : 'cancel'}</span>
+                  <div>
+                    <strong>{finalDecision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Reprovado'}</strong>
+                    <p>{evaluationForm?.conclusion_summary || 'Processo concluído.'}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── CRITÉRIOS (Leitura) ── */}
+              {evaluationForm && (
+                <div className="eval-criteria-section">
+                  <h3 className="criteria-section-title"><span className="material-symbols-outlined">checklist</span>Critérios de Avaliação</h3>
+                  {Object.entries(criteriaMap).map(([group, criteria]) => (
+                    <div key={group} className="criteria-group-block criteria-group-block--readonly">
+                      <h4 className="criteria-group-title">{group}</h4>
+                      {criteria.map(c => {
+                        const my = criterionReviews[c.id] || ''
+                        const allComments = criteriaComments[c.id] || []
+                        return (
+                          <div key={c.id} className="criterion-item criterion-item--readonly">
+                            <div className="criterion-header">
+                              <label className="criterion-name">{c.criterion_name}</label>
+                              {my && (
+                                <div className="criterion-rating">
+                                  {[1, 2, 3, 4, 5].map(s => (
+                                    <span key={s} className={`rating-dot rating-dot--readonly ${my?.startsWith(`Nota ${s}`) ? 'is-active' : ''}`}>
+                                      {s}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {allComments.length > 0 && (
+                              <div className="criterion-comments">
+                                {allComments.map((comment, idx) => (
+                                  <div key={idx} className="criterion-comment">
+                                    <span className="criterion-comment-author">{comment.reviewer_name}:</span>
+                                    <span className="criterion-comment-text">{comment.comment?.replace(/^Nota \d\/5 - /, '') || comment.comment}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+
+                  {/* ── Encerrar Reunião (2 botões) ── */}
+                  {isInDeliberation && (
+                    <div className="eval-recommendation-section">
+                      <h3>
+                        <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>gavel</span>
+                        Resultado da Deliberação
+                      </h3>
+                      <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
+                        Registe o resultado final da reunião.
+                      </p>
+                      
+                      <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                        {/* Botão Deliberado */}
+                        <button
+                          onClick={() => handleCloseMeeting('deliberated')}
+                          disabled={isClosingMeeting}
+                          style={{
+                            flex: 1,
+                            minWidth: '200px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--space-2)',
+                            padding: 'var(--space-2) var(--space-3)',
+                            background: closingResult === 'deliberated'
+                              ? 'var(--primary)'
+                              : 'var(--primary-container)',
+                            color: closingResult === 'deliberated'
+                              ? 'var(--on-primary)'
+                              : 'var(--on-primary-container)',
+                            border: `2px solid var(--primary)`,
+                            borderRadius: 'var(--radius-lg)',
+                            fontFamily: 'var(--font-family)',
+                            fontSize: 'var(--body-md)',
+                            fontWeight: 'var(--font-semibold)',
+                            cursor: isClosingMeeting ? 'wait' : 'pointer',
+                            transition: 'all 0.2s ease',
+                            opacity: isClosingMeeting && closingResult !== 'deliberated' ? 0.6 : 1,
+                          }}
+                          onMouseEnter={e => {
+                            if (!isClosingMeeting) {
+                              e.currentTarget.style.background = 'var(--primary)'
+                              e.currentTarget.style.color = 'var(--on-primary)'
+                              e.currentTarget.style.boxShadow = 'var(--elevation-2)'
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            if (!isClosingMeeting) {
+                              e.currentTarget.style.background = closingResult === 'deliberated'
+                                ? 'var(--primary)'
+                                : 'var(--primary-container)'
+                              e.currentTarget.style.color = closingResult === 'deliberated'
+                                ? 'var(--on-primary)'
+                                : 'var(--on-primary-container)'
+                              e.currentTarget.style.boxShadow = 'var(--elevation-1)'
+                            }
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>
+                            {closingResult === 'deliberated' && isClosingMeeting ? 'hourglass_top' : 'check_circle'}
+                          </span>
+                          <span>
+                            {closingResult === 'deliberated' && isClosingMeeting ? 'A processar...' : 'Deliberado'}
+                          </span>
+                        </button>
+
+                        {/* Botão Não Deliberado */}
+                        <button
+                          onClick={() => handleCloseMeeting('not_deliberated')}
+                          disabled={isClosingMeeting}
+                          style={{
+                            flex: 1,
+                            minWidth: '200px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--space-2)',
+                            padding: 'var(--space-2) var(--space-3)',
+                            background: closingResult === 'not_deliberated'
+                              ? 'var(--error)'
+                              : 'var(--error-container)',
+                            color: closingResult === 'not_deliberated'
+                              ? 'var(--on-error)'
+                              : 'var(--on-error-container)',
+                            border: `2px solid var(--error)`,
+                            borderRadius: 'var(--radius-lg)',
+                            fontFamily: 'var(--font-family)',
+                            fontSize: 'var(--body-md)',
+                            fontWeight: 'var(--font-semibold)',
+                            cursor: isClosingMeeting ? 'wait' : 'pointer',
+                            transition: 'all 0.2s ease',
+                            opacity: isClosingMeeting && closingResult !== 'not_deliberated' ? 0.6 : 1,
+                          }}
+                          onMouseEnter={e => {
+                            if (!isClosingMeeting) {
+                              e.currentTarget.style.background = 'var(--error)'
+                              e.currentTarget.style.color = 'var(--on-error)'
+                              e.currentTarget.style.boxShadow = 'var(--elevation-2)'
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            if (!isClosingMeeting) {
+                              e.currentTarget.style.background = closingResult === 'not_deliberated'
+                                ? 'var(--error)'
+                                : 'var(--error-container)'
+                              e.currentTarget.style.color = closingResult === 'not_deliberated'
+                                ? 'var(--on-error)'
+                                : 'var(--on-error-container)'
+                              e.currentTarget.style.boxShadow = 'var(--elevation-1)'
+                            }
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>
+                            {closingResult === 'not_deliberated' && isClosingMeeting ? 'hourglass_top' : 'cancel'}
+                          </span>
+                          <span>
+                            {closingResult === 'not_deliberated' && isClosingMeeting ? 'A processar...' : 'Não Deliberado'}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ height: 40 }} />
+            </div>
+          </section>
+        </div>
+      </>
     )
   }
 
-  return <div className="page-loader"><p>Nenhum dado encontrado.</p><Link to="/reviews" className="btn btn-outline">Voltar</Link></div>
+  // ═══════════════════════════════════════════════
+  // FALLBACK
+  // ═══════════════════════════════════════════════
+  return (
+    <div className="page-loader">
+      <p>Dados não encontrados.</p>
+      <Link to="/reviewer/meetings" className="btn btn-outline">Voltar</Link>
+    </div>
+  )
 }

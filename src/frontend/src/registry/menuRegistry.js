@@ -82,7 +82,16 @@ export const menuRegistry = [
   id: 'reviewer_meetings',
   label: 'Reuniões',
   icon: 'ti-calendar-event',
-  route: '/reviews/meetings',
+  route: '/reviewer/meetings',
+  permission: 'protocol.evaluate',
+  roles: ['reviewer'],
+},
+// No menu do revisor
+{
+  id: 'reviewer_final_decisions',
+  label: 'Decisões Pendentes',
+  icon: 'ti-gavel',
+  route: '/reviewer/final-decisions',
   permission: 'protocol.evaluate',
   roles: ['reviewer'],
 },

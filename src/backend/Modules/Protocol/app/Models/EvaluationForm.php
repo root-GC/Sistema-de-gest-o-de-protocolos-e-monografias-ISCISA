@@ -11,13 +11,14 @@ class EvaluationForm extends Model
 
     public const FORM_TYPE_EVALUATION = 'evaluation';
     public const FORM_TYPE_DELIBERATION = 'deliberation';
-
     public const STATUS_PENDING_REVIEW = 'pending_review';
     public const STATUS_IN_REVIEW = 'in_review';
     public const STATUS_CONCLUDED = 'concluded';
     public const STATUS_DELIBERATION_PENDING = 'deliberation_pending';
     public const STATUS_DELIBERATION_SCHEDULED = 'deliberation_scheduled';
     public const STATUS_IN_DELIBERATION = 'in_deliberation';
+    public const STATUS_DELIBERATED = 'deliberated';         // houve consenso — vai para decisão final
+    public const STATUS_NOT_DELIBERATED = 'not_deliberated'; // sem consenso — aguarda nova marcação
 
     protected $fillable = [
         'protocol_id',

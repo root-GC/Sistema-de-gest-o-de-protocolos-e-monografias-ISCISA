@@ -84,7 +84,14 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('nucleo.evaluation-forms.schedule-deliberation');
         Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('nucleo.evaluation-forms.start-deliberation');
         Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('nucleo.evaluation-forms.submit-deliberation');
+
+        // NOVO: encerrar reunião (deliberated | not_deliberated)
+        Route::post('evaluation-forms/{form}/close-meeting', [EvaluationFormController::class, 'closeMeeting'])->name('nucleo.evaluation-forms.close-meeting');
+
         Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('nucleo.evaluation-forms.decide');
+
+        // NOVO: listagem para a aba de decisões finais pendentes (status = deliberated)
+        Route::get('final-decisions', [EvaluationFormController::class, 'getPendingFinalDecision'])->name('nucleo.final-decisions.list');
 
         Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('nucleo.reviewer.evaluations.list');
         Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('nucleo.secretary.evaluations.list');
@@ -96,7 +103,6 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::get('reviewer/protocols', [ProtocolApiController::class, 'getForReviewer'])->name('reviewer.protocols.list');
         Route::get('secretary/protocols', [ProtocolApiController::class, 'getForSecretary'])->name('secretary.protocols.list');
     });
-    
 
     // === COMITÉ CIENTÍFICO (CC) ===
     Route::prefix('comite-cientifico')->group(function () {
@@ -106,7 +112,14 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('cc.evaluation-forms.schedule-deliberation');
         Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('cc.evaluation-forms.start-deliberation');
         Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('cc.evaluation-forms.submit-deliberation');
+
+        // NOVO
+        Route::post('evaluation-forms/{form}/close-meeting', [EvaluationFormController::class, 'closeMeeting'])->name('cc.evaluation-forms.close-meeting');
+
         Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('cc.evaluation-forms.decide');
+
+        // NOVO
+        Route::get('final-decisions', [EvaluationFormController::class, 'getPendingFinalDecision'])->name('cc.final-decisions.list');
 
         Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('cc.reviewer.evaluations.list');
         Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('cc.secretary.evaluations.list');

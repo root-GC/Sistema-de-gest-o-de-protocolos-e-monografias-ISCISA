@@ -9,6 +9,7 @@ import { lazy, Suspense } from 'react'
 // Páginas públicas
 import LoginPage from './pages/LoginPage.tsx'
 
+
 // Páginas protegidas — lazy load
 const DashboardPage          = lazy(() => import('./pages/dashboard/DashboardPage'))
 const Page403                = lazy(() => import('./pages/shared/Page403'))
@@ -31,6 +32,9 @@ const SupervisorProtocolDetailPage = lazy(() => import('./pages/supervisor/Super
 const ReviewsPage            = lazy(() => import('./pages/teacher/ReviewsPage'))
 const EvaluationPage         = lazy(() => import('./pages/teacher/EvaluationPage'))
 const ReviewerMeetingsPage = lazy(() => import('./pages/teacher/ReviewerMeetingsPage'))
+const ReviewerMeetingsListPage = lazy(() => import('./pages/teacher/ReviewerMeetingsListPage'))
+const FinalDecisionPage = lazy(() => import('./pages/teacher/FinalDecisionPage'))
+const FinalDecisionDetailPage = lazy(() => import('./pages/teacher/FinalDecisionDetailPage'))
 
 // Coordinator
 const AssignPage             = lazy(() => import('./pages/coordinator/AssignPage'))
@@ -66,7 +70,7 @@ const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
 
 // teste onlyoffice
-const TestOnlyOfficePage  = lazy(() => import('./pages/TestOnlyOfficePage'))
+//const TestOnlyOfficePage  = lazy(() => import('./pages/TestOnlyOfficePage'))
 
 // 🆕 Loader melhorado
 const PageLoader = () => (
@@ -84,7 +88,7 @@ export default function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* Onlyoffice */}
-            <Route path="/teste-office" element={<TestOnlyOfficePage />} />
+            {/* <Route path="/teste-office" element={<TestOnlyOfficePage />} /> */}
             
             {/* ── Públicas ─────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />
@@ -133,13 +137,22 @@ export default function App() {
                   <Route path="/workload" element={<WorkloadPage />} />
                 </Route>
                 <Route element={<ProtectedRoute permission="protocol.evaluate" />}>
-                  <Route path="/reviews"                     element={<ReviewsPage />} />
-                  <Route path="/reviews/assigned"            element={<ReviewsPage />} />
-                  <Route path="/reviews/done"                element={<ReviewsPage />} />
+                  {/* Reuniões - específicas primeiro */}
+                  <Route path="/reviewer/meetings/:protocolId" element={<ReviewerMeetingsPage />} />
+                  <Route path="/reviewer/meetings" element={<ReviewerMeetingsListPage />} />
+
+                  {/* Decisões Pendentes (nova aba) */}
+                    <Route path="/reviewer/final-decisions/:formId" element={<FinalDecisionDetailPage />} />
+                  <Route path="/reviewer/final-decisions" element={<FinalDecisionPage />} />
+
+
+                  {/* Reviews - específicas primeiro */}
                   <Route path="/reviews/protocols/:protocolId" element={<EvaluationPage />} />
-                  <Route path="/reviews/topics/:topicId"     element={<EvaluationPage />} />
-                  <Route path="/reviews/:topicId"            element={<EvaluationPage />} />
-                  <Route path="/reviewer/meetings" element={<ReviewerMeetingsPage />} />
+                  <Route path="/reviews/topics/:topicId" element={<EvaluationPage />} />
+                  <Route path="/reviews/assigned" element={<ReviewsPage />} />
+                  <Route path="/reviews/done" element={<ReviewsPage />} />
+                  <Route path="/reviews/:topicId" element={<EvaluationPage />} />
+                  <Route path="/reviews" element={<ReviewsPage />} />
                 </Route>
 
                 {/* ── Coordinator ─────────────────────────────── */}
