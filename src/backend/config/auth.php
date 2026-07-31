@@ -80,7 +80,7 @@ return [
 
         'driver' => 'eloquent',
 
-        'model' => Modules\Auth\App\Models\User::class,
+        'model' => Modules\User\app\Models\User::class,
     ],
 ],
     /*

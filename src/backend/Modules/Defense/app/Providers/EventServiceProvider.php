@@ -1,27 +1,30 @@
 <?php
+// Modules/Defense/app/Providers/EventServiceProvider.php
 
-namespace Modules\Defense\Providers;
+namespace Modules\Defense\app\Providers;
 
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
+use Modules\Monograph\app\Events\MonographVerified;
+use Modules\Defense\app\Events\{DefenseDateProposed, DefenseDateRejected, DefenseScheduled};
+use Modules\Defense\app\Listeners\{
+    OnMonographVerified, NotifyJuryOnDateProposed,
+    NotifyCoordinatorOnDateRejected, NotifyCoordinatorOnSchedule
+};
 
 class EventServiceProvider extends ServiceProvider
 {
-    /**
-     * The event handler mappings for the application.
-     *
-     * @var array<string, array<int, string>>
-     */
-    protected $listen = [];
-
-    /**
-     * Indicates if events should be discovered.
-     *
-     * @var bool
-     */
-    protected static $shouldDiscoverEvents = true;
-
-    /**
-     * Configure the proper event listeners for email verification.
-     */
-    protected function configureEmailVerification(): void {}
+    protected $listen = [
+        MonographVerified::class => [
+            OnMonographVerified::class,
+        ],
+        DefenseDateProposed::class => [
+            NotifyJuryOnDateProposed::class,
+        ],
+        DefenseDateRejected::class => [
+            NotifyCoordinatorOnDateRejected::class,
+        ],
+        DefenseScheduled::class => [
+            NotifyCoordinatorOnSchedule::class,
+        ],
+    ];
 }

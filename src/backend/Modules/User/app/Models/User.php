@@ -2,9 +2,11 @@
 
 namespace Modules\User\app\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
+use Modules\User\database\factories\UserFactory;
 use Modules\User\app\Models\Organ;
 use Modules\User\app\Models\ScientificArea;
 use Modules\User\app\Models\Permission;
@@ -20,7 +22,12 @@ use Modules\User\app\Models\AdminProfile;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, SoftDeletes;
+    use HasApiTokens, SoftDeletes, HasFactory;
+
+    protected static function newFactory()
+    {
+        return new UserFactory();
+    }
 
     protected $fillable = ['name', 'email', 'password', 'status'];
     protected $hidden   = ['password', 'remember_token'];
