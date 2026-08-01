@@ -1,3 +1,4 @@
+// src/services/authService.ts
 import type { UserPayload } from '../context/AuthContext'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -37,6 +38,27 @@ interface RegisterPayload {
 interface RegisterResponse {
   message: string
   email: string
+}
+
+interface ValidateResetTokenResponse {
+  valid: boolean
+  seconds_remaining: number
+}
+
+interface OtpStatusResponse {
+  seconds_remaining: number | null
+  resend_cooldown: number
+}
+
+// 🆕 Erro customizado para cooldown de reenvio
+export class ResendCooldownError extends Error {
+  retryAfter: number
+
+  constructor(message: string, retryAfter: number) {
+    super(message)
+    this.name = 'ResendCooldownError'
+    this.retryAfter = retryAfter
+  }
 }
 
 async function req<T>(method: string, path: string, body: unknown = null): Promise<T> {
@@ -80,22 +102,57 @@ export const authService = {
   verifyOtp: (email: string, code: string) =>
     req<LoginResponse>('POST', '/api/verify-otp', { email, code }),
 
-  resendOtp: (email: string) =>
-    req<MessageResponse>('POST', '/api/resend-otp', { email }),
+  // 🆕 Resend OTP com tratamento de cooldown
+  resendOtp: async (email: string): Promise<MessageResponse> => {
+    const res = await fetch(`${BASE}/api/resend-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    const data = await res.json()
+
+    if (res.status === 429) {
+      throw new ResendCooldownError(
+        data.message ?? 'Aguarde antes de reenviar.',
+        data.retry_after ?? 60
+      )
+    }
+    if (!res.ok) {
+      throw new Error(data?.message ?? 'Erro desconhecido')
+    }
+    return data
+  },
 
   forgotPassword: (email: string) =>
     req<MessageResponse>('POST', '/api/password/forgot', { email }),
 
-  resetPassword: (
-    email: string,
-    token: string,
-    password: string,
-    password_confirmation: string
-  ) =>
-    req<MessageResponse>('POST', '/api/password/reset', {
-      email,
-      token,
-      password,
-      password_confirmation,
-    }),
+  validateResetToken: async (email: string, token: string): Promise<ValidateResetTokenResponse> => {
+    const url = `${BASE}/api/reset-password/validate?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`
+    
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Link inválido ou expirado')
+      }
+      
+      return res.json()
+    } catch (error) {
+      throw error
+    }
+  },
+
+  resetPassword: (email: string, token: string, password: string, password_confirmation: string) =>
+    req<MessageResponse>('POST', '/api/password/reset', { email, token, password, password_confirmation }),
+
+  // Status do OTP
+  otpStatus: async (email: string, purpose = 'register'): Promise<OtpStatusResponse> => {
+    const res = await fetch(`${BASE}/api/otp/status?email=${encodeURIComponent(email)}&purpose=${purpose}`)
+    if (!res.ok) throw new Error('Não foi possível verificar o estado do código.')
+    return res.json()
+  },
 }

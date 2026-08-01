@@ -1,5 +1,5 @@
 // context/AuthContext.tsx
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 // @ts-ignore
 import { authService } from '../services/authService';
@@ -312,30 +312,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading
   });
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        roles,
-        permissions,
-        profiles,
-        activeRole,
-        activeProfile,
-        loading: isLoading,  // ✅ Usa a variável combinada
-        login,
-        completeAuth,
-        logout,
-        switchRole,
-        refresh,
-        hasPermission,
-        hasAnyPermission,
-        hasAllPermissions,
-        canAccessWidget,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = useMemo(() => ({
+  user, roles, permissions, profiles, activeRole, activeProfile,
+  loading: isLoading, login, completeAuth, logout, switchRole,
+  refresh, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget,
+}), [user, roles, permissions, profiles, activeRole, activeProfile, isLoading, login, completeAuth, logout, switchRole, refresh, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget]);
+
+
+return (
+  <AuthContext.Provider value={value}>
+    {children}
+  </AuthContext.Provider>
+);
 }
 
 export const useAuth = (): AuthContextType => {

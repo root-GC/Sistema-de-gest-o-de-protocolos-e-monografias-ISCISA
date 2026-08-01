@@ -58,7 +58,7 @@ export function useDashboardData(
 
       setDashboardData(widgetData);
       setIsLoading(false);
-    }, 1500); // 1.5 segundos de loading simulado
+    }, 0); 
 
     return () => clearTimeout(timer);
   }, [user, widgetIds]);

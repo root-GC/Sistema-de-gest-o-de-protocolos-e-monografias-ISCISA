@@ -110,17 +110,66 @@ class OtpService
      * @throws ValidationException
      */
     private function assertCanResend(string $email, string $purpose): void
-    {
-        $last = DB::table('otps')
-            ->where('email', $email)
-            ->where('purpose', $purpose)
-            ->orderByDesc('id')
-            ->first();
+{
+    $last = DB::table('otps')
+        ->where('email', $email)
+        ->where('purpose', $purpose)
+        ->orderByDesc('id')
+        ->first();
 
-        if ($last && now()->diffInSeconds($last->created_at) < self::RESEND_COOLDOWN_SECONDS) {
-            throw ValidationException::withMessages([
-                'email' => 'Aguarde alguns segundos antes de solicitar um novo código.',
-            ]);
-        }
+    if (! $last) {
+        return;
     }
+
+    $elapsed = now()->diffInSeconds($last->created_at);
+
+    if ($elapsed < self::RESEND_COOLDOWN_SECONDS) {
+        $remaining = self::RESEND_COOLDOWN_SECONDS - $elapsed;
+
+        throw ValidationException::withMessages([
+            'email' => "Aguarde {$remaining} segundos antes de solicitar um novo código.",
+        ]);
+    }
+}
+
+    // OtpService.php — adicionar
+
+public function secondsRemaining(string $email, string $purpose = 'register'): ?int
+{
+    $otp = DB::table('otps')
+        ->where('email', $email)
+        ->where('purpose', $purpose)
+        ->whereNull('verified_at')
+        ->orderByDesc('id')
+        ->first();
+
+    if (! $otp) {
+        return null;
+    }
+
+    $remaining = now()->diffInSeconds($otp->expires_at, false);
+    $max = self::TTL_MINUTES * 60;
+
+    return max(0, min($remaining, $max));
+}
+
+public function resendCooldownRemaining(string $email, string $purpose = 'register'): int
+{
+    $last = DB::table('otps')
+        ->where('email', $email)
+        ->where('purpose', $purpose)
+        ->orderByDesc('id')
+        ->first();
+
+    if (! $last) {
+        return 0;
+    }
+
+    $elapsed   = now()->diffInSeconds($last->created_at);
+    $remaining = self::RESEND_COOLDOWN_SECONDS - $elapsed;
+
+    // Clamp: nunca pode ser negativo nem maior que o próprio cooldown
+    return max(0, min($remaining, self::RESEND_COOLDOWN_SECONDS));
+}
+
 }

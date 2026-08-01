@@ -44,6 +44,14 @@ Route::prefix('api')->group(function () {
         Route::post('/dashboard', [DashboardController::class, 'index']);
         Route::post('/logout', LogoutController::class);
     });
+
+     // ── Reset password ───────────────────────────────────────────────
+    //Timer reset password
+    Route::get('/reset-password/validate', [ForgotPasswordController::class, 'validateToken']);
+
+    // routes/api.php (módulo Auth)
+    // Rota para verificar o status do OTP (tempo restante e cooldown)
+    Route::get('/otp/status', [VerifyOtpController::class, 'status']);
 });
 
 Route::prefix('auth')->name('auth.')->group(function () {
@@ -62,6 +70,8 @@ Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('logout', LogoutController::class)->name('logout');
         Route::get('me', MeController::class)->name('me');
     });
+
+   
 });
 
 // ── Admin Técnico / Executivo ────────────────────────────────────────────
@@ -108,4 +118,6 @@ Route::prefix('api/v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('permissions', [PermissionController::class, 'store']);
     Route::put('permissions/{id}', [PermissionController::class, 'update']);
     Route::delete('permissions/{id}', [PermissionController::class, 'destroy']);
+
+   
 });

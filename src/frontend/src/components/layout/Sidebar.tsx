@@ -95,7 +95,8 @@ const ICON_MAP: Record<string, string> = {
   
   // 🆕 NOVOS ÍCONES ADICIONADOS
   'ti-calendar-plus': 'calendar_add_on',    // 📅➕ Marcar Reunião
-  'ti-table': 'table',                       // 📊 Planilha de Protocolos
+  'ti-table': 'table',      
+  'ti-gavel': 'gavel',                  // 📊 Planilha de Protocolos
   
   // Fallbacks por ID
   'secretary_meeting': 'calendar_add_on',    // Marcar Reunião
@@ -299,37 +300,6 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
       transition: 'width 0.25s ease, transform 0.3s ease',
       overflow: 'hidden'
     }}>
-      {/* Overlay de logout - cobre toda a tela */}
-      {loggingOut && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          backdropFilter: 'blur(3px)', zIndex: 100, display: 'flex',
-          alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{
-            background: 'var(--surface-container-lowest)',
-            borderRadius: 'var(--radius-xl)', padding: 'var(--space-5)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            gap: 'var(--space-3)', boxShadow: 'var(--elevation-3)',
-            minWidth: '220px'
-          }}>
-            <div style={{
-              width: '44px', height: '44px',
-              border: '3px solid var(--outline-variant)',
-              borderTopColor: 'var(--secondary)',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite'
-            }} />
-            <p style={{
-              fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)',
-              fontWeight: 'var(--font-medium)', fontFamily: 'var(--font-family)'
-            }}>
-              A terminar sessão...
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Botão fechar (mobile) */}
       {isMobile && mobileOpen && (
         <button onClick={onCloseMobile} aria-label="Fechar menu" style={{
@@ -594,11 +564,24 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
                   color: loggingOut ? 'var(--outline)' : 'var(--secondary)',
                   cursor: loggingOut ? 'not-allowed' : 'pointer',
                   padding: '6px', borderRadius: 'var(--radius-md)',
-                  display: 'flex', transition: 'all 0.2s',
-                  opacity: loggingOut ? 0.6 : 1
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  opacity: loggingOut ? 0.6 : 1,
+                  position: 'relative'
                 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>logout</span>
+                {loggingOut ? (
+                  <span style={{
+                    width: '18px', height: '18px',
+                    border: '2px solid var(--secondary)',
+                    borderTopColor: 'transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 0.6s linear infinite',
+                    display: 'block'
+                  }} />
+                ) : (
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>logout</span>
+                )}
               </button>
             </div>
           </>
@@ -633,11 +616,26 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
               style={{
                 background: 'none', border: 'none',
                 color: loggingOut ? 'var(--outline)' : 'var(--secondary)',
-                cursor: loggingOut ? 'not-allowed' : 'pointer', padding: '4px',
-                opacity: loggingOut ? 0.6 : 1, transition: 'all 0.2s'
+                cursor: loggingOut ? 'not-allowed' : 'pointer',
+                padding: '4px', borderRadius: 'var(--radius-md)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.2s',
+                opacity: loggingOut ? 0.6 : 1,
+                position: 'relative'
               }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>logout</span>
+              {loggingOut ? (
+                <span style={{
+                  width: '16px', height: '16px',
+                  border: '2px solid var(--secondary)',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 0.6s linear infinite',
+                  display: 'block'
+                }} />
+              ) : (
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>logout</span>
+              )}
             </button>
           </div>
         )}

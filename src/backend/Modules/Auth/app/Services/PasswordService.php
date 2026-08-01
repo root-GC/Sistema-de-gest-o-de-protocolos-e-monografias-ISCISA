@@ -4,14 +4,16 @@ namespace Modules\Auth\app\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Modules\Auth\app\Notifications\ResetPasswordNotification;
 use Modules\User\app\Models\User;
 
 class PasswordService
 {
-    private int $expiresMinutes = 60;
+    private int $expiresMinutes = 10;
+
+    public function __construct(private BrevoMailerService $mailer) {}
 
     // ── Forgot ────────────────────────────────────────────────────────
 
@@ -24,7 +26,29 @@ class PasswordService
 
         $plainToken = $this->createToken($email);
 
-        $user->notify(new ResetPasswordNotification($plainToken, $this->expiresMinutes));
+        $link = rtrim(config('app.frontend_url'), '/')
+            . '/reset-password?email=' . urlencode($user->email)
+            . '&token=' . $plainToken;
+
+        try {
+            $this->mailer->send(
+                ['email' => $user->email, 'name' => $user->name],
+                'Redefinição de palavra-passe — SGPMC ISCISA',
+                view('auth::emails.reset-password', [
+                    'name'           => $user->name,
+                    'link'           => $link,
+                    'expiresMinutes' => $this->expiresMinutes,
+                ])->render()
+            );
+        } catch (\Throwable $e) {
+            // Ao contrário do convite, aqui NÃO fazemos rollback de nada
+            // (não criámos user nenhum) — só logamos. A resposta ao
+            // frontend continua genérica, não revelamos a falha.
+            Log::error('[PasswordService] falha ao enviar email de reset', [
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -33,7 +57,6 @@ class PasswordService
      */
     public function createToken(string $email): string
     {
-        // Apagar tokens anteriores do mesmo email
         DB::table('password_reset_tokens')->where('email', $email)->delete();
 
         $plainToken = Str::random(64);
@@ -71,23 +94,18 @@ class PasswordService
 
         $user = User::where('email', $email)->firstOrFail();
 
-        // 'active' + must_reset_password=false cobre tanto o reset comum
-        // (já estava active) como a primeira definição de senha de um admin
-        // convidado (estava 'pending' e com must_reset_password=true).
         $user->forceFill([
             'password'            => Hash::make($newPassword),
             'status'              => 'active',
             'must_reset_password' => false,
         ])->save();
 
-        // Revogar todas as sessões activas
         $user->tokens()->delete();
 
-        // Apagar token usado
         DB::table('password_reset_tokens')->where('email', $email)->delete();
     }
 
-    // ── Validar token (para feedback no frontend) ─────────────────────
+    // ── Validar token ───────────────────────────────────────────────
 
     public function tokenIsValid(string $email, string $plainToken): bool
     {
@@ -99,5 +117,24 @@ class PasswordService
         if (! $record) return false;
 
         return now()->diffInMinutes($record->created_at) <= $this->expiresMinutes;
+    }
+
+    // PasswordService.php
+
+    public function secondsRemaining(string $email, string $plainToken): ?int
+    {
+        $record = DB::table('password_reset_tokens')
+            ->where('email', $email)
+            ->where('token', hash('sha256', $plainToken))
+            ->first();
+
+        if (! $record) {
+            return null; // token inválido
+        }
+
+        $expiresAt = \Carbon\Carbon::parse($record->created_at)->addMinutes($this->expiresMinutes);
+        $remaining = now()->diffInSeconds($expiresAt, false);
+
+        return $remaining > 0 ? (int) $remaining : 0;
     }
 }
