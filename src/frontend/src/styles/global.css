@@ -4841,3 +4841,60 @@ a:hover {
     font-size: 20px;
   }
 }
+
+/* Barra de progresso do temporizador */
+.reset-timer-bar-wrapper {
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.reset-timer-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--surface-container-high);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.reset-timer-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 1s linear;
+}
+
+.reset-timer-bar-fill--urgent {
+  background: var(--error);
+  animation: pulse-bar 1s ease-in-out infinite;
+}
+
+@keyframes pulse-bar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.reset-timer-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  color: var(--on-surface-variant);
+}
+
+.reset-timer-bar-icon {
+  font-size: 16px;
+}
+
+.reset-timer-bar-icon--urgent {
+  color: var(--error);
+}
+
+.reset-timer-bar-text {
+  color: var(--on-surface-variant);
+}
+
+.reset-timer-bar-text--urgent {
+  color: var(--error);
+  font-weight: 500;
+}

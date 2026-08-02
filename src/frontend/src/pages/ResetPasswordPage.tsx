@@ -5,12 +5,6 @@ import { authService } from '../services/authService'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import '../styles/global.css'
 
-function formatTime(s: number): string {
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}:${sec.toString().padStart(2, '0')}`
-}
-
 export default function ResetPasswordPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -111,6 +105,8 @@ export default function ResetPasswordPage() {
 
   const progressPercent = initialSeconds > 0 ? (secondsLeft! / initialSeconds) * 100 : 0
   const isUrgent = secondsLeft !== null && secondsLeft < 60
+  const minutes = secondsLeft !== null ? Math.floor(secondsLeft / 60) : 0
+  const secs = secondsLeft !== null ? secondsLeft % 60 : 0
 
   return (
     <div className="reset-page">
@@ -129,28 +125,23 @@ export default function ResetPasswordPage() {
           {/* Card */}
           <div className="card reset-form-card">
             
-            {/* Timer */}
+            {/* Barra de progresso discreta */}
             {secondsLeft !== null && (
-              <div className={`reset-timer ${isUrgent ? 'reset-timer--urgent' : ''}`}>
-                <svg width="60" height="60" viewBox="0 0 60 60">
-                  <circle cx="30" cy="30" r="27" fill="none" stroke="var(--surface-container-high)" strokeWidth="3" />
-                  <circle cx="30" cy="30" r="27" fill="none" 
-                    stroke={isUrgent ? 'var(--error)' : 'var(--primary)'} 
-                    strokeWidth="3" strokeLinecap="round"
-                    strokeDasharray={`${2 * Math.PI * 27}`}
-                    strokeDashoffset={`${2 * Math.PI * 27 * (1 - progressPercent / 100)}`}
-                    style={{ transition: 'stroke-dashoffset 1s linear' }}
+              <div className="reset-timer-bar-wrapper">
+                <div className="reset-timer-bar">
+                  <div 
+                    className={`reset-timer-bar-fill ${isUrgent ? 'reset-timer-bar-fill--urgent' : ''}`}
+                    style={{ width: `${progressPercent}%` }}
                   />
-                </svg>
-                <span className={`material-symbols-outlined reset-timer-icon ${isUrgent ? 'reset-timer-icon--shake' : ''}`}>
-                  {isUrgent ? 'timer_off' : 'schedule'}
-                </span>
-                <div className="reset-timer-text">
-                  <span className={`reset-timer-time ${isUrgent ? 'reset-timer-time--urgent' : ''}`}>
-                    {formatTime(secondsLeft)}
+                </div>
+                <div className="reset-timer-bar-info">
+                  <span className={`material-symbols-outlined reset-timer-bar-icon ${isUrgent ? 'reset-timer-bar-icon--urgent' : ''}`}>
+                    schedule
                   </span>
-                  <span className="reset-timer-label">
-                    {isUrgent ? 'Expira em breve!' : 'Tempo restante'}
+                  <span className={`reset-timer-bar-text ${isUrgent ? 'reset-timer-bar-text--urgent' : ''}`}>
+                    {isUrgent 
+                      ? `${minutes}:${secs.toString().padStart(2, '0')} restantes` 
+                      : `Link válido por ${minutes}:${secs.toString().padStart(2, '0')}`}
                   </span>
                 </div>
               </div>

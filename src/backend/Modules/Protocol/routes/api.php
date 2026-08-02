@@ -38,6 +38,7 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         [TopicController::class, 'getMyApprovedTopics']
     );
 
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
    
 
     Route::post('topics', [TopicController::class, 'store'])->name('topic.store');

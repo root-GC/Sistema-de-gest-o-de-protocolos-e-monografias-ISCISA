@@ -1,94 +1,133 @@
-// types/dashboard.ts
-import React from 'react';
+// src/types/dashboard.ts
 
-export interface DashboardWidget {
+export type ProtocolStatus =
+  | 'protocol_pending_supervisor'
+  | 'protocol_rejected_supervisor'
+  | 'protocol_pending_nucleo'
+  | 'protocol_in_review_nucleo'
+  | 'protocol_pending_comite_cientifico'
+  | 'protocol_in_review_comite_cientifico'
+  | 'protocol_pending_comite_bioetica'
+  | 'protocol_in_review_comite_bioetica'
+  | 'protocol_rejected_nucleo'
+  | 'protocol_rejected_cc'
+  | 'protocol_rejected_bioetica'
+  | 'protocol_approved_final'
+  | 'protocol_rejected_final';
+
+export interface TimelineStep {
+  stage: ProtocolStatus;
+  label: string;
+  done: boolean;
+  current: boolean;
+}
+
+export interface TopicSummary {
+  id: number;
+  title: string;
+  status: string;
+  status_label: string;
+  rejected: boolean;
+}
+
+export interface ProtocolSummary {
+  id: number;
+  code: string | null;
+  title: string | null;
+  current_stage: ProtocolStatus;
+  stage_label: string;
+  is_rejected: boolean;
+  next_action: string | null;
+  timeline: TimelineStep[];
+}
+
+export interface NotificationItem {
   id: string;
-  component: React.ComponentType<WidgetProps>;
-  permissions?: string[];
-  anyPermission?: boolean;
-  category: WidgetCategory;
-  order: number;
-  title: string;
-  description?: string;
-  size: 'small' | 'medium' | 'large' | 'full';
-  endpoint?: string;
+  message: string;
+  read: boolean;
+  created_at: string;
 }
 
-export type WidgetCategory = 
-  | 'workflow'
-  | 'review'
-  | 'evaluation'
-  | 'administration'
-  | 'reports'
-  | 'defense'
-  | 'supervision'
-  | 'general';
-
-export interface WidgetProps {
-  data?: any;
-  isLoading?: boolean;
-  error?: string | null;
+export interface StudentDashboardPayload {
+  profile: {
+    name: string;
+    email: string;
+    supervisor?: string | null;
+  };
+  phase: 'topic' | 'protocol' | 'none';
+  topic: TopicSummary | null;
+  protocol: ProtocolSummary | null;
+  notifications: NotificationItem[];
 }
 
-export interface WidgetDataResponse {
-  widgetId: string;
-  data: any;
-  lastUpdated: string;
+export interface QueueItem {
+  protocol_id: number;
+  title: string | null;
+  waiting_since: string | null;
+  action_needed: string;
 }
 
-// Configuração visual das seções
-export const CATEGORY_CONFIG: Record<WidgetCategory, {
-  title: string;
-  icon: string;
-  order: number;
-  color: string;
-}> = {
-  workflow: {
-    title: 'Fluxo de Trabalho',
-    icon: 'account_tree',
-    order: 1,
-    color: 'var(--primary)'
-  },
-  review: {
-    title: 'Revisões Científicas',
-    icon: 'rate_review',
-    order: 2,
-    color: 'var(--secondary)'
-  },
-  evaluation: {
-    title: 'Avaliações',
-    icon: 'grading',
-    order: 3,
-    color: 'var(--tertiary)'
-  },
-  defense: {
-    title: 'Defesas',
-    icon: 'school',
-    order: 4,
-    color: '#7C4DFF'
-  },
-  supervision: {
-    title: 'Supervisão',
-    icon: 'supervisor_account',
-    order: 5,
-    color: '#FF6D00'
-  },
-  administration: {
-    title: 'Administração',
-    icon: 'admin_panel_settings',
-    order: 6,
-    color: '#C62828'
-  },
-  reports: {
-    title: 'Relatórios & BI',
-    icon: 'analytics',
-    order: 7,
-    color: '#00695C'
-  },
-  general: {
-    title: 'Geral',
-    icon: 'dashboard',
-    order: 99,
-    color: 'var(--on-surface-variant)'
-  }
-};
+export interface SecretaryDashboardPayload {
+  queue: {
+    pending_nucleo: number;
+    pending_comite_cientifico: number;
+    pending_comite_bioetica: number;
+    items: QueueItem[];
+  };
+  notifications: NotificationItem[];
+}
+
+export interface PendingFinalDecisionItem {
+  evaluation_form_id: number;
+  title: string | null;
+  organ: string;
+}
+
+export interface StatsDashboardPayload {
+  profile: {
+    name: string;
+    email: string;
+    scope?: string | null;
+  };
+  stats: {
+    total_users?: number | null;
+    total_protocols: number;
+    by_status: Record<string, number>;
+    protocols_this_month?: number;
+  };
+  pending_final_decisions?: PendingFinalDecisionItem[];
+  notifications: NotificationItem[];
+}
+
+export interface PendingEvaluationItem {
+  evaluation_form_id: number;
+  title: string | null;
+  organ: string;
+  status: string;
+}
+
+export interface ReviewerDashboardPayload {
+  profile: {
+    name: string;
+    email: string;
+  };
+  pending_evaluations: PendingEvaluationItem[];
+  notifications: NotificationItem[];
+}
+
+export interface PendingApprovalItem {
+  id: number;
+  title: string | null;
+  submitted_at: string | null;
+}
+
+export interface SupervisorDashboardPayload {
+  profile: {
+    name: string;
+    email: string;
+  };
+  supervisees_count: number;
+  pending_topics: PendingApprovalItem[];
+  pending_protocols: PendingApprovalItem[];
+  notifications: NotificationItem[];
+}
