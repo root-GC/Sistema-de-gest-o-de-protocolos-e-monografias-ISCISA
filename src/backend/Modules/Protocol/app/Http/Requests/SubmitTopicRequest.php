@@ -26,7 +26,7 @@ class SubmitTopicRequest extends FormRequest
                 ),
             ],
             'document' => [
-                'nullable',
+                'required',
                 'file',
                 'mimes:docx',
                 'mimetypes:application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -45,6 +45,7 @@ class SubmitTopicRequest extends FormRequest
             'scientific_area_id.exists' => 'A area cientifica informada e invalida.',
             'course_id.required' => 'O curso e obrigatorio.',
             'course_id.exists' => 'O curso informado e invalido para a area cientifica selecionada.',
+            'document.required' => 'O documento do tema e obrigatorio.',
             'document.mimes' => 'O documento deve ser um ficheiro .docx.',
             'document.mimetypes' => 'O documento deve ser um ficheiro .docx.',
             'document.max' => 'O documento nao pode exceder 10MB.',

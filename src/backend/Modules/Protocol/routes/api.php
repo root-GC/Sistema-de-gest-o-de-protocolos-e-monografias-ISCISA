@@ -63,11 +63,17 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::post('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@store')->name('protocol.store');
     Route::get('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@index')->name('protocol.index');
     Route::get('protocols/{protocol}', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@show')->name('protocol.show');
+    Route::get('protocols/{protocol}/history', [ProtocolApiController::class, 'history'])->name('protocol.history');
     Route::patch('protocols/{protocol}/supervisor-approve', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@approveBySupervisor')->name('protocol.supervisor-approve');
     Route::patch('protocols/{protocol}/supervisor-reject', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@rejectBySupervisor')->name('protocol.supervisor-reject');
 
     // Document download
     Route::get('protocols/{protocol}/download', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@downloadDocument')->name('protocols.document.download');
+    Route::get('protocols/{protocol}/required-documents', [ProtocolApiController::class, 'listRequiredDocuments'])->name('protocols.required-documents.list');
+    Route::post('protocols/{protocol}/required-documents/{requirement}/upload', [ProtocolApiController::class, 'uploadRequiredDocument'])->name('protocols.required-documents.upload');
+    Route::patch('protocols/{protocol}/required-documents/{requirement}/approve', [ProtocolApiController::class, 'approveRequiredDocument'])->name('protocols.required-documents.approve');
+    Route::patch('protocols/{protocol}/required-documents/{requirement}/reject', [ProtocolApiController::class, 'rejectRequiredDocument'])->name('protocols.required-documents.reject');
+    Route::get('protocols/{protocol}/required-documents/{requirement}/download', [ProtocolApiController::class, 'downloadRequiredDocument'])->name('protocols.required-documents.download');
 
     // Opinions (pareceres)
     Route::get('opinions/{opinion}/download', [EvaluationFormController::class, 'downloadOpinion'])->name('opinions.download');
@@ -108,6 +114,7 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::prefix('comite-cientifico')->group(function () {
         Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('cc.evaluation-forms.show');
         Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('cc.evaluation-forms.criteria.review');
+        Route::post('evaluation-forms/{form}/mark-evaluated', [EvaluationFormController::class, 'markEvaluated'])->name('cc.evaluation-forms.mark-evaluated');
         Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('cc.evaluation-forms.submit');
         Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('cc.evaluation-forms.schedule-deliberation');
         Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('cc.evaluation-forms.start-deliberation');
@@ -128,14 +135,26 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::get('protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersCC'])->name('cc.protocols.eligible-reviewers');
         Route::get('protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersCC'])->name('cc.protocols.reviewers');
         Route::post('protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersCC'])->name('cc.protocols.assign-reviewers');
+        Route::get('secretary/protocols', [ProtocolApiController::class, 'getForSecretary'])->name('cc.secretary.protocols.list');
     });
 
-    // === COMITÉ DE BIOÉTICA ===
+    // === Comité de Bioética ===
     Route::prefix('comite-bioetica')->group(function () {
+        Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('bioetica.evaluation-forms.show');
+        Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('bioetica.evaluation-forms.criteria.review');
+        Route::post('evaluation-forms/{form}/mark-evaluated', [EvaluationFormController::class, 'markEvaluated'])->name('bioetica.evaluation-forms.mark-evaluated');
+        Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('bioetica.evaluation-forms.submit');
+        Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('bioetica.evaluation-forms.schedule-deliberation');
+        Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('bioetica.evaluation-forms.start-deliberation');
+        Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('bioetica.evaluation-forms.submit-deliberation');
+        Route::post('evaluation-forms/{form}/close-meeting', [EvaluationFormController::class, 'closeMeeting'])->name('bioetica.evaluation-forms.close-meeting');
+        Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('bioetica.evaluation-forms.decide');
+        Route::get('final-decisions', [EvaluationFormController::class, 'getPendingFinalDecision'])->name('bioetica.final-decisions.list');
+        Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('bioetica.reviewer.evaluations.list');
+        Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('bioetica.secretary.evaluations.list');
         Route::get('protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersBioetica'])->name('bioetica.protocols.eligible-reviewers');
         Route::get('protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersBioetica'])->name('bioetica.protocols.reviewers');
         Route::post('protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersBioetica'])->name('bioetica.protocols.assign-reviewers');
-
-
+        Route::get('secretary/protocols', [ProtocolApiController::class, 'getForSecretary'])->name('bioetica.secretary.protocols.list');
     });
 });

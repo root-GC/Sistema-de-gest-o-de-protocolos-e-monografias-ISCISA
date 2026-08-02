@@ -18,12 +18,14 @@ class ProtocolReviewAssignment extends Model
         'reviewer_one',
         'reviewer_two',
         'review_order',
+        'is_primary',
         'status',
         'assigned_at',
     ];
 
     protected $casts = [
         'review_order' => 'boolean',
+        'is_primary' => 'boolean',
         'assigned_at' => 'datetime',
     ];
 

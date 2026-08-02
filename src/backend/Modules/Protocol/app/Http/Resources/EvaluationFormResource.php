@@ -5,6 +5,7 @@ namespace Modules\Protocol\app\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Modules\Protocol\app\Models\EvaluationForm;
+use Modules\Protocol\app\Models\Protocol;
 
 class EvaluationFormResource extends JsonResource
 {
@@ -15,6 +16,25 @@ class EvaluationFormResource extends JsonResource
         $isReviewer = $teacherProfile && $this->reviewerEvaluations
             ? $this->reviewerEvaluations->contains('reviewer_id', $teacherProfile->id)
             : false;
+        $myReviewerEvaluation = $teacherProfile && $this->reviewerEvaluations
+            ? $this->reviewerEvaluations->firstWhere('reviewer_id', $teacherProfile->id)
+            : null;
+        $isPrimaryReviewer = (bool) $myReviewerEvaluation?->protocolReviewAssignment?->is_primary;
+        $canAccessForm = $this->organ !== Protocol::ORGAN_COMITE_BIOETICA
+            || $isPrimaryReviewer
+            || ($user?->hasPermission('protocol.assign') ?? false);
+        $isSharedCommittee = in_array($this->organ, [
+            Protocol::ORGAN_COMITE_CIENTIFICO,
+            Protocol::ORGAN_COMITE_BIOETICA,
+        ], true);
+        $canShowFormFields = $canAccessForm && (
+            ! $isSharedCommittee
+            || in_array($this->status, [
+                EvaluationForm::STATUS_IN_DELIBERATION,
+                EvaluationForm::STATUS_DELIBERATED,
+                EvaluationForm::STATUS_CONCLUDED,
+            ], true)
+        );
 
         return [
             'id' => $this->id,
@@ -23,8 +43,13 @@ class EvaluationFormResource extends JsonResource
             'form_type' => $this->form_type,
             'parent_form_id' => $this->parent_form_id,
             'organ' => $this->organ,
+            'is_shared_form' => $isSharedCommittee,
+            'is_primary_reviewer' => $isPrimaryReviewer,
+            'can_access_form' => $canAccessForm,
             'status' => $this->status,
             'final_decision' => $this->final_decision,
+            'harmonized_decision' => $this->harmonized_decision,
+            'harmonized_at' => $this->harmonized_at,
             'decided_by' => $this->decided_by,
             'decided_at' => $this->decided_at,
             'conclusion_summary' => $this->conclusion_summary,
@@ -42,14 +67,34 @@ class EvaluationFormResource extends JsonResource
                 'status' => $this->protocol->status,
                 'status_label' => $this->protocol->status_label,
             ]),
-            'form_criteria' => EvaluationFormCriterionResource::collection(
-                $this->whenLoaded('formCriteria')
+            'form_criteria' => $this->when(
+                $canShowFormFields && $this->relationLoaded('formCriteria'),
+                fn() => EvaluationFormCriterionResource::collection($this->formCriteria)
             ),
-            'reviewer_evaluations' => ReviewerEvaluationResource::collection(
-                $this->whenLoaded('reviewerEvaluations')
-            ),
+            'reviewer_evaluations' => $canAccessForm
+                ? ReviewerEvaluationResource::collection($this->whenLoaded('reviewerEvaluations'))
+                : $this->whenLoaded('reviewerEvaluations', fn() => $this->reviewerEvaluations
+                    ->map(fn($reviewerEvaluation) => [
+                        'id' => $reviewerEvaluation->id,
+                        'evaluation_form_id' => $reviewerEvaluation->evaluation_form_id,
+                        'reviewer_id' => $reviewerEvaluation->reviewer_id,
+                        'status' => $reviewerEvaluation->status,
+                        'is_evaluated' => $reviewerEvaluation->status === \Modules\Protocol\app\Models\ReviewerEvaluation::STATUS_SUBMITTED,
+                        'is_primary' => (bool) $reviewerEvaluation->protocolReviewAssignment?->is_primary,
+                        'role' => $reviewerEvaluation->protocolReviewAssignment?->is_primary ? 'primary' : 'reviewer',
+                        'submitted_at' => $reviewerEvaluation->submitted_at,
+                        'evaluated_at' => $reviewerEvaluation->submitted_at,
+                        'reviewer' => $reviewerEvaluation->reviewer ? [
+                            'id' => $reviewerEvaluation->reviewer->id,
+                            'user' => $reviewerEvaluation->reviewer->relationLoaded('user') && $reviewerEvaluation->reviewer->user ? [
+                                'id' => $reviewerEvaluation->reviewer->user->id,
+                                'name' => $reviewerEvaluation->reviewer->user->name,
+                            ] : null,
+                        ] : null,
+                    ])
+                    ->values()),
             'criteria_comments' => $this->when(
-                $this->relationLoaded('formCriteria') && $this->relationLoaded('reviewerEvaluations'),
+                $canShowFormFields && $this->relationLoaded('formCriteria') && $this->relationLoaded('reviewerEvaluations'),
                 fn() => $this->buildCriteriaComments()
             ),
             'parent_form' => $this->whenLoaded('parentForm', fn() => $this->parentForm ? [
@@ -93,7 +138,17 @@ class EvaluationFormResource extends JsonResource
 
             $existing = $reviews->first();
 
+            if (in_array($this->organ, [Protocol::ORGAN_COMITE_CIENTIFICO, Protocol::ORGAN_COMITE_BIOETICA], true) && $existing) {
+                $reviews = collect([[
+                    'reviewer_id' => null,
+                    'reviewer_name' => '',
+                    'comment' => $existing['comment'],
+                    'is_shared' => true,
+                ]]);
+            }
+
             return [
+                'form_criterion_id' => $fc->id,
                 'criterion_id' => $fc->criterion_id,
                 'criterion_name' => $fc->criterion_name,
                 'group_name' => $fc->group_name,

@@ -135,29 +135,43 @@ class TopicService
             ->latest('submitted_at')
             ->get();
 
-        $protocolTopicIds = Protocol::query()
+        $latestProtocols = Protocol::query()
             ->whereIn('topic_id', $topics->pluck('id'))
-            ->pluck('topic_id')
-            ->toArray();
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('topic_id')
+            ->keyBy('topic_id');
 
-        return $topics->map(fn(Topic $topic) => [
-            'id' => $topic->id,
-            'title' => $topic->title,
-            'justification' => $topic->justification,
-            'status' => $topic->status,
-            'status_label' => $topic->status_label,
-            'submitted_at' => $topic->submitted_at,
-            'has_protocol' => in_array($topic->id, $protocolTopicIds),
-            'scientific_area' => $topic->scientificArea ? [
-                'id' => (int) $topic->scientificArea->id,
-                'name' => $topic->scientificArea->name,
-            ] : null,
-            'course' => $topic->course ? [
-                'id' => (int) $topic->course->id,
-                'name' => $topic->course->name,
-                'code' => $topic->course->code,
-            ] : null,
-        ])->all();
+        return $topics->map(function (Topic $topic) use ($latestProtocols) {
+            $latestProtocol = $latestProtocols->get($topic->id);
+            $canResubmitProtocol = $latestProtocol
+                && in_array($latestProtocol->status, Protocol::resubmittableStatuses(), true);
+
+            return [
+                'id' => $topic->id,
+                'title' => $topic->title,
+                'justification' => $topic->justification,
+                'status' => $topic->status,
+                'status_label' => $topic->status_label,
+                'submitted_at' => $topic->submitted_at,
+                'has_protocol' => (bool) $latestProtocol && ! $canResubmitProtocol,
+                'has_any_protocol' => (bool) $latestProtocol,
+                'can_resubmit_protocol' => (bool) $canResubmitProtocol,
+                'latest_protocol_id' => $latestProtocol?->id,
+                'latest_protocol_status' => $latestProtocol?->status,
+                'latest_protocol_status_label' => $latestProtocol?->status_label,
+                'scientific_area' => $topic->scientificArea ? [
+                    'id' => (int) $topic->scientificArea->id,
+                    'name' => $topic->scientificArea->name,
+                ] : null,
+                'course' => $topic->course ? [
+                    'id' => (int) $topic->course->id,
+                    'name' => $topic->course->name,
+                    'code' => $topic->course->code,
+                ] : null,
+            ];
+        })->all();
     }
 
     public function listForSupervisor(User $supervisor)

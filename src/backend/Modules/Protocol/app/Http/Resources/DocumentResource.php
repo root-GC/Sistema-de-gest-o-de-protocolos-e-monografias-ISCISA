@@ -18,6 +18,13 @@ class DocumentResource extends JsonResource
             'file_url' => Storage::disk('public')->url($this->file_path),
             'pages' => $this->pages,
             'version' => $this->version,
+            'version_label' => $this->version_label,
+            'rejected_by' => $this->whenLoaded('rejectedBy', fn() => $this->rejectedBy ? [
+                'id' => $this->rejectedBy->id,
+                'name' => $this->rejectedBy->name,
+                'email' => $this->rejectedBy->email,
+            ] : null),
+            'rejected_at' => $this->rejected_at,
             'status' => $this->status,
             'submitted_by' => $this->whenLoaded('submitter', fn() => [
                 'id' => $this->submitter->id,

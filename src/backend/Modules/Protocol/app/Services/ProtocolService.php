@@ -11,17 +11,20 @@ use Modules\Protocol\app\Models\EvaluationForm;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Events\ProtocolReviewersAssigned;
 use Modules\Protocol\app\Events\ProtocolStatusChanged;
+use Modules\Protocol\app\Models\ProtocolDocumentRequirement;
 use Modules\Protocol\app\Models\ProtocolReviewAssignment;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
 use Modules\Protocol\app\Models\Topic;
 use Modules\Protocol\app\Models\TopicReviewAssignment;
 use Modules\Protocol\app\Services\EvaluationService;
+use Modules\Protocol\app\Services\ProtocolHistoryService;
+use Modules\User\app\Models\Organ;
 use Modules\User\app\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 class ProtocolService
 {
-    public function submit(User $user, Topic $topic, UploadedFile $document, string $protocolType): Protocol
+    public function submit(User $user, Topic $topic, UploadedFile $document, string $protocolType, array $requiredDocuments = []): Protocol
     {
         $topic->loadMissing('student', 'supervisor.user', 'scientificArea.organ');
 
@@ -33,7 +36,7 @@ class ProtocolService
 
         if (! in_array($topic->status, [Topic::STATUS_APPROVED_NUCLEO, 'topic_approved'], true)) {
             throw new HttpResponseException(response()->json([
-                'message' => 'O protocolo so pode ser submetido apos aprovacao do tema pelo Nucleo Cientifico.',
+                'message' => 'O protocolo so pode ser submetido apos aprovacao do tema.',
             ], 422));
         }
 
@@ -54,12 +57,7 @@ class ProtocolService
             ->latest('submitted_at')
             ->first();
 
-        $resubmittableStatuses = [
-            Protocol::STATUS_REJECTED_SUPERVISOR,
-            Protocol::STATUS_REJECTED_NUCLEO,
-            Protocol::STATUS_REJECTED_CC,
-            Protocol::STATUS_REJECTED_BIOETICA,
-        ];
+        $resubmittableStatuses = Protocol::resubmittableStatuses();
 
         if ($existing && ! in_array($existing->status, $resubmittableStatuses, true)) {
             throw new HttpResponseException(response()->json([
@@ -68,11 +66,22 @@ class ProtocolService
             ], 409));
         }
 
-        return DB::transaction(function () use ($user, $topic, $document, $protocolType, $existing) {
+        return DB::transaction(function () use ($user, $topic, $document, $protocolType, $requiredDocuments, $existing) {
             $currentOrganId = $topic->scientificArea?->organ_id;
+
+            $oldStatus = null;
+            $oldSubmissionNumber = null;
+            $previousRequiredDocuments = collect();
+            $isResubmission = (bool) $existing;
 
             if ($existing) {
                 $protocol = Protocol::lockForUpdate()->findOrFail($existing->id);
+                $oldStatus = $protocol->status;
+                $oldSubmissionNumber = (int) ($protocol->submission_number ?: 1);
+                $previousRequiredDocuments = $protocol->protocolDocumentRequirements()
+                    ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
+                    ->get()
+                    ->keyBy('document_key');
                 $nextSubmission = ((int) ($protocol->submission_number ?: 1)) + 1;
 
                 Document::query()
@@ -85,7 +94,7 @@ class ProtocolService
                     'protocol_type' => $protocolType,
                     'submission_number' => $nextSubmission,
                     'status' => Protocol::STATUS_PENDING_SUPERVISOR,
-                    'version' => (string) $nextSubmission,
+                    'version' => Protocol::submissionVersionLabel($nextSubmission),
                     'submitted_at' => now(),
                     'supervisor_decision_at' => null,
                     'justification' => null,
@@ -107,7 +116,7 @@ class ProtocolService
                     'protocol_type' => $protocolType,
                     'submission_number' => 1,
                     'status' => Protocol::STATUS_PENDING_SUPERVISOR,
-                    'version' => '1',
+                    'version' => Protocol::submissionVersionLabel(1),
                     'submitted_at' => now(),
                     'nc_version' => 0,
                     'cc_version' => 0,
@@ -161,8 +170,15 @@ class ProtocolService
                 'file_path' => $path,
                 'pages' => null,
                 'version' => $submissionNumber,
+                'version_label' => Protocol::submissionVersionLabel($submissionNumber),
                 'status' => Document::STATUS_ACTIVE,
             ]);
+
+            $storedRequiredDocuments = $this->storeCCRequiredDocuments(
+                $protocol,
+                $requiredDocuments,
+                $previousRequiredDocuments
+            );
 
     //  $createdDocument = Document::create([
     //     'submited_by' => $user->id,
@@ -181,15 +197,293 @@ class ProtocolService
     //     'file_path' => $createdDocument->file_path,
     //     'real_path' => $path,
     // ]);
-            event(new ProtocolStatusChanged($protocol, null, $protocol->status, $user));
+            app(ProtocolHistoryService::class)->record(
+                $protocol,
+                $isResubmission ? 'resubmitted' : 'submitted',
+                $user,
+                $protocol->current_organ_id,
+                $oldStatus,
+                $protocol->status,
+                $isResubmission
+                    ? 'Protocolo ressubmetido pelo estudante.'
+                    : 'Protocolo submetido pelo estudante.',
+                [
+                    'submission_number' => (int) $protocol->submission_number,
+                    'previous_submission_number' => $oldSubmissionNumber,
+                    'protocol_type' => $protocolType,
+                    'required_documents' => $storedRequiredDocuments,
+                ]
+            );
 
-            return $protocol->load(['topic:id,title,status', 'supervisor.user:id,name,email', 'documents']);
+            event(new ProtocolStatusChanged($protocol, $oldStatus, $protocol->status, $user));
+
+            return $protocol->load([
+                'topic:id,title,status',
+                'supervisor.user:id,name,email',
+                'documents.rejectedBy:id,name,email',
+                'protocolDocumentRequirements',
+            ]);
         });
     }
 
     public function getForSupervisor(User $supervisor): Collection
     {
         return $this->listForSupervisor($supervisor);
+    }
+
+    private function storeCCRequiredDocuments(Protocol $protocol, array $files, ?Collection $previousRequiredDocuments = null): array
+    {
+        $submissionNumber = (int) ($protocol->submission_number ?: 1);
+        $previousRequiredDocuments = $previousRequiredDocuments ?? collect();
+        $preparedDocuments = [];
+
+        foreach (ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS as $key => $name) {
+            $file = $files[$key] ?? null;
+            $safeKey = preg_replace('/[^a-z0-9_\\-]/i', '_', $key);
+            $source = 'uploaded';
+            $fileName = null;
+
+            if ($file instanceof UploadedFile) {
+                $extension = $file->getClientOriginalExtension() ?: 'pdf';
+                $path = $file->storeAs(
+                    "protocols/{$protocol->id}/required-documents/S{$submissionNumber}",
+                    "{$safeKey}.{$extension}",
+                    'public'
+                );
+                $fileName = $file->getClientOriginalName();
+            } else {
+                $previousRequirement = $previousRequiredDocuments->get($key);
+
+                if (! $previousRequirement || ! $previousRequirement->file_path) {
+                    throw new HttpResponseException(response()->json([
+                        'message' => "O anexo obrigatorio '{$name}' nao foi enviado nem encontrado na versao anterior.",
+                    ], 422));
+                }
+
+                $extension = pathinfo($previousRequirement->file_path, PATHINFO_EXTENSION) ?: 'pdf';
+                $path = "protocols/{$protocol->id}/required-documents/S{$submissionNumber}/{$safeKey}.{$extension}";
+                Storage::disk('public')->copy($previousRequirement->file_path, $path);
+                $fileName = $previousRequirement->file_name ?: basename($previousRequirement->file_path);
+                $source = 'reused';
+            }
+
+            $preparedDocuments[] = [
+                'document_key' => $key,
+                'nome' => $name,
+                'file_path' => $path,
+                'file_name' => $fileName,
+                'source' => $source,
+            ];
+        }
+
+        if ($previousRequiredDocuments->isNotEmpty()) {
+            $protocol->protocolDocumentRequirements()
+                ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
+                ->delete();
+        }
+
+        $storedDocuments = [];
+
+        foreach ($preparedDocuments as $preparedDocument) {
+            $requirement = ProtocolDocumentRequirement::create([
+                'protocol_id' => $protocol->id,
+                'document_key' => $preparedDocument['document_key'],
+                'nome' => $preparedDocument['nome'],
+                'required_for_organ' => Protocol::ORGAN_COMITE_CIENTIFICO,
+                'file_path' => $preparedDocument['file_path'],
+                'file_name' => $preparedDocument['file_name'],
+                'enviado' => true,
+                'aprovado' => null,
+                'rejection_reason' => null,
+            ]);
+
+            $storedDocuments[] = [
+                'requirement_id' => $requirement->id,
+                'document_key' => $preparedDocument['document_key'],
+                'document_name' => $preparedDocument['nome'],
+                'file_name' => $preparedDocument['file_name'],
+                'source' => $preparedDocument['source'],
+            ];
+        }
+
+        return $storedDocuments;
+    }
+
+    public function uploadRequiredDocument(ProtocolDocumentRequirement $requirement, UploadedFile $file, User $user): ProtocolDocumentRequirement
+    {
+        return DB::transaction(function () use ($requirement, $file, $user) {
+            $requirement = ProtocolDocumentRequirement::query()->lockForUpdate()->findOrFail($requirement->id);
+            $protocol = Protocol::query()->lockForUpdate()->findOrFail($requirement->protocol_id);
+
+            if ((int) $protocol->student !== (int) $user->id) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Apenas o estudante dono do protocolo pode reenviar este anexo.',
+                ], 403));
+            }
+
+            if ($requirement->aprovado === true) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Este anexo ja foi aprovado e nao pode ser substituido.',
+                ], 422));
+            }
+
+            if (! in_array($protocol->status, [
+                Protocol::STATUS_PENDING_SUPERVISOR,
+                Protocol::STATUS_DOCUMENTS_PENDING_CC,
+                Protocol::STATUS_REJECTED_SUPERVISOR,
+                Protocol::STATUS_REJECTED_CC,
+            ], true)) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Este protocolo nao permite reenviar anexos neste estado.',
+                ], 422));
+            }
+
+            $oldFileName = $requirement->file_name;
+
+            $extension = $file->getClientOriginalExtension() ?: 'pdf';
+            $safeKey = preg_replace('/[^a-z0-9_\\-]/i', '_', $requirement->document_key);
+            $path = $file->storeAs(
+                "protocols/{$protocol->id}/required-documents/S{$protocol->submission_number}",
+                "{$safeKey}.{$extension}",
+                'public'
+            );
+
+            $requirement->update([
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'enviado' => true,
+                'aprovado' => null,
+                'rejection_reason' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+            ]);
+
+            app(ProtocolHistoryService::class)->record(
+                $protocol,
+                'required_document_uploaded',
+                $user,
+                $protocol->current_organ_id,
+                $protocol->status,
+                $protocol->status,
+                "Anexo reenviado: {$requirement->nome}.",
+                [
+                    'requirement_id' => $requirement->id,
+                    'document_key' => $requirement->document_key,
+                    'document_name' => $requirement->nome,
+                    'old_file_name' => $oldFileName,
+                    'new_file_name' => $file->getClientOriginalName(),
+                ]
+            );
+
+            return $requirement->fresh();
+        });
+    }
+
+    public function reviewRequiredDocument(ProtocolDocumentRequirement $requirement, bool $approved, ?string $reason, User $secretary): Protocol
+    {
+        return DB::transaction(function () use ($requirement, $approved, $reason, $secretary) {
+            $requirement = ProtocolDocumentRequirement::query()->lockForUpdate()->findOrFail($requirement->id);
+            $protocol = Protocol::query()->lockForUpdate()->findOrFail($requirement->protocol_id);
+            $secretaryProfile = $secretary->secretaryProfile;
+
+            if (! $secretaryProfile || $secretaryProfile->organ?->type !== Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Apenas secretarias do Comite Cientifico podem validar anexos.',
+                ], 403));
+            }
+
+            if ((int) $protocol->current_organ_id !== (int) $secretaryProfile->organ_id) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Secretaria nao tem permissao para validar anexos deste protocolo.',
+                ], 403));
+            }
+
+            if ($protocol->status !== Protocol::STATUS_DOCUMENTS_PENDING_CC) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'O protocolo nao esta em validacao documental do Comite Cientifico.',
+                ], 422));
+            }
+
+            if (! $requirement->enviado || ! $requirement->file_path) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Este anexo ainda nao foi enviado.',
+                ], 422));
+            }
+
+            if (! $approved && ! trim((string) $reason)) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Informe o motivo da reprovacao do anexo.',
+                ], 422));
+            }
+
+            $oldStatus = $protocol->status;
+
+            $requirement->update([
+                'aprovado' => $approved,
+                'rejection_reason' => $approved ? null : $reason,
+                'reviewed_by' => $secretary->id,
+                'reviewed_at' => now(),
+            ]);
+
+            app(ProtocolHistoryService::class)->record(
+                $protocol,
+                $approved ? 'required_document_approved' : 'required_document_rejected',
+                $secretary,
+                $secretaryProfile->organ_id,
+                $oldStatus,
+                $protocol->status,
+                ($approved ? 'Anexo aprovado: ' : 'Anexo reprovado: ') . $requirement->nome . '.',
+                [
+                    'requirement_id' => $requirement->id,
+                    'document_key' => $requirement->document_key,
+                    'document_name' => $requirement->nome,
+                    'file_name' => $requirement->file_name,
+                    'rejection_reason' => $approved ? null : $reason,
+                ]
+            );
+
+            if ($this->areRequiredDocumentsApproved($protocol, Protocol::ORGAN_COMITE_CIENTIFICO)) {
+                $protocol->update([
+                    'status' => Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
+                    'justification' => null,
+                ]);
+
+                app(ProtocolHistoryService::class)->record(
+                    $protocol,
+                    'required_documents_approved',
+                    $secretary,
+                    $secretaryProfile->organ_id,
+                    $oldStatus,
+                    $protocol->status,
+                    'Todos os anexos obrigatorios do Comite Cientifico foram aprovados.',
+                );
+
+                event(new ProtocolStatusChanged($protocol, $oldStatus, $protocol->status, $secretary));
+            }
+
+            return $protocol->fresh()->load([
+                'topic:id,title,status,scientific_area_id,supervisor_id',
+                'topic.scientificArea:id,name,organ_id',
+                'topic.supervisor.user:id,name,email',
+                'supervisor.user:id,name,email',
+                'student:id,name,email',
+                'documents.rejectedBy:id,name,email',
+                'protocolDocumentRequirements.reviewer:id,name,email',
+            ]);
+        });
+    }
+
+    public function areRequiredDocumentsApproved(Protocol $protocol, string $organ): bool
+    {
+        $requirements = $protocol->protocolDocumentRequirements()
+            ->where('required_for_organ', $organ)
+            ->get();
+
+        if ($requirements->count() < count(ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS)) {
+            return false;
+        }
+
+        return $requirements->every(fn(ProtocolDocumentRequirement $requirement) => $requirement->aprovado === true);
     }
 
     public function listForStudent(User $user)
@@ -199,7 +493,12 @@ class ProtocolService
             ->with([
                 'topic:id,title,status',
                 'supervisor.user:id,name,email',
-                'documents',
+                'documents.rejectedBy:id,name,email',
+                'protocolDocumentRequirements.reviewer:id,name,email',
+                'histories' => fn($q) => $q
+                    ->with(['actor:id,name,email', 'organ:id,name,type'])
+                    ->orderBy('occurred_at')
+                    ->orderBy('id'),
             ])
             ->latest('submitted_at')
             ->get();
@@ -219,7 +518,12 @@ class ProtocolService
                 'topic:id,title,status',
                 'student:id,name,email',
                 'supervisor.user:id,name,email',
-                'documents',
+                'documents.rejectedBy:id,name,email',
+                'protocolDocumentRequirements.reviewer:id,name,email',
+                'histories' => fn($q) => $q
+                    ->with(['actor:id,name,email', 'organ:id,name,type'])
+                    ->orderBy('occurred_at')
+                    ->orderBy('id'),
             ])
             ->latest('submitted_at')
             ->get();
@@ -255,22 +559,35 @@ class ProtocolService
                 ], 422));
             }
 
+            $oldStatus = $protocol->status;
+
             if ($decision === 'approved') {
-                $topic->loadMissing('scientificArea:id,organ_id');
-                $submissionNumber = (int) ($protocol->submission_number ?: 1);
+                $ccOrgan = Organ::query()
+                    ->where('type', Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE)
+                    ->first();
+
+                if (! $ccOrgan) {
+                    throw new HttpResponseException(response()->json([
+                        'message' => 'Orgao do Comite Cientifico nao encontrado.',
+                    ], 500));
+                }
+
+                $versionLabel = Protocol::organVersionLabel(Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE, 1);
 
                 $protocol->update([
-                    'status' => Protocol::STATUS_PENDING_NUCLEO,
+                    'status' => Protocol::STATUS_DOCUMENTS_PENDING_CC,
                     'approved_by_supervisor' => true,
                     'supervisor_id' => $assignedSupervisorId,
                     'supervisor_decision_at' => now(),
                     'justification' => null,
-                    'current_organ_id' => $topic->scientificArea?->organ_id ?: $protocol->current_organ_id,
-                    'nc_version' => $submissionNumber,
-                    'cc_version' => 0,
+                    'current_organ_id' => $ccOrgan->id,
+                    'nc_version' => 0,
+                    'cc_version' => 1,
                     'cb_version' => 0,
-                    'version' => 'NC_V' . $submissionNumber,
+                    'version' => $versionLabel,
                 ]);
+
+                $this->syncLatestDocumentVersionLabel($protocol, $versionLabel);
             } else {
                 $protocol->update([
                     'status' => Protocol::STATUS_REJECTED_SUPERVISOR,
@@ -282,16 +599,66 @@ class ProtocolService
                     'cc_version' => 0,
                     'cb_version' => 0,
                 ]);
+
+                $this->markLatestDocumentRejected($protocol, $supervisor->id);
             }
 
             $newStatus = $decision === 'approved'
-                ? Protocol::STATUS_PENDING_NUCLEO
+                ? Protocol::STATUS_DOCUMENTS_PENDING_CC
                 : Protocol::STATUS_REJECTED_SUPERVISOR;
 
-            event(new ProtocolStatusChanged($protocol, Protocol::STATUS_PENDING_SUPERVISOR, $newStatus, $supervisor));
+            app(ProtocolHistoryService::class)->record(
+                $protocol,
+                $decision === 'approved' ? 'supervisor_approved' : 'supervisor_rejected',
+                $supervisor,
+                $protocol->current_organ_id,
+                $oldStatus,
+                $newStatus,
+                $decision === 'approved'
+                    ? 'Protocolo autorizado pelo supervisor e encaminhado ao Comite Cientifico.'
+                    : 'Protocolo rejeitado pelo supervisor.',
+                [
+                    'justification' => $decision === 'approved' ? null : $justification,
+                    'submission_number' => (int) $protocol->submission_number,
+                ]
+            );
 
-            return $protocol->load(['topic:id,title,status', 'supervisor.user:id,name,email', 'documents']);
+            event(new ProtocolStatusChanged($protocol, $oldStatus, $newStatus, $supervisor));
+
+            return $protocol->load([
+                'topic:id,title,status',
+                'supervisor.user:id,name,email',
+                'documents.rejectedBy:id,name,email',
+                'protocolDocumentRequirements.reviewer:id,name,email',
+            ]);
         });
+    }
+
+    public function syncLatestDocumentVersionLabel(Protocol $protocol, string $versionLabel): void
+    {
+        $latestDocument = $protocol->latestDocument()->first();
+
+        if (! $latestDocument) {
+            return;
+        }
+
+        $latestDocument->update([
+            'version_label' => $versionLabel,
+        ]);
+    }
+
+    public function markLatestDocumentRejected(Protocol $protocol, ?int $userId): void
+    {
+        $latestDocument = $protocol->latestDocument()->first();
+
+        if (! $latestDocument || ! $userId) {
+            return;
+        }
+
+        $latestDocument->update([
+            'rejected_by' => $userId,
+            'rejected_at' => now(),
+        ]);
     }
 
     public function listForSecretary(User $secretary): Collection
@@ -314,6 +681,7 @@ class ProtocolService
                 Protocol::STATUS_IN_REVIEW_NUCLEO,
             ],
             Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => [
+                Protocol::STATUS_DOCUMENTS_PENDING_CC,
                 Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
                 Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
             ],
@@ -324,24 +692,49 @@ class ProtocolService
         ];
 
         $statuses = $statusMap[$organ->type] ?? [];
+        $formOrgan = Protocol::formOrganFromOrganType($organ->type);
 
         if ($statuses === []) {
             return collect();
         }
 
-        return Protocol::query()
-            ->whereIn('status', $statuses)
-            ->where('current_organ_id', $organ->id)
+        $protocols = Protocol::query()
+            ->where(function ($query) use ($statuses, $organ, $formOrgan) {
+                $query->where(function ($activeQuery) use ($statuses, $organ) {
+                    $activeQuery
+                        ->whereIn('status', $statuses)
+                        ->where('current_organ_id', $organ->id);
+                });
+
+                $query->orWhereHas('histories', fn($historyQuery) => $historyQuery->where('organ_id', $organ->id));
+
+                if ($formOrgan) {
+                    $query->orWhereHas('opinions', fn($opinionQuery) => $opinionQuery->where('organ', $formOrgan));
+                }
+            })
             ->when(
                 $organ->type === 'nucleus' && $secretaryProfile->scientific_area_id,
                 fn($q) => $q->whereHas('topic', fn($q) => $q->where('scientific_area_id', $secretaryProfile->scientific_area_id))
             )
             ->with([
+                'currentOrgan:id,name,type',
                 'topic:id,title,status,scientific_area_id,supervisor_id',
                 'topic.scientificArea:id,name,organ_id',
+                'topic.course:id,name,code,scientific_area_id',
                 'topic.supervisor.user:id,name,email',
                 'supervisor.user:id,name,email',
                 'student:id,name,email',
+                'documents.rejectedBy:id,name,email',
+                'protocolDocumentRequirements.reviewer:id,name,email',
+                'histories' => fn($q) => $q
+                    ->where('organ_id', $organ->id)
+                    ->with(['actor:id,name,email', 'organ:id,name,type'])
+                    ->orderBy('occurred_at')
+                    ->orderBy('id'),
+                'opinions' => fn($q) => $q
+                    ->when($formOrgan, fn($opinionQuery) => $opinionQuery->where('organ', $formOrgan))
+                    ->with(['issuedBy:id,name,email', 'evaluationForm:id,version'])
+                    ->latest('issued_at'),
                 'reviewAssignments' => fn($q) => $q
                     ->where('organ_id', $organ->id)
                     ->with([
@@ -351,6 +744,17 @@ class ProtocolService
             ])
             ->latest('submitted_at')
             ->get();
+
+        return $protocols->map(function (Protocol $protocol) use ($organ, $formOrgan, $statuses) {
+            $isActionableInOrgan = (int) $protocol->current_organ_id === (int) $organ->id
+                && in_array($protocol->status, $statuses, true);
+
+            $protocol->setAttribute('organ_tracking', $this->buildOrganTracking($protocol, $organ, $formOrgan));
+            $protocol->setAttribute('read_only_for_organ', ! $isActionableInOrgan);
+            $protocol->setAttribute('is_historical_for_organ', ! $isActionableInOrgan);
+
+            return $protocol;
+        });
     }
 
     public function listForReviewer(User $reviewer): Collection
@@ -447,16 +851,19 @@ class ProtocolService
 
     private function getEligibleReviewersForOrgan(Protocol $protocol, string $organType): Collection
     {
-        $protocol->loadMissing('topic');
+        $protocol->loadMissing('topic.scientificArea', 'currentOrgan');
 
-        $organ = \Modules\User\app\Models\Organ::query()
-            ->where('type', $organType)
-            ->first();
+        $organ = $protocol->currentOrgan && $protocol->currentOrgan->type === $organType
+            ? $protocol->currentOrgan
+            : \Modules\User\app\Models\Organ::query()
+                ->where('type', $organType)
+                ->first();
 
         if (! $organ) {
             return collect();
         }
 
+        $topicScientificAreaId = $protocol->topic?->scientific_area_id;
         $supervisorId = $protocol->supervisor_id ?: $protocol->topic?->supervisor_id;
         $assignedReviewerIds = $this->getAllAssignedReviewerIds($protocol, $organ->id);
 
@@ -464,19 +871,31 @@ class ProtocolService
             ->distinct()
             ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
             ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
+            ->leftJoin('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
             ->where('organ_members.organ_id', $organ->id)
             ->whereNull('organ_members.deleted_at')
             ->whereNull('teacher_profiles.deleted_at')
             ->whereNull('users.deleted_at')
             ->when($supervisorId, fn($q) => $q->where('teacher_profiles.id', '!=', $supervisorId))
             ->when($assignedReviewerIds !== [], fn($q) => $q->whereNotIn('teacher_profiles.id', $assignedReviewerIds))
-            ->select('teacher_profiles.id', 'users.name', 'users.email')
+            ->select(
+                'teacher_profiles.id',
+                'teacher_profiles.scientific_area_id',
+                'users.name',
+                'users.email',
+                'scientific_areas.name as scientific_area_name',
+            )
             ->orderBy('users.name')
             ->get()
             ->map(fn($reviewer) => [
                 'id' => $reviewer->id,
                 'name' => $reviewer->name,
                 'email' => $reviewer->email,
+                'scientific_area_id' => $reviewer->scientific_area_id,
+                'scientific_area_name' => $reviewer->scientific_area_name,
+                'is_same_scientific_area' => $topicScientificAreaId
+                    ? (int) $reviewer->scientific_area_id === (int) $topicScientificAreaId
+                    : false,
                 'active_works' => $this->countActiveWorksForTeacher($reviewer->id),
             ]);
     }
@@ -531,6 +950,8 @@ class ProtocolService
                         ] : null,
                         'status' => $assignment->status,
                         'review_order' => $assignment->review_order,
+                        'is_primary' => (bool) $assignment->is_primary,
+                        'role' => $assignment->is_primary ? 'primary' : 'reviewer',
                         'assigned_at' => $assignment->assigned_at,
                     ] : null,
                     $assignment->reviewerTwo ? [
@@ -547,6 +968,8 @@ class ProtocolService
                         ] : null,
                         'status' => $assignment->status,
                         'review_order' => $assignment->review_order,
+                        'is_primary' => (bool) $assignment->is_primary,
+                        'role' => $assignment->is_primary ? 'primary' : 'reviewer',
                         'assigned_at' => $assignment->assigned_at,
                     ] : null,
                 ])->filter();
@@ -588,6 +1011,15 @@ class ProtocolService
             if ((int) $protocol->current_organ_id !== (int) $organ->id) {
                 throw new HttpResponseException(
                     response()->json(['message' => 'Secretaria nao tem permissao para atribuir revisores a este protocolo.'], 403)
+                );
+            }
+
+            if (
+                $expectedOrganType === Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE
+                && ! $this->areRequiredDocumentsApproved($protocol, Protocol::ORGAN_COMITE_CIENTIFICO)
+            ) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Nem todos os anexos obrigatorios foram aprovados pela secretaria do Comite Cientifico.'], 422)
                 );
             }
 
@@ -659,13 +1091,203 @@ class ProtocolService
                 );
             }
 
+            $oldStatus = $protocol->status;
             $protocol->update(['status' => $newStatus]);
+
+            app(ProtocolHistoryService::class)->record(
+                $protocol,
+                'reviewers_assigned',
+                $secretary,
+                $organ->id,
+                $oldStatus,
+                $newStatus,
+                'Revisores atribuidos ao protocolo.',
+                [
+                    'reviewer_ids' => array_values($reviewerIds),
+                ]
+            );
 
             app(EvaluationService::class)->createForProtocol(
                 $protocol,
                 $reviewerIds,
                 $secretary,
                 $formOrgan
+            );
+
+            event(new ProtocolReviewersAssigned($protocol, $reviewerIds));
+
+            return $protocol->load([
+                'topic:id,title,status,scientific_area_id,supervisor_id',
+                'topic.scientificArea:id,name,organ_id',
+                'topic.supervisor.user:id,name,email',
+                'supervisor.user:id,name,email',
+                'student:id,name,email',
+                'reviewAssignments' => fn($q) => $q
+                    ->where('organ_id', $organ->id)
+                    ->with([
+                        'reviewerOne.user:id,name,email',
+                        'reviewerTwo.user:id,name,email',
+                    ]),
+            ]);
+        });
+    }
+
+    public function assignReviewersToBioetica(Protocol $protocol, int $primaryReviewerId, array $reviewerIds, User $secretary): Protocol
+    {
+        return DB::transaction(function () use ($protocol, $primaryReviewerId, $reviewerIds, $secretary) {
+            $protocol = Protocol::lockForUpdate()->findOrFail($protocol->id);
+            $secretaryProfile = $secretary->secretaryProfile;
+
+            if (! $secretaryProfile) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Utilizador nao e uma secretaria.'], 403)
+                );
+            }
+
+            $organ = $secretaryProfile->organ;
+            if (! $organ || $organ->type !== Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Secretaria nao tem permissao para atribuir revisores no Comite de Bioetica.'], 403)
+                );
+            }
+
+            if ($protocol->status !== Protocol::STATUS_PENDING_COMITE_BIOETICA) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'O protocolo nao esta em estado de atribuicao de revisores no Comite de Bioetica.'], 422)
+                );
+            }
+
+            if ((int) $protocol->current_organ_id !== (int) $organ->id) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Secretaria nao tem permissao para atribuir revisores a este protocolo.'], 403)
+                );
+            }
+
+            $protocol->loadMissing('topic');
+            $topicScientificAreaId = $protocol->topic?->scientific_area_id;
+            $supervisorId = $protocol->supervisor_id ?: $protocol->topic?->supervisor_id;
+
+            if (! $topicScientificAreaId) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'O protocolo nao possui area cientifica para validar o revisor principal.'], 422)
+                );
+            }
+
+            $reviewerIds = collect($reviewerIds)
+                ->prepend($primaryReviewerId)
+                ->filter()
+                ->map(fn($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->toArray();
+
+            if ($reviewerIds === []) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Informe pelo menos um revisor.'], 422)
+                );
+            }
+
+            if (! in_array($primaryReviewerId, $reviewerIds, true)) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'O revisor principal deve fazer parte da lista de revisores.'], 422)
+                );
+            }
+
+            if ($supervisorId && in_array((int) $supervisorId, $reviewerIds, true)) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'O supervisor do tema nao pode ser atribuido como revisor.'], 422)
+                );
+            }
+
+            $reviewers = DB::table('teacher_profiles')
+                ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
+                ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
+                ->leftJoin('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+                ->whereIn('teacher_profiles.id', $reviewerIds)
+                ->where('organ_members.organ_id', $organ->id)
+                ->whereNull('organ_members.deleted_at')
+                ->whereNull('teacher_profiles.deleted_at')
+                ->whereNull('users.deleted_at')
+                ->select(
+                    'teacher_profiles.id',
+                    'teacher_profiles.scientific_area_id',
+                    'users.name',
+                    'users.email',
+                    'scientific_areas.name as scientific_area_name',
+                )
+                ->get()
+                ->keyBy('id');
+
+            if ($reviewers->count() !== count($reviewerIds)) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Todos os revisores do Comite de Bioetica devem pertencer ao orgao.'], 422)
+                );
+            }
+
+            $primaryReviewer = $reviewers->get($primaryReviewerId);
+
+            if (! $primaryReviewer) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Revisor principal nao encontrado no orgao do Comite de Bioetica.'], 422)
+                );
+            }
+
+            if ($topicScientificAreaId && (int) $primaryReviewer->scientific_area_id !== (int) $topicScientificAreaId) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'O revisor principal deve pertencer a area cientifica do protocolo.'], 422)
+                );
+            }
+
+            $assignedExisting = $protocol->reviewAssignments()
+                ->where('organ_id', $organ->id)
+                ->where(
+                    fn($query) => $query
+                        ->whereIn('reviewer_one', $reviewerIds)
+                        ->orWhereIn('reviewer_two', $reviewerIds)
+                )
+                ->exists();
+
+            if ($assignedExisting) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Um dos revisores ja foi atribuido a este protocolo neste orgao.'], 409)
+                );
+            }
+
+            foreach ($reviewerIds as $reviewerId) {
+                ProtocolReviewAssignment::create([
+                    'protocol_id' => $protocol->id,
+                    'organ_id' => $organ->id,
+                    'reviewer_one' => $reviewerId,
+                    'reviewer_two' => null,
+                    'review_order' => false,
+                    'is_primary' => (int) $reviewerId === (int) $primaryReviewerId,
+                    'status' => 'pending',
+                    'assigned_at' => now(),
+                ]);
+            }
+
+            $oldStatus = $protocol->status;
+            $protocol->update(['status' => Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA]);
+
+            app(ProtocolHistoryService::class)->record(
+                $protocol,
+                'reviewers_assigned',
+                $secretary,
+                $organ->id,
+                $oldStatus,
+                Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
+                'Revisores atribuidos ao protocolo no Comite de Bioetica.',
+                [
+                    'primary_reviewer_id' => $primaryReviewerId,
+                    'reviewer_ids' => array_values($reviewerIds),
+                ]
+            );
+
+            app(EvaluationService::class)->createForProtocol(
+                $protocol,
+                $reviewerIds,
+                $secretary,
+                Protocol::ORGAN_COMITE_BIOETICA
             );
 
             event(new ProtocolReviewersAssigned($protocol, $reviewerIds));
@@ -699,6 +1321,151 @@ class ProtocolService
             ->unique()
             ->values()
             ->toArray();
+    }
+
+    private function buildOrganTracking(Protocol $protocol, $organ, ?string $formOrgan): array
+    {
+        $histories = $protocol->relationLoaded('histories')
+            ? $protocol->histories
+            : collect();
+        $opinions = $protocol->relationLoaded('opinions')
+            ? $protocol->opinions
+            : collect();
+
+        $latestHistory = $histories->last();
+        $latestOpinion = $opinions->first();
+        $isCurrent = (int) $protocol->current_organ_id === (int) $organ->id;
+        $organName = $organ->name ?: $this->organTypeLabel($organ->type);
+        $latestActionAt = $latestHistory?->occurred_at ?? $latestOpinion?->issued_at;
+        $approvedAt = $histories
+            ->first(fn($history) => $history->action === 'approved')
+            ?->occurred_at
+            ?? ($latestOpinion?->decision === ReviewerEvaluation::DECISION_APPROVED ? $latestOpinion->issued_at : null);
+        $rejectedAt = $histories
+            ->first(fn($history) => $history->action === 'rejected')
+            ?->occurred_at
+            ?? ($latestOpinion?->decision === ReviewerEvaluation::DECISION_NOT_APPROVED ? $latestOpinion->issued_at : null);
+
+        return [
+            'organ_id' => $organ->id,
+            'organ_name' => $organName,
+            'organ_type' => $organ->type,
+            'form_organ' => $formOrgan,
+            'is_current' => $isCurrent,
+            'is_historical' => ! $isCurrent,
+            'status_label' => $isCurrent
+                ? $protocol->status_label
+                : $this->historicalStatusLabel($organName, $latestHistory?->action, $latestOpinion?->decision),
+            'latest_action' => $latestHistory?->action,
+            'latest_action_label' => $this->historyActionLabel($latestHistory?->action),
+            'latest_action_at' => $latestActionAt,
+            'approved_at' => $approvedAt,
+            'rejected_at' => $rejectedAt,
+            'history' => $histories->map(fn($history) => [
+                'id' => $history->id,
+                'action' => $history->action,
+                'action_label' => $this->historyActionLabel($history->action),
+                'description' => $history->description,
+                'old_status' => $history->old_status,
+                'old_status_label' => $this->protocolStatusLabel($history->old_status),
+                'new_status' => $history->new_status,
+                'new_status_label' => $this->protocolStatusLabel($history->new_status),
+                'occurred_at' => $history->occurred_at,
+                'actor' => $history->actor ? [
+                    'id' => $history->actor->id,
+                    'name' => $history->actor->name,
+                    'email' => $history->actor->email,
+                ] : null,
+                'metadata' => $history->metadata,
+            ])->values(),
+            'latest_opinion' => $latestOpinion ? [
+                'id' => $latestOpinion->id,
+                'decision' => $latestOpinion->decision,
+                'issued_at' => $latestOpinion->issued_at,
+                'version' => $latestOpinion->effectiveVersion(),
+            ] : null,
+        ];
+    }
+
+    private function historicalStatusLabel(string $organName, ?string $latestAction, ?string $latestDecision): string
+    {
+        if ($latestAction === 'approved' || $latestDecision === ReviewerEvaluation::DECISION_APPROVED) {
+            return "Aprovado no {$organName}";
+        }
+
+        if ($latestAction === 'rejected' || $latestDecision === ReviewerEvaluation::DECISION_NOT_APPROVED) {
+            return "Reprovado no {$organName}";
+        }
+
+        if ($latestAction) {
+            return $this->historyActionLabel($latestAction) ?? "Registado no {$organName}";
+        }
+
+        return "Registado no {$organName}";
+    }
+
+    private function historyActionLabel(?string $action): ?string
+    {
+        if (! $action) {
+            return null;
+        }
+
+        return match ($action) {
+            'submitted' => 'Submetido',
+            'resubmitted' => 'Ressubmetido',
+            'supervisor_approved' => 'Autorizado pelo supervisor',
+            'supervisor_rejected' => 'Rejeitado pelo supervisor',
+            'required_document_uploaded' => 'Anexo reenviado',
+            'required_document_approved' => 'Anexo aprovado',
+            'required_document_rejected' => 'Anexo reprovado',
+            'required_documents_approved' => 'Anexos aprovados',
+            'reviewers_assigned' => 'Revisores atribuídos',
+            'reviewer_submitted_evaluation' => 'Revisor submeteu avaliação',
+            'reviewer_marked_evaluated' => 'Revisor marcou como avaliado',
+            'deliberation_pending' => 'Aguardando deliberação',
+            'deliberation_scheduled' => 'Deliberação marcada',
+            'deliberation_started' => 'Deliberação iniciada',
+            'deliberation_closed' => 'Deliberação encerrada',
+            'approved' => 'Aprovado',
+            'rejected' => 'Reprovado',
+            'forwarded' => 'Encaminhado',
+            default => $action,
+        };
+    }
+
+    private function protocolStatusLabel(?string $status): ?string
+    {
+        if (! $status) {
+            return null;
+        }
+
+        return match ($status) {
+            Protocol::STATUS_PENDING_SUPERVISOR => 'Aguardando aprovacao do supervisor',
+            Protocol::STATUS_REJECTED_SUPERVISOR => 'Rejeitado pelo supervisor',
+            Protocol::STATUS_PENDING_NUCLEO => 'Encaminhado ao Nucleo Cientifico',
+            Protocol::STATUS_IN_REVIEW_NUCLEO => 'Em avaliacao pelo Nucleo Cientifico',
+            Protocol::STATUS_DOCUMENTS_PENDING_CC => 'Aguardando validacao dos anexos pelo Comite Cientifico',
+            Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Encaminhado ao Comite Cientifico',
+            Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO => 'Em avaliacao pelo Comite Cientifico',
+            Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Encaminhado ao Comite de Bioetica',
+            Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA => 'Em avaliacao pelo Comite de Bioetica',
+            Protocol::STATUS_REJECTED_NUCLEO => 'Rejeitado pelo Nucleo Cientifico',
+            Protocol::STATUS_REJECTED_CC => 'Rejeitado pelo Comite Cientifico',
+            Protocol::STATUS_REJECTED_BIOETICA => 'Rejeitado pelo Comite de Bioetica',
+            Protocol::STATUS_APPROVED_FINAL => 'Aprovado',
+            Protocol::STATUS_REJECTED_FINAL => 'Rejeitado',
+            default => $status,
+        };
+    }
+
+    private function organTypeLabel(string $organType): string
+    {
+        return match ($organType) {
+            Protocol::ORGAN_TYPE_NUCLEUS => 'Nucleo Cientifico',
+            Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => 'Comite Cientifico',
+            Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE => 'Comite de Bioetica',
+            default => 'Orgao',
+        };
     }
 
     public function assignReviewers(Protocol $protocol, array $reviewerIds, User $secretary): Protocol
@@ -801,9 +1568,23 @@ class ProtocolService
                 );
             }
 
+            $oldStatus = $protocol->status;
             $protocol->update([
                 'status' => $newStatus,
             ]);
+
+            app(ProtocolHistoryService::class)->record(
+                $protocol,
+                'reviewers_assigned',
+                $secretary,
+                $organ->id,
+                $oldStatus,
+                $newStatus,
+                'Revisores atribuidos ao protocolo.',
+                [
+                    'reviewer_ids' => array_values($reviewerIds),
+                ]
+            );
 
             app(EvaluationService::class)->createForProtocol(
                 $protocol,

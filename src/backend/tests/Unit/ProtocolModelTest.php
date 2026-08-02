@@ -52,4 +52,15 @@ class ProtocolModelTest extends TestCase
         $this->assertSame(Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA, Protocol::ORGAN_FLOW[Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE]['in_review_status']);
         $this->assertNull(Protocol::ORGAN_FLOW[Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE]['next_organ_type']);
     }
+
+    public function test_version_helpers_restart_by_stage_without_padding(): void
+    {
+        $this->assertSame('V1', Protocol::submissionVersionLabel(1));
+        $this->assertSame('V12', Protocol::submissionVersionLabel(12));
+
+        $this->assertSame('NC_V1', Protocol::organVersionLabel(Protocol::ORGAN_TYPE_NUCLEUS));
+        $this->assertSame('CC_V1', Protocol::organVersionLabel(Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE));
+        $this->assertSame('CC_V2', Protocol::organVersionLabel(Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE, 2));
+        $this->assertSame('CIBS_V1', Protocol::organVersionLabel(Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE));
+    }
 }

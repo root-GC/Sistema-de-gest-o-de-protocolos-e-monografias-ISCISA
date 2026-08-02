@@ -28,6 +28,8 @@ class EvaluationForm extends Model
         'organ',
         'status',
         'final_decision',
+        'harmonized_decision',
+        'harmonized_at',
         'decided_by',
         'decided_at',
         'conclusion_summary',
@@ -38,6 +40,7 @@ class EvaluationForm extends Model
 
     protected $casts = [
         'decided_at' => 'datetime',
+        'harmonized_at' => 'datetime',
         'deliberation_date' => 'datetime',
     ];
 

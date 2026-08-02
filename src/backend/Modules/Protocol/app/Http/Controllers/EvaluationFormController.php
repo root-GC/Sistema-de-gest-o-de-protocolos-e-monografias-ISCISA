@@ -58,6 +58,33 @@ class EvaluationFormController extends Controller
         return false;
     }
 
+    private function routeFormOrgan(Request $request): string
+    {
+        if ($request->routeIs('cc.*')) {
+            return Protocol::ORGAN_COMITE_CIENTIFICO;
+        }
+
+        if ($request->routeIs('bioetica.*')) {
+            return Protocol::ORGAN_COMITE_BIOETICA;
+        }
+
+        return Protocol::ORGAN_NUCLEO;
+    }
+
+    private function isBioeticaPrimaryReviewer(User $user, EvaluationForm $form): bool
+    {
+        $teacherProfile = $user->teacherProfile;
+
+        if (! $teacherProfile) {
+            return false;
+        }
+
+        return $form->reviewerEvaluations()
+            ->where('reviewer_id', $teacherProfile->id)
+            ->whereHas('protocolReviewAssignment', fn($query) => $query->where('is_primary', true))
+            ->exists();
+    }
+
     public function show(EvaluationForm $form)
     {
         $this->authorize('view', $form);
@@ -138,6 +165,7 @@ class EvaluationFormController extends Controller
             $response['message'] = $messages[$protocol->status] ?? 'Protocolo actualizado.';
             $response['opinion'] = [
                 'id' => $opinion->id,
+                'version' => $opinion->effectiveVersion(),
                 'decision' => $opinion->decision,
                 'issued_at' => $opinion->issued_at,
                 'document_url' => Storage::disk('public')->url($path),
@@ -149,6 +177,35 @@ class EvaluationFormController extends Controller
         return response()->json($response);
     }
 
+    public function markEvaluated(SubmitEvaluationRequest $request, EvaluationForm $form)
+    {
+        $this->authorize('submitEvaluation', $form);
+
+        if (! in_array($form->organ, [Protocol::ORGAN_COMITE_CIENTIFICO, Protocol::ORGAN_COMITE_BIOETICA], true)) {
+            return response()->json([
+                'message' => 'Esta acção está disponível apenas para fichas do Comité Científico e Comité de Bioética.',
+            ], 422);
+        }
+
+        $result = $this->evaluationService->markAsReviewed(
+            $form,
+            $request->user(),
+            $request->input('decision'),
+            $request->input('overall_comment')
+        );
+
+        $message = ($result['deliberation_pending'] ?? false)
+            ? 'Avaliação registada. Aguardando marcação da deliberação.'
+            : 'Marcado como avaliado. Aguardando o outro revisor.';
+
+        return response()->json([
+            'message' => $message,
+            'reviewer_evaluation' => $result['reviewer_evaluation'],
+            'deliberation_pending' => $result['deliberation_pending'] ?? false,
+            'evaluation_form' => EvaluationFormResource::make($result['form']),
+        ]);
+    }
+
     public function scheduleDeliberation(Request $request, EvaluationForm $form)
     {
         $user = $request->user();
@@ -157,7 +214,10 @@ class EvaluationFormController extends Controller
             return response()->json(['message' => 'Apenas a secretaria pode marcar a deliberação.'], 403);
         }
 
-        if ($form->status !== EvaluationForm::STATUS_DELIBERATION_PENDING) {
+        if (! in_array($form->status, [
+            EvaluationForm::STATUS_DELIBERATION_PENDING,
+            EvaluationForm::STATUS_NOT_DELIBERATED,
+        ], true)) {
             return response()->json(['message' => 'A ficha não está em estado de deliberação pendente.'], 422);
         }
 
@@ -212,17 +272,26 @@ class EvaluationFormController extends Controller
             $validated['conclusion_summary'] ?? null
         );
 
+        $protocol = $result['evaluation_form']->protocol;
+
+        if (! $result['opinion']) {
+            return response()->json([
+                'message' => 'Ficha de deliberação submetida. Aguardando decisão final.',
+                'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
+            ]);
+        }
+
         $opinion = $result['opinion'];
         $path = app(DocumentGenerationService::class)->generateOpinionPdf($opinion);
         $opinion->update(['document_path' => $path]);
 
-        $protocol = $result['evaluation_form']->protocol;
         $messages = [
             Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
             Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
             Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
             Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado pelo Núcleo Científico.',
             Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado pelo Comité Científico.',
+            Protocol::STATUS_REJECTED_BIOETICA => 'Protocolo não aprovado pelo Comité de Bioética.',
             Protocol::STATUS_REJECTED_FINAL => 'Protocolo não aprovado.',
         ];
 
@@ -231,6 +300,7 @@ class EvaluationFormController extends Controller
             'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
             'opinion' => [
                 'id' => $opinion->id,
+                'version' => $opinion->effectiveVersion(),
                 'decision' => $opinion->decision,
                 'issued_at' => $opinion->issued_at,
                 'document_url' => Storage::disk('public')->url($path),
@@ -286,14 +356,20 @@ class EvaluationFormController extends Controller
     public function downloadOpinion(Request $request, Opinion $opinion, DocumentGenerationService $documentService)
     {
         $user = $request->user();
-        $opinion->loadMissing('protocol');
+        $opinion->loadMissing('protocol', 'evaluationForm');
         $protocol = $opinion->protocol;
 
         if (! $protocol || ! $this->canAccessProtocolDocument($user, $protocol)) {
             abort(403);
         }
 
-        if (! $opinion->document_path || ! Storage::disk('public')->exists($opinion->document_path)) {
+        $expectedFileName = 'parecer-' . $documentService->opinionVersion($opinion) . '.pdf';
+
+        if (
+            ! $opinion->document_path
+            || ! Storage::disk('public')->exists($opinion->document_path)
+            || basename($opinion->document_path) !== $expectedFileName
+        ) {
             $path = $documentService->generateOpinionPdf($opinion);
             $opinion->update(['document_path' => $path]);
         }
@@ -323,6 +399,10 @@ class EvaluationFormController extends Controller
 
         if (! $protocol || ! $this->canAccessProtocolDocument($user, $protocol)) {
             abort(403);
+        }
+
+        if ($form->organ === Protocol::ORGAN_COMITE_BIOETICA && ! $this->isBioeticaPrimaryReviewer($user, $form)) {
+            abort(403, 'Apenas o revisor principal do Comité de Bioética pode baixar esta ficha.');
         }
 
         $path = $documentService->generateEvaluationFormPdf($form);
@@ -385,12 +465,12 @@ class EvaluationFormController extends Controller
 
         $opinions = Opinion::query()
             ->where('protocol_id', $protocol->id)
-            ->with('issuedBy:id,name,email')
+            ->with(['issuedBy:id,name,email', 'evaluationForm:id,version'])
             ->latest('issued_at')
             ->get()
             ->map(fn($o) => [
                 'id' => $o->id,
-                'version' => $o->version,
+                'version' => $o->effectiveVersion(),
                 'organ' => $o->organ,
                 'decision' => $o->decision,
                 'observations' => $o->observations,
@@ -416,7 +496,15 @@ class EvaluationFormController extends Controller
 {
     $this->authorize('submitEvaluation', $form);
 
-    $form = $this->evaluationService->closeMeeting($form, $request->user());
+    $validated = $request->validate([
+        'result' => 'nullable|string|in:deliberated,not_deliberated',
+    ]);
+
+    $form = $this->evaluationService->closeMeeting(
+        $form,
+        $request->user(),
+        $validated['result'] ?? null
+    );
 
     $message = $form->status === EvaluationForm::STATUS_DELIBERATED
         ? 'Reunião encerrada com deliberação. Aguardando decisão final.'
@@ -437,8 +525,7 @@ public function getPendingFinalDecision(Request $request)
         return response()->json(['message' => 'Sem permissão para ver decisões pendentes.'], 403);
     }
 
-    // Detecta o órgão pelo prefixo da rota, tal como os outros métodos partilhados já devem fazer
-    $organ = $request->routeIs('nucleo.*') ? 'nucleo' : 'comite_cientifico';
+    $organ = $this->routeFormOrgan($request);
 
     return response()->json([
         'evaluation_forms' => EvaluationFormResource::collection(

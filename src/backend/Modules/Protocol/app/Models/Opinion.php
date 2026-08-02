@@ -40,4 +40,13 @@ class Opinion extends Model
     {
         return $this->belongsTo(User::class, 'issued_by');
     }
+
+    public function effectiveVersion(): string
+    {
+        if ($this->relationLoaded('evaluationForm') && $this->evaluationForm?->version) {
+            return $this->evaluationForm->version;
+        }
+
+        return $this->version;
+    }
 }

@@ -84,6 +84,7 @@ class ProtocolProtocolsIndexTest extends TestCase
             ->assertJsonCount(1, 'protocols')
             ->assertJsonPath('protocols.0.id', 1)
             ->assertJsonPath('protocols.0.documents.0.file_name', 'protocol-1-S1.docx')
+            ->assertJsonPath('protocols.0.documents.0.version_label', 'V1')
             ->assertJsonPath('protocols.0.documents.1.file_url', url('storage/protocols/1/protocol-1-S2.docx'));
     }
 }

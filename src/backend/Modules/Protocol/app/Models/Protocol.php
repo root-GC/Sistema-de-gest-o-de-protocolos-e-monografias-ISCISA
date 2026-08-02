@@ -16,6 +16,7 @@ class Protocol extends Model
     public const STATUS_REJECTED_SUPERVISOR = 'protocol_rejected_supervisor';
     public const STATUS_PENDING_NUCLEO = 'protocol_pending_nucleo';
     public const STATUS_IN_REVIEW_NUCLEO = 'protocol_in_review_nucleo';
+    public const STATUS_DOCUMENTS_PENDING_CC = 'protocol_documents_pending_cc';
     public const STATUS_PENDING_COMITE_CIENTIFICO = 'protocol_pending_comite_cientifico';
     public const STATUS_IN_REVIEW_COMITE_CIENTIFICO = 'protocol_in_review_comite_cientifico';
     public const STATUS_PENDING_COMITE_BIOETICA = 'protocol_pending_comite_bioetica';
@@ -48,7 +49,7 @@ class Protocol extends Model
             'in_review_status' => self::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
             'next_organ_type' => self::ORGAN_TYPE_BIOETHICS_COMMITTEE,
             'next_form_organ' => self::ORGAN_COMITE_BIOETICA,
-            'version_prefix' => 'CB_V',
+            'version_prefix' => 'CIBS_V',
             'version_field' => 'cb_version',
         ],
         self::ORGAN_TYPE_BIOETHICS_COMMITTEE => [
@@ -94,6 +95,22 @@ class Protocol extends Model
         'status_label',
     ];
 
+    public static function rejectedStatuses(): array
+    {
+        return [
+            self::STATUS_REJECTED_SUPERVISOR,
+            self::STATUS_REJECTED_NUCLEO,
+            self::STATUS_REJECTED_CC,
+            self::STATUS_REJECTED_BIOETICA,
+            self::STATUS_REJECTED_FINAL,
+        ];
+    }
+
+    public static function resubmittableStatuses(): array
+    {
+        return self::rejectedStatuses();
+    }
+
     public function getStatusLabelAttribute(): string
     {
         return match ($this->status) {
@@ -101,13 +118,14 @@ class Protocol extends Model
             self::STATUS_REJECTED_SUPERVISOR => 'Rejeitado pelo supervisor',
             self::STATUS_PENDING_NUCLEO => 'Encaminhado ao Nucleo Cientifico',
             self::STATUS_IN_REVIEW_NUCLEO => 'Em avaliacao pelo Nucleo Cientifico',
+            self::STATUS_DOCUMENTS_PENDING_CC => 'Aguardando validacao dos anexos pelo Comite Cientifico',
             self::STATUS_PENDING_COMITE_CIENTIFICO => 'Encaminhado ao Comite Cientifico',
             self::STATUS_IN_REVIEW_COMITE_CIENTIFICO => 'Em avaliacao pelo Comite Cientifico',
             self::STATUS_PENDING_COMITE_BIOETICA => 'Encaminhado ao Comite de Bioetica',
             self::STATUS_IN_REVIEW_COMITE_BIOETICA => 'Em avaliacao pelo Comite de Bioetica',
             self::STATUS_REJECTED_NUCLEO => 'Rejeitado pelo Núcleo Científico',
             self::STATUS_REJECTED_CC => 'Rejeitado pelo Comité Científico',
-            self::STATUS_REJECTED_BIOETICA => 'Rejeitado pelo Comité de Bioética',
+            self::STATUS_REJECTED_BIOETICA => 'Rejeitado pelo Comite de Bioetica',
             self::STATUS_APPROVED_FINAL => 'Aprovado',
             self::STATUS_REJECTED_FINAL => 'Rejeitado (final)',
             default => $this->status,
@@ -130,6 +148,23 @@ class Protocol extends Model
             self::ORGAN_TYPE_NUCLEUS => self::ORGAN_NUCLEO,
             self::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => self::ORGAN_COMITE_CIENTIFICO,
             self::ORGAN_TYPE_BIOETHICS_COMMITTEE => self::ORGAN_COMITE_BIOETICA,
+            default => null,
+        };
+    }
+
+    public static function submissionVersionLabel(int $submissionNumber): string
+    {
+        return 'V' . max(1, $submissionNumber);
+    }
+
+    public static function organVersionLabel(string $organType, int $versionNumber = 1): ?string
+    {
+        $versionNumber = max(1, $versionNumber);
+
+        return match ($organType) {
+            self::ORGAN_TYPE_NUCLEUS => 'NC_V' . $versionNumber,
+            self::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => 'CC_V' . $versionNumber,
+            self::ORGAN_TYPE_BIOETHICS_COMMITTEE => 'CIBS_V' . $versionNumber,
             default => null,
         };
     }
@@ -162,6 +197,21 @@ class Protocol extends Model
     public function reviewAssignments()
     {
         return $this->hasMany(ProtocolReviewAssignment::class);
+    }
+
+    public function histories()
+    {
+        return $this->hasMany(ProtocolHistory::class);
+    }
+
+    public function opinions()
+    {
+        return $this->hasMany(Opinion::class);
+    }
+
+    public function protocolDocumentRequirements()
+    {
+        return $this->hasMany(ProtocolDocumentRequirement::class);
     }
 
     public function supervisor()
