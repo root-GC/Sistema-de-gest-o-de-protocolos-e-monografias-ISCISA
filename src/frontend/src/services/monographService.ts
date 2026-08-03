@@ -1,6 +1,6 @@
 // src/services/monographService.ts
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const BASE = import.meta.env.VITE_API_URL ?? ''
 
 function token(): string | null {
   return localStorage.getItem('sgpmc_token')
@@ -184,7 +184,7 @@ export const monographService = {
   /**
    * Abrir arquivo no navegador
    */
-  openFile: async (url: string, fallbackFilename?: string) => {
+  openFile: async (url: string, _fallbackFilename?: string) => {
     const t = token()
     const res = await fetch(url, {
       headers: {

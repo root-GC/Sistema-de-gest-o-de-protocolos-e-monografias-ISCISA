@@ -43,6 +43,7 @@ const ReportsPage            = lazy(() => import('./pages/coordinator/ReportsPag
 
 // Secretary
 const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtocolsPage'))
+const AgendaPage = lazy(() => import('./pages/shared/AgendaPage'))
 const MeetingPage            = lazy(() => import('./pages/shared/secretary/MeetingPage'))
 const SpreadsheetPage        = lazy(() => import('./pages/shared/secretary/SpreadsheetPage'))
 
@@ -135,6 +136,9 @@ export default function App() {
                 <Route path="/defense"          element={<DefensePage />} />
                 <Route path="/defense/schedule" element={<DefensePage />} />
                 <Route path="/reports" element={<ReportsPage />} />
+
+                {/* ── Agenda (shared) ──────────────────────────── */}
+                <Route path="/agenda" element={<AgendaPage />} />
 
                 {/* ── Secretary ───────────────────────────────── */}
                 <Route path="/secretary/protocols" element={<SecretaryProtocolsPage />} />

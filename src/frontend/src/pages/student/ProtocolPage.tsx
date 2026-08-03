@@ -1,6 +1,15 @@
 // src/pages/student/ProtocolPage.tsx
 import { useEffect, useState } from 'react'
-import { protocolService, type Protocol, type ProtocolOpinion } from '../../services/protocolService'
+import {
+  CC_REQUIRED_DOCUMENTS,
+  protocolService,
+  type CCRequiredDocumentFiles,
+  type CCRequiredDocumentKey,
+  type Document,
+  type Protocol,
+  type ProtocolDocumentRequirement,
+  type ProtocolOpinion,
+} from '../../services/protocolService'
 import { topicService, type ApprovedTopic } from '../../services/topicService'
 import { TopicJustificationToggle } from '../../components/TopicJustification'
 import PdfPreviewModal from '../../components/PdfPreviewModal'
@@ -18,9 +27,12 @@ function getStatusStyle(status: string) {
     protocol_in_review: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Em Revisão' },
     protocol_approved_nucleo: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado (Núcleo)' },
     protocol_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Núcleo)' },
+    protocol_documents_pending_cc: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Anexos em validação (CC)' },
     protocol_pending_comite_cientifico: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Encaminhado ao CC' },
     protocol_rejected_cc: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (CC)' },
     protocol_rejected_bioetica: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Bioética)' },
+    protocol_approved_final: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado final' },
+    protocol_rejected_final: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado final' },
     protocol_resubmitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Re-submetido' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
@@ -30,6 +42,117 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function emptyRequiredDocuments(): CCRequiredDocumentFiles {
+  return Object.fromEntries(CC_REQUIRED_DOCUMENTS.map(doc => [doc.key, null])) as CCRequiredDocumentFiles
+}
+
+function getDocumentVersionLabel(doc: Pick<Document, 'version' | 'version_label' | 'status'>, protocolVersion?: string | null) {
+  if (doc.version_label) {
+    return doc.version_label
+  }
+
+  if (doc.status === 'active' && protocolVersion && protocolVersion !== 'APROVADO') {
+    return protocolVersion
+  }
+
+  return `V${doc.version}`
+}
+
+function getRequirementValidationState(requirement: ProtocolDocumentRequirement) {
+  if (requirement.aprovado === true) {
+    return {
+      icon: 'check_circle',
+      label: requirement.status_label || 'Aprovado',
+      color: 'var(--primary)',
+      background: 'var(--primary-container)',
+      border: 'var(--primary)',
+    }
+  }
+
+  if (requirement.aprovado === false) {
+    return {
+      icon: 'cancel',
+      label: requirement.status_label || 'Não aprovado',
+      color: 'var(--error)',
+      background: 'var(--error-container)',
+      border: 'var(--error)',
+    }
+  }
+
+  if (requirement.enviado) {
+    return {
+      icon: 'pending_actions',
+      label: requirement.status_label || 'Pendente de validação',
+      color: 'var(--tertiary)',
+      background: 'var(--tertiary-fixed)',
+      border: 'var(--tertiary)',
+    }
+  }
+
+  return {
+    icon: 'upload_file',
+    label: requirement.status_label || 'Não enviado',
+    color: 'var(--outline)',
+    background: 'var(--surface-container-lowest)',
+    border: 'var(--outline-variant)',
+  }
+}
+
+function getRequirementUploadState(attachment: File | null, previousRequirement?: ProtocolDocumentRequirement) {
+  if (attachment) {
+    return {
+      icon: previousRequirement?.aprovado === false ? 'published_with_changes' : 'check_circle',
+      label: previousRequirement?.file_name ? 'Novo ficheiro' : 'Selecionado',
+      helper: previousRequirement?.aprovado === false ? 'Substitui anexo não aprovado' : 'Pronto para submissão',
+      color: 'var(--primary)',
+      background: 'var(--primary-container)',
+      border: 'var(--primary)',
+    }
+  }
+
+  if (previousRequirement?.file_name) {
+    if (previousRequirement.aprovado === true) {
+      return {
+        icon: 'verified',
+        label: 'Aprovado anteriormente',
+        helper: 'Será reutilizado nesta versão',
+        color: 'var(--primary)',
+        background: 'var(--surface-container-low)',
+        border: 'var(--primary)',
+      }
+    }
+
+    if (previousRequirement.aprovado === false) {
+      return {
+        icon: 'cancel',
+        label: 'Não aprovado anteriormente',
+        helper: 'Pode substituir antes de submeter',
+        color: 'var(--error)',
+        background: 'var(--error-container)',
+        border: 'var(--error)',
+      }
+    }
+
+    return {
+      icon: 'history',
+      label: 'Reutilizado',
+      helper: 'Já existe um ficheiro carregado',
+      color: 'var(--tertiary)',
+      background: 'var(--surface-container-low)',
+      border: 'var(--tertiary)',
+    }
+  }
+
+  return {
+    icon: 'upload_file',
+    label: 'Não enviado',
+    helper: 'PDF, DOC ou DOCX até 10 MB',
+    color: 'var(--outline)',
+    background: 'var(--surface-container-lowest)',
+    border: 'var(--outline-variant)',
+  }
 }
 
 // ============================================================
@@ -45,13 +168,12 @@ export default function ProtocolPage() {
   const [selectedTopicId, setSelectedTopicId] = useState('')
   const [protocolType, setProtocolType] = useState('protocol')
   const [file, setFile] = useState<File | null>(null)
+  const [formStep, setFormStep] = useState<1 | 2 | 3>(1)
+  const [requiredDocuments, setRequiredDocuments] = useState<CCRequiredDocumentFiles>(() => emptyRequiredDocuments())
   const [submitting, setSubmitting] = useState(false)
+  const [uploadingRequirementId, setUploadingRequirementId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-
-  // 🆕 Submissão ao Comité Científico
-  const [ccFile, setCcFile] = useState<File | null>(null)
-  const [submittingCc, setSubmittingCc] = useState(false)
 
   useEffect(() => {
     load()
@@ -103,19 +225,47 @@ export default function ProtocolPage() {
     'protocol_rejected_nucleo',
     'protocol_rejected_cc',
     'protocol_rejected_bioetica',
+    'protocol_rejected_final',
   ].includes(current.status)
 
-  // 🆕 Pode submeter ao CC quando está pending_comite_cientifico
-  const canSubmitToCC = current?.status === 'protocol_pending_comite_cientifico'
-
   const selectedTopic = approvedTopics.find(t => t.id === Number(selectedTopicId))
-  const topicHasProtocol = selectedTopic?.has_protocol || false
+  const selectedProtocol = selectedTopic?.latest_protocol_id
+    ? protocols.find(protocol => protocol.id === selectedTopic.latest_protocol_id)
+    : undefined
+  const selectedProtocolRequirementsByKey = (selectedProtocol?.protocol_document_requirements ?? [])
+    .reduce((acc, requirement) => {
+      acc[requirement.document_key] = requirement
+      return acc
+    }, {} as Record<string, ProtocolDocumentRequirement>)
+  const isResubmission = Boolean(selectedTopic?.can_resubmit_protocol && selectedProtocol)
+  const topicHasActiveProtocol = Boolean(selectedTopic?.has_protocol && !selectedTopic?.can_resubmit_protocol)
+  const protocolStepComplete = Boolean(selectedTopicId && file && !topicHasActiveProtocol)
+  const requiredDocumentsComplete = CC_REQUIRED_DOCUMENTS.every(doc => Boolean(
+    requiredDocuments[doc.key] || (isResubmission && selectedProtocolRequirementsByKey[doc.key]?.file_name)
+  ))
+  const reusedRequiredDocuments = CC_REQUIRED_DOCUMENTS.filter(doc => (
+    !requiredDocuments[doc.key] && Boolean(selectedProtocolRequirementsByKey[doc.key]?.file_name)
+  ))
+  const requiredDocumentUploadRows = CC_REQUIRED_DOCUMENTS.map(doc => {
+    const attachment = requiredDocuments[doc.key]
+    const previousRequirement = selectedProtocolRequirementsByKey[doc.key]
+
+    return {
+      doc,
+      attachment,
+      previousRequirement,
+      state: getRequirementUploadState(attachment, previousRequirement),
+    }
+  })
+  const selectedRequiredDocumentsCount = requiredDocumentUploadRows.filter(row => Boolean(row.attachment)).length
+  const readyRequiredDocumentsCount = requiredDocumentUploadRows.filter(row => Boolean(row.attachment || row.previousRequirement?.file_name)).length
+  const rejectedPreviousDocumentsCount = requiredDocumentUploadRows.filter(row => !row.attachment && row.previousRequirement?.aprovado === false).length
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!file || !selectedTopicId) return
+    if (!file || !selectedTopicId || !requiredDocumentsComplete) return
 
-    if (topicHasProtocol) {
+    if (topicHasActiveProtocol) {
       setError('Este tema já possui um protocolo ativo.')
       return
     }
@@ -124,10 +274,14 @@ export default function ProtocolPage() {
     setError(null)
     setSuccess(null)
     try {
-      await protocolService.submit(Number(selectedTopicId), protocolType, file)
+      await protocolService.submit(Number(selectedTopicId), protocolType, file, requiredDocuments)
       setFile(null)
       setSelectedTopicId('')
-      setSuccess('Protocolo submetido com sucesso!')
+      setRequiredDocuments(emptyRequiredDocuments())
+      setFormStep(1)
+      setSuccess(isResubmission
+        ? 'Protocolo ressubmetido com sucesso. Aguarda autorização do supervisor.'
+        : 'Protocolo e anexos submetidos com sucesso. Aguarda autorização do supervisor.')
       await load()
       await loadApprovedTopics()
       setTimeout(() => setSuccess(null), 3000)
@@ -143,24 +297,25 @@ export default function ProtocolPage() {
     }
   }
 
-  // 🆕 Submeter ao Comité Científico
-  async function handleSubmitToCC(e: React.FormEvent) {
-    e.preventDefault()
-    if (!ccFile || !current) return
+  function setRequiredDocument(key: CCRequiredDocumentKey, attachment: File | null) {
+    setRequiredDocuments(prev => ({ ...prev, [key]: attachment }))
+  }
 
-    setSubmittingCc(true)
+  async function reuploadRequirement(protocolId: number, requirementId: number, attachment: File | null) {
+    if (!attachment) return
+
+    setUploadingRequirementId(requirementId)
     setError(null)
     setSuccess(null)
     try {
-      await protocolService.submitToComiteCientifico(current.id, ccFile)
-      setCcFile(null)
-      setSuccess('Documento submetido ao Comité Científico com sucesso!')
+      await protocolService.uploadRequiredDocument(protocolId, requirementId, attachment)
+      setSuccess('Anexo reenviado com sucesso.')
       await load()
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       setError((err as Error).message)
     } finally {
-      setSubmittingCc(false)
+      setUploadingRequirementId(null)
     }
   }
 
@@ -248,7 +403,14 @@ export default function ProtocolPage() {
           {protocols.map(p => {
             const s = getStatusStyle(p.status)
             const activeDocs = p.documents?.filter(d => d.status === 'active') || []
+            const historicalDocs = p.documents?.filter(d => d.status !== 'active') || []
             const opinions = opinionsByProtocol[p.id] || []
+            const opinionsByVersion = opinions.reduce((acc, opinion) => {
+              if (!acc[opinion.version]) {
+                acc[opinion.version] = opinion
+              }
+              return acc
+            }, {} as Record<string, ProtocolOpinion>)
 
             return (
               <div key={p.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -285,22 +447,30 @@ export default function ProtocolPage() {
                 )}
 
                 {activeDocs.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-                    <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Documentos anexos
-                    </p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                      <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                        Documento atual
+                      </p>
+                      {p.submission_number > 1 && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: 'var(--radius-full)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-medium)', background: 'var(--primary-container)', color: 'var(--on-primary-container)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>star</span>
+                          Versão atual
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-2)' }}>
                       {activeDocs.map(doc => (
-                        <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '12px var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)', fontSize: 'var(--body-md)', color: 'var(--on-surface)', fontWeight: 'var(--font-medium)' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--primary)' }}>description</span>
-                          <div style={{ flex: 1 }}>
-                            <button type="button" onClick={() => downloadFile(doc.download_url, doc.file_name)} disabled={!doc.download_url} style={{ background: 'transparent', border: 'none', padding: 0, margin: 0, color: 'var(--primary)', textAlign: 'left', fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', cursor: doc.download_url ? 'pointer' : 'not-allowed', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px 12px', background: 'var(--primary-container)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--primary)', fontSize: 'var(--body-sm)', color: 'var(--on-surface)', fontWeight: 'var(--font-medium)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--primary)' }}>description</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <button type="button" onClick={() => downloadFile(doc.download_url, doc.file_name)} disabled={!doc.download_url} style={{ background: 'transparent', border: 'none', padding: 0, margin: 0, color: 'var(--primary)', textAlign: 'left', fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', cursor: doc.download_url ? 'pointer' : 'not-allowed', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '6px', maxWidth: '100%' }}>
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</span>
                               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>open_in_new</span>
                             </button>
-                            <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>Versão {doc.version}</p>
+                            <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 0 }}>Versão {getDocumentVersionLabel(doc, p.version)}</p>
                           </div>
-                          <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                          <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap' }}>
                             <button type="button" onClick={() => openFile(doc.download_url, doc.file_name)} disabled={!doc.download_url} className="btn" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', borderRadius: 'var(--radius-md)', border: '1px solid var(--outline-variant)', cursor: doc.download_url ? 'pointer' : 'not-allowed', fontWeight: 'var(--font-medium)' }}>
                               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>visibility</span>Ver
                             </button>
@@ -312,6 +482,148 @@ export default function ProtocolPage() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {historicalDocs.length > 0 && (
+                  <details style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--surface-container-lowest)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--outline-variant)' }}>
+                    <summary style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', cursor: 'pointer', fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>history</span>
+                      Histórico de versões
+                      <span style={{ marginLeft: 'auto', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-medium)' }}>
+                        {historicalDocs.length} ficheiro{historicalDocs.length !== 1 ? 's' : ''}
+                      </span>
+                    </summary>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                      {historicalDocs.map(doc => {
+                        const versionLabel = getDocumentVersionLabel(doc, p.version)
+                        const opinion = opinionsByVersion[versionLabel]
+                        const supervisorRejection = !opinion && /^V(\d+)$/.test(versionLabel)
+                          ? (p.histories || []).find(history => {
+                              const submissionNumber = Number((history.metadata as Record<string, unknown> | null)?.submission_number)
+                              return history.action === 'supervisor_rejected'
+                                && Number.isFinite(submissionNumber)
+                                && `V${submissionNumber}` === versionLabel
+                          })
+                          : null
+                        const rejectionActor = doc.rejected_by?.name
+                          || (opinion?.decision === 'not_approved'
+                          ? opinion.issued_by?.name ?? null
+                          : supervisorRejection?.actor?.name ?? null)
+
+                        return (
+                          <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px 12px', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)', fontSize: 'var(--body-sm)', color: 'var(--on-surface-variant)', fontWeight: 'var(--font-medium)' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--outline)' }}>history</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <button type="button" onClick={() => downloadFile(doc.download_url, doc.file_name)} disabled={!doc.download_url} style={{ background: 'transparent', border: 'none', padding: 0, margin: 0, color: 'var(--primary)', textAlign: 'left', fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', cursor: doc.download_url ? 'pointer' : 'not-allowed', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '6px', maxWidth: '100%' }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</span>
+                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>open_in_new</span>
+                              </button>
+                              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 0 }}>Versão {versionLabel} • histórico</p>
+                              {rejectionActor && (
+                                <p style={{ fontSize: 'var(--label-sm)', color: 'var(--error)', margin: '4px 0 0 0' }}>
+                                  Rejeitado por {rejectionActor}
+                                </p>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap' }}>
+                              <button type="button" onClick={() => openFile(doc.download_url, doc.file_name)} disabled={!doc.download_url} className="btn" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', borderRadius: 'var(--radius-md)', border: '1px solid var(--outline-variant)', cursor: doc.download_url ? 'pointer' : 'not-allowed', fontWeight: 'var(--font-medium)' }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>visibility</span>Ver
+                              </button>
+                              {doc.download_url && (
+                                <button type="button" onClick={() => downloadFile(doc.download_url, doc.file_name)} className="btn" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px var(--space-2)', fontSize: 'var(--label-sm)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 'var(--font-medium)', border: '1px solid var(--outline-variant)' }}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>Baixar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </details>
+                )}
+
+                {p.protocol_document_requirements && p.protocol_document_requirements.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                      <div>
+                        <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Anexos obrigatórios do Comité Científico
+                        </p>
+                        <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', marginTop: '4px' }}>
+                          Acompanhe a validação documental feita pela secretaria.
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'var(--surface-container-low)', color: 'var(--on-surface-variant)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>upload_file</span>
+                          {p.protocol_document_requirements.filter(req => req.enviado).length}/{p.protocol_document_requirements.length} enviados
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'var(--primary-container)', color: 'var(--on-primary-container)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>check_circle</span>
+                          {p.protocol_document_requirements.filter(req => req.aprovado === true).length} aprovados
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: p.protocol_document_requirements.some(req => req.aprovado === false) ? 'var(--error-container)' : 'var(--surface-container-low)', color: p.protocol_document_requirements.some(req => req.aprovado === false) ? 'var(--on-error-container)' : 'var(--on-surface-variant)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>cancel</span>
+                          {p.protocol_document_requirements.filter(req => req.aprovado === false).length} não aprovados
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--surface-container-lowest)' }}>
+                      {p.protocol_document_requirements.map((req, index) => {
+                        const rejected = req.aprovado === false
+                        const state = getRequirementValidationState(req)
+
+                        return (
+                          <div key={req.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', padding: '12px var(--space-3)', background: state.background, borderTop: index === 0 ? 'none' : '1px solid var(--outline-variant)', borderLeft: `4px solid ${state.border}`, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flex: '1 1 320px', minWidth: 0 }}>
+                              <span className="material-symbols-outlined" style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-lg)', background: 'rgba(255,255,255,0.55)', color: state.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
+                                {state.icon}
+                              </span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', marginBottom: '2px' }}>{req.nome}</p>
+                                <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {req.file_name || 'Nenhum ficheiro carregado'}
+                                </p>
+                                {(req.rejection_reason || (rejected && req.reviewer)) && (
+                                  <p style={{ fontSize: 'var(--label-sm)', color: rejected ? 'var(--on-error-container)' : 'var(--on-surface-variant)', marginTop: '4px' }}>
+                                    {rejected && req.reviewer ? `Rejeitado por: ${req.reviewer.name}` : null}
+                                    {rejected && req.reviewer && req.rejection_reason ? ' • ' : null}
+                                    {req.rejection_reason ? `Motivo: ${req.rejection_reason}` : null}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(255,255,255,0.55)', color: state.color, fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)', whiteSpace: 'nowrap' }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>{state.icon}</span>
+                                {state.label}
+                              </span>
+                              {req.download_url && (
+                                <button type="button" onClick={() => downloadFile(req.download_url, req.file_name || req.nome)} className="btn btn-small">
+                                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>Baixar
+                                </button>
+                              )}
+                              {rejected && (
+                                <label className="btn btn-small" style={{ cursor: uploadingRequirementId === req.id ? 'wait' : 'pointer', opacity: uploadingRequirementId === req.id ? 0.7 : 1 }}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>upload</span>
+                                  {uploadingRequirementId === req.id ? 'A enviar...' : 'Reenviar'}
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx"
+                                    disabled={uploadingRequirementId === req.id}
+                                    onChange={e => reuploadRequirement(p.id, req.id, e.target.files?.[0] ?? null)}
+                                    style={{ display: 'none' }}
+                                  />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -358,56 +670,6 @@ export default function ProtocolPage() {
                   </div>
                 )}
 
-                {/* 🆕 Submissão ao Comité Científico */}
-                {canSubmitToCC && p.id === current?.id && (
-                  <form onSubmit={handleSubmitToCC} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--tertiary-container)', borderRadius: 'var(--radius-lg)', border: '2px solid var(--tertiary)' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--tertiary)', flexShrink: 0 }}>info</span>
-                      <div>
-                        <strong style={{ color: 'var(--on-tertiary-container)' }}>Submeter ao Comité Científico</strong>
-                        <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-tertiary-container)', marginTop: '4px' }}>
-                          O teu protocolo foi aprovado pelo Núcleo Científico. Submete o documento final para avaliação pelo Comité Científico.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        id="ccFile"
-                        type="file"
-                        accept=".docx,.pdf"
-                        onChange={e => setCcFile(e.target.files?.[0] ?? null)}
-                        required
-                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-                      />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px dashed var(--tertiary)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', color: ccFile ? 'var(--on-surface)' : 'var(--on-surface-variant)', transition: 'all 0.2s ease', cursor: 'pointer' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--tertiary)'; e.currentTarget.style.background = 'rgba(115,92,0,0.02)' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--tertiary)'; e.currentTarget.style.background = 'var(--surface-container-lowest)' }}
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--tertiary)' }}>
-                          {ccFile ? 'check_circle' : 'upload'}
-                        </span>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {ccFile ? `${ccFile.name} (${formatFileSize(ccFile.size)})` : 'Selecionar documento para o Comité Científico...'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button type="submit" className="btn btn-primary" disabled={submittingCc || !ccFile} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-1)', padding: '14px var(--space-3)', fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', borderRadius: 'var(--radius-lg)', border: 'none', cursor: submittingCc || !ccFile ? 'not-allowed' : 'pointer', opacity: submittingCc || !ccFile ? 0.7 : 1, transition: 'all 0.2s ease' }}>
-                      {submittingCc ? (
-                        <>
-                          <span style={{ width: '18px', height: '18px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} />
-                          A enviar...
-                        </>
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>send</span>
-                          Submeter ao Comité Científico
-                        </>
-                      )}
-                    </button>
-                  </form>
-                )}
               </div>
             )
           })}
@@ -426,58 +688,319 @@ export default function ProtocolPage() {
       {/* Formulário de submissão inicial */}
       {canSubmitNew && (
         <form onSubmit={handleSubmit} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', padding: 'var(--space-4)' }}>
-          {/* ... (formulário existente mantém-se igual) ... */}
-          <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', marginBottom: 'var(--space-1)' }}>Submeter novo protocolo</h2>
+          <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', marginBottom: 'var(--space-1)' }}>
+            {selectedTopic?.can_resubmit_protocol ? 'Ressubmeter protocolo' : 'Submeter novo protocolo'}
+          </h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-            <label htmlFor="topicId" style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>Tema aprovado</label>
-            <select id="topicId" value={selectedTopicId} onChange={e => setSelectedTopicId(e.target.value)} required disabled={loadingTopics || approvedTopics.length === 0} style={{ width: '100%', padding: '12px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: approvedTopics.length === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease', boxSizing: 'border-box', appearance: 'auto' }}>
-              <option value="">{loadingTopics ? 'A carregar temas...' : approvedTopics.length === 0 ? 'Nenhum tema aprovado disponível' : 'Selecione um tema'}</option>
-              {approvedTopics.map(topic => (
-                <option key={topic.id} value={topic.id} disabled={topic.has_protocol}>{topic.title}{topic.has_protocol ? ' (já tem protocolo)' : ''}</option>
-              ))}
-            </select>
-            {selectedTopic && <TopicJustificationToggle justification={selectedTopic.justification} showEmpty compact style={{ marginTop: 'var(--space-1)' }} />}
-            {selectedTopic && topicHasProtocol && (
-              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--error)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>warning</span>Este tema já possui um protocolo ativo.
-              </p>
-            )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 'var(--space-2)' }}>
+            {([
+              { step: 1, label: 'Protocolo' },
+              { step: 2, label: 'Anexos' },
+              { step: 3, label: 'Confirmação' },
+            ] as const).map(item => (
+              <button
+                key={item.step}
+                type="button"
+                onClick={() => {
+                  if (item.step === 1 || (item.step === 2 && protocolStepComplete) || (item.step === 3 && protocolStepComplete && requiredDocumentsComplete)) {
+                    setFormStep(item.step)
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '10px var(--space-2)',
+                  borderRadius: 'var(--radius-full)',
+                  border: formStep === item.step ? '1px solid var(--primary)' : '1px solid var(--outline-variant)',
+                  background: formStep === item.step ? 'var(--primary-container)' : 'var(--surface-container-low)',
+                  color: formStep === item.step ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
+                  cursor: 'pointer',
+                  fontSize: 'var(--label-md)',
+                  fontWeight: 'var(--font-semibold)',
+                }}
+              >
+                <span style={{ width: '24px', height: '24px', borderRadius: 'var(--radius-full)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: formStep === item.step ? 'var(--primary)' : 'var(--surface-container)', color: formStep === item.step ? 'var(--on-primary)' : 'var(--on-surface-variant)' }}>
+                  {item.step}
+                </span>
+                {item.label}
+              </button>
+            ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-              <label htmlFor="protocolType" style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>Tipo</label>
-              <select id="protocolType" value={protocolType} onChange={e => setProtocolType(e.target.value)} style={{ width: '100%', padding: '12px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: 'pointer', transition: 'all 0.2s ease', boxSizing: 'border-box', appearance: 'auto' }}>
-                <option value="protocol">Protocolo</option>
-              </select>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-              <label htmlFor="file" style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>Documento (.docx)</label>
-              <div style={{ position: 'relative' }}>
-                <input id="file" type="file" accept=".docx" onChange={e => setFile(e.target.files?.[0] ?? null)} required style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px dashed var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', color: file ? 'var(--on-surface)' : 'var(--on-surface-variant)', transition: 'all 0.2s ease', cursor: 'pointer' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = 'rgba(0,105,51,0.02)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--outline-variant)'; e.currentTarget.style.background = 'var(--surface-container-lowest)' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--primary)' }}>{file ? 'check_circle' : 'upload'}</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? `${file.name} (${formatFileSize(file.size)})` : 'Selecionar ficheiro...'}</span>
+          {formStep === 1 && (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                <label htmlFor="topicId" style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>Tema aprovado</label>
+                <select id="topicId" value={selectedTopicId} onChange={e => setSelectedTopicId(e.target.value)} required disabled={loadingTopics || approvedTopics.length === 0} style={{ width: '100%', padding: '12px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: approvedTopics.length === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease', boxSizing: 'border-box', appearance: 'auto' }}>
+                  <option value="">{loadingTopics ? 'A carregar temas...' : approvedTopics.length === 0 ? 'Nenhum tema aprovado disponível' : 'Selecione um tema'}</option>
+                  {approvedTopics.map(topic => {
+                    const hasActiveProtocol = Boolean(topic.has_protocol && !topic.can_resubmit_protocol)
+
+                    return (
+                      <option key={topic.id} value={topic.id} disabled={hasActiveProtocol}>
+                        {topic.title}
+                        {topic.can_resubmit_protocol ? ' (rejeitado, pode ressubmeter)' : hasActiveProtocol ? ' (já tem protocolo ativo)' : ''}
+                      </option>
+                    )
+                  })}
+                </select>
+                {selectedTopic && <TopicJustificationToggle justification={selectedTopic.justification} showEmpty compact style={{ marginTop: 'var(--space-1)' }} />}
+                {selectedTopic && topicHasActiveProtocol && (
+                  <p style={{ fontSize: 'var(--label-sm)', color: 'var(--error)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>warning</span>Este tema já possui um protocolo ativo.
+                  </p>
+                )}
+                {selectedTopic?.can_resubmit_protocol && (
+                  <div style={{ marginTop: 'var(--space-2)', padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--primary-container)', color: 'var(--on-primary-container)', border: '1px solid var(--primary)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-1)' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--primary)' }}>restart_alt</span>
+                        <div>
+                          <p style={{ fontWeight: 'var(--font-semibold)', marginBottom: '2px' }}>Ressubmissão detectada</p>
+                          <p style={{ fontSize: 'var(--body-sm)' }}>
+                            {selectedTopic.latest_protocol_status_label || 'Último protocolo rejeitado'}. Os anexos anteriores serão reutilizados se não forem trocados.
+                          </p>
+                        </div>
+                      </div>
+                      {selectedProtocol && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: 'var(--radius-full)', background: 'var(--primary)', color: 'var(--on-primary)', fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)' }}>
+                          Versão {selectedProtocol.version}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                      {CC_REQUIRED_DOCUMENTS.map(doc => {
+                        const attachment = requiredDocuments[doc.key]
+                        const previousRequirement = selectedProtocolRequirementsByKey[doc.key]
+                        const reused = !attachment && Boolean(previousRequirement?.file_name)
+
+                        return (
+                          <span key={doc.key} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(255,255,255,0.35)', color: 'var(--on-primary-container)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-medium)' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>{attachment ? 'check_circle' : reused ? 'history' : 'pending'}</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</span>
+                          </span>
+                        )
+                      })}
+                    </div>
+                    {reusedRequiredDocuments.length > 0 && (
+                      <p style={{ fontSize: 'var(--label-sm)', margin: 0 }}>
+                        {reusedRequiredDocuments.length} anexo{reusedRequiredDocuments.length !== 1 ? 's' : ''} ser{reusedRequiredDocuments.length !== 1 ? 'ão' : 'á'} reutilizado{reusedRequiredDocuments.length !== 1 ? 's' : ''} automaticamente se não forem substituídos.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--space-3)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                  <label htmlFor="protocolType" style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>Tipo</label>
+                  <select id="protocolType" value={protocolType} onChange={e => setProtocolType(e.target.value)} style={{ width: '100%', padding: '12px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: 'pointer', transition: 'all 0.2s ease', boxSizing: 'border-box', appearance: 'auto' }}>
+                    <option value="protocol">Protocolo</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                  <label htmlFor="file" style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>Documento principal (.docx)</label>
+                  <div style={{ position: 'relative' }}>
+                    <input id="file" type="file" accept=".docx" onChange={e => setFile(e.target.files?.[0] ?? null)} required style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px dashed var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', color: file ? 'var(--on-surface)' : 'var(--on-surface-variant)', transition: 'all 0.2s ease', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = 'rgba(0,105,51,0.02)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--outline-variant)'; e.currentTarget.style.background = 'var(--surface-container-lowest)' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--primary)' }}>{file ? 'check_circle' : 'upload'}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? `${file.name} (${formatFileSize(file.size)})` : 'Selecionar ficheiro .docx...'}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <button type="submit" className="btn btn-primary" disabled={submitting || !file || !selectedTopicId || topicHasProtocol} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-1)', padding: '14px var(--space-3)', fontSize: 'var(--body-lg)', fontWeight: 'var(--font-semibold)', borderRadius: 'var(--radius-lg)', border: 'none', cursor: submitting || !file || !selectedTopicId || topicHasProtocol ? 'not-allowed' : 'pointer', opacity: submitting || !file || !selectedTopicId || topicHasProtocol ? 0.7 : 1, transition: 'all 0.2s ease', boxShadow: 'var(--elevation-1)', marginTop: 'var(--space-1)' }}>
-            {submitting ? (
-              <><span style={{ width: '18px', height: '18px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} />A enviar...</>
-            ) : (
-              <><span className="material-symbols-outlined" style={{ fontSize: '20px' }}>send</span>Submeter protocolo</>
-            )}
-          </button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-primary" disabled={!protocolStepComplete} onClick={() => setFormStep(2)} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', borderRadius: 'var(--radius-lg)', opacity: !protocolStepComplete ? 0.6 : 1, cursor: !protocolStepComplete ? 'not-allowed' : 'pointer' }}>
+                  Seguinte
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>arrow_forward</span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {formStep === 2 && (
+            <>
+              <div style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-container-low)', border: '1px solid var(--outline-variant)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <div>
+                    <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', marginBottom: '4px' }}>Documentos obrigatórios</p>
+                    <p style={{ fontSize: 'var(--body-sm)', color: 'var(--on-surface-variant)' }}>
+                      Aceita ficheiros .pdf, .doc e .docx. Na ressubmissão, os anexos existentes serão reutilizados se não forem substituídos.
+                    </p>
+                  </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: 'var(--radius-full)', background: requiredDocumentsComplete ? 'var(--primary-container)' : 'var(--surface-container-lowest)', color: requiredDocumentsComplete ? 'var(--on-primary-container)' : 'var(--on-surface-variant)', fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', border: '1px solid var(--outline-variant)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>{requiredDocumentsComplete ? 'check_circle' : 'pending_actions'}</span>
+                    {readyRequiredDocumentsCount}/{CC_REQUIRED_DOCUMENTS.length} prontos
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'var(--primary-container)', color: 'var(--on-primary-container)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add_circle</span>
+                    {selectedRequiredDocumentsCount} novo{selectedRequiredDocumentsCount !== 1 ? 's' : ''}
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'var(--surface-container-lowest)', color: 'var(--on-surface-variant)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>history</span>
+                    {reusedRequiredDocuments.length} reutilizado{reusedRequiredDocuments.length !== 1 ? 's' : ''}
+                  </span>
+                  {rejectedPreviousDocumentsCount > 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'var(--error-container)', color: 'var(--on-error-container)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>cancel</span>
+                      {rejectedPreviousDocumentsCount} não aprovado{rejectedPreviousDocumentsCount !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {selectedProtocol && selectedTopic?.can_resubmit_protocol && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>restart_alt</span>
+                      Versão anterior {selectedProtocol.version}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--surface-container-lowest)' }}>
+                {requiredDocumentUploadRows.map(({ doc, attachment, previousRequirement, state }, index) => {
+                  const hasFile = Boolean(attachment || previousRequirement?.file_name)
+                  const fileLabel = attachment
+                    ? `${attachment.name} (${formatFileSize(attachment.size)})`
+                    : previousRequirement?.file_name || 'Nenhum ficheiro carregado'
+
+                  return (
+                    <div key={doc.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', padding: '14px var(--space-3)', borderTop: index === 0 ? 'none' : '1px dashed var(--outline-variant)', borderLeft: `4px solid ${state.border}`, background: state.background, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flex: '1 1 360px', minWidth: 0 }}>
+                        <span className="material-symbols-outlined" style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-lg)', background: hasFile ? 'rgba(255,255,255,0.55)' : 'var(--surface-container-low)', color: state.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
+                          {state.icon}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', marginBottom: '2px' }}>{doc.name}</p>
+                          <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {fileLabel}
+                          </p>
+                          {(state.helper || previousRequirement?.rejection_reason || (previousRequirement?.aprovado === false && previousRequirement?.reviewer)) && (
+                            <p style={{ fontSize: 'var(--label-sm)', color: previousRequirement?.aprovado === false && !attachment ? 'var(--on-error-container)' : 'var(--on-surface-variant)', marginTop: '4px' }}>
+                              {state.helper}
+                              {previousRequirement?.aprovado === false && previousRequirement?.reviewer ? ` • Rejeitado por: ${previousRequirement.reviewer.name}` : null}
+                              {previousRequirement?.rejection_reason ? ` • Motivo: ${previousRequirement.rejection_reason}` : null}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(255,255,255,0.55)', color: state.color, fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)', whiteSpace: 'nowrap' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>{state.icon}</span>
+                          {state.label}
+                        </span>
+                        <label className="btn btn-small" style={{ cursor: 'pointer' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>{hasFile ? 'sync' : 'attach_file'}</span>
+                          {hasFile ? 'Trocar' : 'Anexar'}
+                          <input type="file" accept=".pdf,.doc,.docx" onChange={e => setRequiredDocument(doc.key, e.target.files?.[0] ?? null)} style={{ display: 'none' }} />
+                        </label>
+                        {attachment && (
+                          <button type="button" className="btn btn-small" onClick={() => setRequiredDocument(doc.key, null)}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
+                            Remover
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                <button type="button" className="btn" onClick={() => setFormStep(1)} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', borderRadius: 'var(--radius-lg)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>arrow_back</span>
+                  Voltar
+                </button>
+                <button type="button" className="btn btn-primary" disabled={!requiredDocumentsComplete} onClick={() => setFormStep(3)} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', borderRadius: 'var(--radius-lg)', opacity: !requiredDocumentsComplete ? 0.6 : 1, cursor: !requiredDocumentsComplete ? 'not-allowed' : 'pointer' }}>
+                  Seguinte
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>arrow_forward</span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {formStep === 3 && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--space-3)' }}>
+                <div style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-container-low)', border: '1px solid var(--outline-variant)' }}>
+                  <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Protocolo</p>
+                  <p style={{ marginTop: 'var(--space-1)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>{selectedTopic?.title || 'Tema não selecionado'}</p>
+                  <p style={{ fontSize: 'var(--body-sm)', color: 'var(--on-surface-variant)' }}>{file ? `${file.name} (${formatFileSize(file.size)})` : 'Documento principal em falta'}</p>
+                </div>
+                <div style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', border: '1px solid var(--outline-variant)' }}>
+                  <p style={{ fontWeight: 'var(--font-semibold)', marginBottom: '4px' }}>Fluxo após submissão</p>
+                  <p style={{ fontSize: 'var(--body-sm)' }}>1. Supervisor autoriza o protocolo. 2. Secretaria do CC valida os anexos. 3. CC atribui revisores e segue para avaliação.</p>
+                  {isResubmission && reusedRequiredDocuments.length > 0 && (
+                    <p style={{ fontSize: 'var(--label-sm)', marginTop: 'var(--space-1)' }}>
+                      {reusedRequiredDocuments.length} anexo{reusedRequiredDocuments.length !== 1 ? 's' : ''} ser{reusedRequiredDocuments.length !== 1 ? 'ão' : 'á'} reutilizado{reusedRequiredDocuments.length !== 1 ? 's' : ''} se não forem trocados.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)' }}>
+                <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 'var(--space-2)' }}>Anexos selecionados</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                  {requiredDocumentUploadRows.map(({ doc, attachment, previousRequirement, state }) => {
+                    const hasFile = Boolean(attachment || previousRequirement?.file_name)
+                    const fileLabel = attachment
+                      ? `${attachment.name} (${formatFileSize(attachment.size)})`
+                      : previousRequirement?.file_name || 'Ficheiro em falta'
+
+                    return (
+                      <div key={doc.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', padding: '10px 12px', borderRadius: 'var(--radius-md)', background: hasFile ? 'var(--surface-container-low)' : 'var(--error-container)', border: `1px solid ${hasFile ? 'var(--outline-variant)' : 'var(--error)'}`, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: 'var(--space-1)', alignItems: 'flex-start', flex: '1 1 260px', minWidth: 0 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '18px', color: state.color }}>{state.icon}</span>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>{doc.name}</p>
+                            <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fileLabel}</p>
+                          </div>
+                        </div>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderRadius: 'var(--radius-full)', background: 'var(--surface-container-lowest)', color: state.color, fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)', whiteSpace: 'nowrap' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>{state.icon}</span>
+                          {state.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {rejectedPreviousDocumentsCount > 0 && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-1)', padding: 'var(--space-2) var(--space-3)', background: 'var(--error-container)', color: 'var(--on-error-container)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-sm)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px', flexShrink: 0 }}>info</span>
+                  <p>
+                    Existem anexos não aprovados anteriormente que serão reutilizados se não forem substituídos nesta ressubmissão.
+                  </p>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                <button type="button" className="btn" onClick={() => setFormStep(2)} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', padding: '12px var(--space-3)', borderRadius: 'var(--radius-lg)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>arrow_back</span>
+                  Voltar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={submitting || !protocolStepComplete || !requiredDocumentsComplete} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-1)', padding: '14px var(--space-3)', fontSize: 'var(--body-lg)', fontWeight: 'var(--font-semibold)', borderRadius: 'var(--radius-lg)', border: 'none', cursor: submitting || !protocolStepComplete || !requiredDocumentsComplete ? 'not-allowed' : 'pointer', opacity: submitting || !protocolStepComplete || !requiredDocumentsComplete ? 0.7 : 1, transition: 'all 0.2s ease', boxShadow: 'var(--elevation-1)' }}>
+                  {submitting ? (
+                    <><span style={{ width: '18px', height: '18px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: 'var(--radius-full)', animation: 'spin 0.8s linear infinite' }} />A enviar...</>
+                  ) : (
+                    <><span className="material-symbols-outlined" style={{ fontSize: '20px' }}>send</span>Submeter protocolo</>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </form>
       )}
 
       {/* Mensagem de bloqueio */}
-      {!canSubmitNew && !canSubmitToCC && (
+      {!canSubmitNew && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3) var(--space-4)', background: 'var(--surface-container)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)', color: 'var(--on-surface-variant)', fontSize: 'var(--body-md)' }}>
           <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--tertiary)', flexShrink: 0 }}>info</span>
           <p>O teu protocolo está em curso ({current?.status_label}). Não podes submeter uma nova versão agora.</p>

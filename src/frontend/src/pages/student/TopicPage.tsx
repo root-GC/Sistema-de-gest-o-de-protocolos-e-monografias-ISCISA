@@ -104,6 +104,12 @@ export default function TopicPage() {
         return
       }
 
+      if (!documentFile) {
+        setError('O documento do tema é obrigatório. Selecione um ficheiro .docx.')
+        setSubmitting(false)
+        return
+      }
+
       const res = await topicService.submit({
         title,
         scientific_area_id: studentScientificArea.id,
@@ -836,7 +842,7 @@ export default function TopicPage() {
               fontWeight: 'var(--font-medium)',
               color: 'var(--on-surface-variant)'
             }}>
-              Documento do tema (.docx)
+              Documento do tema (.docx) <span style={{color: 'var(--error)'}}>*</span>
             </label>
             <p style={{
               fontSize: 'var(--body-md)',

@@ -33,7 +33,6 @@ export default function ManageOrganMembersPage() {
   const [showInviteSecretary, setShowInviteSecretary] = useState(false)
   const [secretaryName, setSecretaryName] = useState('')
   const [secretaryEmail, setSecretaryEmail] = useState('')
-  const [secretaryOffice, setSecretaryOffice] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // ── Editar função ──
@@ -71,7 +70,6 @@ export default function ManageOrganMembersPage() {
     setShowInviteSecretary(true)
     setSecretaryName('')
     setSecretaryEmail('')
-    setSecretaryOffice('')
   }
 
   async function handleInviteSecretary(e: React.FormEvent) {

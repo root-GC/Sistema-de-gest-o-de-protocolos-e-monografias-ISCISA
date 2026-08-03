@@ -1,6 +1,6 @@
 // src/pages/general-admin/ManagePersonnelPage.tsx
 import { useEffect, useState } from 'react'
-import { generalAdminService, type Coordinator, type Secretary, type Organ, type ScientificArea, type Course } from '../../services/generalAdminService'
+import { generalAdminService, type Coordinator, type Secretary, type ScientificArea, type Course } from '../../services/generalAdminService'
 import { adminService } from '../../services/adminService'
 import { useAuth } from '../../context/AuthContext'
 import '../../styles/global.css'
@@ -12,7 +12,6 @@ export default function ManagePersonnelPage() {
   const [activeTab, setActiveTab] = useState<TabType>('coordinators')
   const [coordinators, setCoordinators] = useState<Coordinator[]>([])
   const [secretaries, setSecretaries] = useState<Secretary[]>([])
-  const [organs, setOrgans] = useState<Organ[]>([])
   const [areas, setAreas] = useState<ScientificArea[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
@@ -83,12 +82,10 @@ export default function ManagePersonnelPage() {
     setLoading(true)
     setError(null)
     try {
-      const [organsData, areasData, coursesData] = await Promise.all([
-        generalAdminService.listOrgans(),
+      const [areasData, coursesData] = await Promise.all([
         generalAdminService.listAllAreas(),
         generalAdminService.listAllCourses(),
       ])
-      setOrgans(Array.isArray(organsData.data) ? organsData.data : [])
       setAreas(Array.isArray(areasData.data) ? areasData.data : [])
       setCourses(Array.isArray(coursesData.data) ? coursesData.data : [])
 
@@ -119,12 +116,6 @@ export default function ManagePersonnelPage() {
   // MOCK DATA (FALLBACK)
   // ═══════════════════════════════════════════════
   function loadMockData() {
-    setOrgans([
-      { id: 1, name: 'Núcleo Científico', type: 'nucleus' },
-      { id: 2, name: 'Comité Científico', type: 'scientific_committee' },
-      { id: 3, name: 'Comité de Bioética', type: 'bioethics_committee' },
-      { id: 4, name: 'Direção Científica', type: 'scientific_direction' },
-    ])
     setAreas([
       { id: 1, organ_id: 1, name: 'Saúde Pública', organ: { id: 1, name: 'Núcleo Científico', type: 'nucleus' } },
       { id: 2, organ_id: 1, name: 'Enfermagem', organ: { id: 1, name: 'Núcleo Científico', type: 'nucleus' } },

@@ -372,7 +372,7 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
             <p style={{
               fontSize: '10px', color: 'var(--on-surface-variant)',
               textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 'var(--font-semibold)'
-            }}>Gestão Científica</p>
+            }}>Direção Científica</p>
           </div>
         )}
       </div>

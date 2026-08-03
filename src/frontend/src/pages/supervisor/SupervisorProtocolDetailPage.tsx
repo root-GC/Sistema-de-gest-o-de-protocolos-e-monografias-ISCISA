@@ -110,6 +110,7 @@ export default function SupervisorProtocolDetailPage() {
   }
 
   const activeDocs = protocol.documents?.filter(d => d.status === 'active') || []
+  const requiredDocs = protocol.protocol_document_requirements || []
   const isPending = protocol.status === 'protocol_pending_supervisor' || protocol.status === 'protocol_submitted'
 
   return (
@@ -246,7 +247,7 @@ export default function SupervisorProtocolDetailPage() {
                 <div style={{ flex: 1 }}>
                   <p style={{ fontWeight: 'var(--font-semibold)' }}>{doc.file_name}</p>
                   <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
-                    Versão {doc.version}
+                    Versão {doc.version_label || `V${doc.version}`}
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
@@ -274,6 +275,37 @@ export default function SupervisorProtocolDetailPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {requiredDocs.length > 0 && (
+          <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <h3 style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', margin: 0 }}>
+              Anexos obrigatórios do Comité Científico
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--space-2)' }}>
+              {requiredDocs.map(doc => {
+                const approved = doc.aprovado === true
+                const rejected = doc.aprovado === false
+
+                return (
+                  <div key={doc.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: '12px var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '22px', color: approved ? 'var(--primary)' : rejected ? 'var(--error)' : 'var(--tertiary)' }}>
+                      {approved ? 'check_circle' : rejected ? 'error' : 'pending_actions'}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>{doc.nome}</p>
+                      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>{doc.status_label || 'Pendente de validação'}</p>
+                      {doc.file_name && (
+                        <button type="button" onClick={() => downloadFile(doc.download_url, doc.file_name || undefined)} disabled={!doc.download_url} style={{ marginTop: '4px', padding: 0, border: 'none', background: 'transparent', color: 'var(--primary)', cursor: doc.download_url ? 'pointer' : 'not-allowed', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)', textDecoration: 'underline', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                          {doc.file_name}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

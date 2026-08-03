@@ -2,8 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
-import { evaluationService, type EvaluationForm, type FormCriterion } from '../../services/evaluationService'
-import { useAuth } from '../../context/AuthContext'
+import { evaluationService, type EvaluationForm, type EvaluationOrgan, type FormCriterion } from '../../services/evaluationService'
 import OnlyOfficeEditor from '../../components/OnlyOfficeEditor/OnlyOfficeEditor'
 import '../../styles/global.css'
 
@@ -74,6 +73,26 @@ function formatDate(dateStr?: string | null): string {
   } catch { return dateStr }
 }
 
+function organForEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): EvaluationOrgan {
+  if (form?.organ === 'comite_cientifico') return 'comite-cientifico'
+  if (form?.organ === 'comite_bioetica') return 'comite-bioetica'
+  return 'nucleo'
+}
+
+function isBioeticaEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
+  return form?.organ === 'comite_bioetica'
+}
+
+function isSharedCommitteeEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
+  return form?.organ === 'comite_cientifico' || form?.organ === 'comite_bioetica'
+}
+
+function committeeLabel(form?: Pick<EvaluationForm, 'organ'> | null): string {
+  if (form?.organ === 'comite_bioetica') return 'Comité de Bioética'
+  if (form?.organ === 'comite_cientifico') return 'Comité Científico'
+  return 'órgão'
+}
+
 type ExpandedPanel = 'both' | 'document' | 'form'
 
 const MIN_PANEL_WIDTH = 300
@@ -82,7 +101,6 @@ const DEFAULT_SPLIT = 50
 // ── Componente Principal ──────────────────────────────
 export default function ReviewerMeetingsPage() {
   const { protocolId } = useParams<{ protocolId: string }>()
-  const { user } = useAuth()
   const id = Number(protocolId)
 
   // ── Protocol & Form state ──
@@ -92,7 +110,6 @@ export default function ReviewerMeetingsPage() {
   const [finalDecision, setFinalDecision] = useState<string | null>(null)
 
   // ── Deliberation state ──
-  const [deliberationSummary, setDeliberationSummary] = useState('')
   const [isStartingDeliberation, setIsStartingDeliberation] = useState(false)
   const [isClosingMeeting, setIsClosingMeeting] = useState(false)
   const [closingResult, setClosingResult] = useState<'deliberated' | 'not_deliberated' | null>(null)
@@ -239,7 +256,7 @@ export default function ReviewerMeetingsPage() {
         return
       }
 
-      const fullForm = await evaluationService.getForm(form.id)
+      const fullForm = await evaluationService.getForm(form.id, organForEvaluation(form))
       const formData = fullForm.evaluation_form
       
       if (!formData) {
@@ -250,20 +267,28 @@ export default function ReviewerMeetingsPage() {
 
       setEvaluationForm(formData)
       setFinalDecision(formData.final_decision || null)
-      setDeliberationSummary(formData.conclusion_summary || '')
       setClosingResult(null)
 
-      const allEvals = formData.reviewer_evaluations || []
       const reviews: Record<number, string> = {}
-      allEvals.forEach(rev => {
-        ;(rev.criterion_reviews || []).forEach(cr => {
-          if (cr.evaluation_form_criterion_id && cr.comment) {
-            if (!reviews[cr.evaluation_form_criterion_id]) {
-              reviews[cr.evaluation_form_criterion_id] = cr.comment
-            }
+      if (isSharedCommitteeEvaluation(formData) && formData.criteria_comments) {
+        formData.criteria_comments.forEach(item => {
+          const first = item.reviews?.find(review => review.comment)
+          if (item.form_criterion_id && first?.comment) {
+            reviews[item.form_criterion_id] = first.comment
           }
         })
-      })
+      } else {
+        const allEvals = formData.reviewer_evaluations || []
+        allEvals.forEach(rev => {
+          ;(rev.criterion_reviews || []).forEach(cr => {
+            if (cr.evaluation_form_criterion_id && cr.comment) {
+              if (!reviews[cr.evaluation_form_criterion_id]) {
+                reviews[cr.evaluation_form_criterion_id] = cr.comment
+              }
+            }
+          })
+        })
+      }
       setCriterionReviews(reviews)
 
     } catch (e: any) {
@@ -278,7 +303,7 @@ export default function ReviewerMeetingsPage() {
     setIsStartingDeliberation(true)
     setError(null)
     try {
-      await evaluationService.startDeliberation(evaluationForm.id)
+      await evaluationService.startDeliberation(evaluationForm.id, organForEvaluation(evaluationForm))
       setSuccess('Reunião de deliberação iniciada.')
       await loadMeetingData()
     } catch (e: any) {
@@ -294,7 +319,7 @@ export default function ReviewerMeetingsPage() {
     setClosingResult(result)
     setError(null)
     try {
-      const { message } = await evaluationService.closeMeeting(evaluationForm.id, result)
+      const { message } = await evaluationService.closeMeeting(evaluationForm.id, result, organForEvaluation(evaluationForm))
       setSuccess(message)
       await loadMeetingData()
     } catch (e: any) {
@@ -313,6 +338,15 @@ export default function ReviewerMeetingsPage() {
   async function downloadFile(url: string | null | undefined) {
     if (!url) return
     try { await evaluationService.downloadFile(url) } catch (e) {}
+  }
+
+  async function handleSaveCriterionReview(fcId: number) {
+    if (!evaluationForm || evaluationForm.status !== 'in_deliberation') return
+    try {
+      await evaluationService.saveCriterionReview(evaluationForm.id, fcId, criterionReviews[fcId] || null, organForEvaluation(evaluationForm))
+    } catch (e: any) {
+      setError(e.message)
+    }
   }
 
   // ═══════════════════════════════════════════════
@@ -346,6 +380,10 @@ export default function ReviewerMeetingsPage() {
     const isConcluded = evaluationForm?.status === 'concluded'
     const isDeliberated = evaluationForm?.status === 'deliberated'
     const isNotDeliberated = evaluationForm?.status === 'not_deliberated'
+    const isBioeticaForm = isBioeticaEvaluation(evaluationForm)
+    const canAccessForm = !isBioeticaForm || Boolean(evaluationForm.can_access_form)
+    const canManageMeeting = !isBioeticaForm || Boolean(evaluationForm.is_primary_reviewer)
+    const canEditCriteria = isInDeliberation && !isConcluded && canAccessForm && canManageMeeting
     
     const protocolCode = protocol.code || `ISC-P-${id}`
     const docFileName = protocol.latest_document?.file_name || `${protocolCode}.docx`
@@ -358,16 +396,30 @@ export default function ReviewerMeetingsPage() {
     }, {})
 
     const criteriaComments: Record<number, { reviewer_name: string; comment: string }[]> = {}
-    ;(evaluationForm?.reviewer_evaluations || []).forEach(rev => {
-      const reviewerName = rev.reviewer?.user?.name || 'Revisor'
-      ;(rev.criterion_reviews || []).forEach(cr => {
-        if (cr.evaluation_form_criterion_id && cr.comment) {
-          if (!criteriaComments[cr.evaluation_form_criterion_id]) criteriaComments[cr.evaluation_form_criterion_id] = []
-          const exists = criteriaComments[cr.evaluation_form_criterion_id].some(c => c.reviewer_name === reviewerName)
-          if (!exists) criteriaComments[cr.evaluation_form_criterion_id].push({ reviewer_name: reviewerName, comment: cr.comment })
-        }
+    if (isSharedCommitteeEvaluation(evaluationForm) && evaluationForm.criteria_comments) {
+      evaluationForm.criteria_comments.forEach(item => {
+        if (!item.form_criterion_id) return
+        item.reviews?.forEach(review => {
+          if (!review.comment) return
+          if (!criteriaComments[item.form_criterion_id!]) criteriaComments[item.form_criterion_id!] = []
+          criteriaComments[item.form_criterion_id!].push({
+            reviewer_name: review.reviewer_name || '',
+            comment: review.comment,
+          })
+        })
       })
-    })
+    } else {
+      ;(evaluationForm?.reviewer_evaluations || []).forEach(rev => {
+        const reviewerName = rev.reviewer?.user?.name || 'Revisor'
+        ;(rev.criterion_reviews || []).forEach(cr => {
+          if (cr.evaluation_form_criterion_id && cr.comment) {
+            if (!criteriaComments[cr.evaluation_form_criterion_id]) criteriaComments[cr.evaluation_form_criterion_id] = []
+            const exists = criteriaComments[cr.evaluation_form_criterion_id].some(c => c.reviewer_name === reviewerName)
+            if (!exists) criteriaComments[cr.evaluation_form_criterion_id].push({ reviewer_name: reviewerName, comment: cr.comment })
+          }
+        })
+      })
+    }
 
     return (
       <>
@@ -504,9 +556,13 @@ export default function ReviewerMeetingsPage() {
                     <strong>Reunião Agendada</strong>
                     <p>{formatDate(evaluationForm.deliberation_date)} — {evaluationForm.deliberation_location || 'Local não definido'}</p>
                   </div>
-                  <button className="btn btn-primary btn-sm" onClick={handleStartDeliberation} disabled={isStartingDeliberation}>
-                    {isStartingDeliberation ? 'A iniciar...' : 'Iniciar Reunião'}
-                  </button>
+                  {canManageMeeting ? (
+                    <button className="btn btn-primary btn-sm" onClick={handleStartDeliberation} disabled={isStartingDeliberation}>
+                      {isStartingDeliberation ? 'A iniciar...' : 'Iniciar Reunião'}
+                    </button>
+                  ) : (
+                    <span className="badge badge-warning">Apenas o revisor principal inicia</span>
+                  )}
                 </div>
               )}
 
@@ -554,21 +610,45 @@ export default function ReviewerMeetingsPage() {
                 </div>
               )}
 
-              {/* ── CRITÉRIOS (Leitura) ── */}
-              {evaluationForm && (
+              {/* ── Ficha única ── */}
+              {evaluationForm && canAccessForm && (
                 <div className="eval-criteria-section">
-                  <h3 className="criteria-section-title"><span className="material-symbols-outlined">checklist</span>Critérios de Avaliação</h3>
+                  <h3 className="criteria-section-title">
+                    <span className="material-symbols-outlined">checklist</span>
+                    {isSharedCommitteeEvaluation(evaluationForm) ? `Ficha Única do ${committeeLabel(evaluationForm)}` : 'Critérios de Avaliação'}
+                    {canEditCriteria && (
+                      <span style={{ fontSize: 'var(--label-sm)', color: 'var(--tertiary)', fontWeight: 'var(--font-medium)', marginLeft: 'auto' }}>
+                        Editável
+                      </span>
+                    )}
+                  </h3>
                   {Object.entries(criteriaMap).map(([group, criteria]) => (
-                    <div key={group} className="criteria-group-block criteria-group-block--readonly">
+                    <div key={group} className={`criteria-group-block ${!canEditCriteria ? 'criteria-group-block--readonly' : ''}`}>
                       <h4 className="criteria-group-title">{group}</h4>
                       {criteria.map(c => {
                         const my = criterionReviews[c.id] || ''
                         const allComments = criteriaComments[c.id] || []
                         return (
-                          <div key={c.id} className="criterion-item criterion-item--readonly">
+                          <div key={c.id} className={`criterion-item ${!canEditCriteria ? 'criterion-item--readonly' : ''}`}>
                             <div className="criterion-header">
                               <label className="criterion-name">{c.criterion_name}</label>
-                              {my && (
+                              {canEditCriteria && (
+                                <div className="criterion-rating">
+                                  {[1, 2, 3, 4, 5].map(s => (
+                                    <button
+                                      key={s}
+                                      className={`rating-dot ${my?.startsWith(`Nota ${s}`) ? 'is-active' : ''}`}
+                                      onClick={() => {
+                                        const currentComment = my.replace(/^Nota \d\/5 - /, '') || ''
+                                        setCriterionReviews(prev => ({ ...prev, [c.id]: `Nota ${s}/5 - ${currentComment}` }))
+                                      }}
+                                    >
+                                      {s}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {!canEditCriteria && my && (
                                 <div className="criterion-rating">
                                   {[1, 2, 3, 4, 5].map(s => (
                                     <span key={s} className={`rating-dot rating-dot--readonly ${my?.startsWith(`Nota ${s}`) ? 'is-active' : ''}`}>
@@ -582,11 +662,24 @@ export default function ReviewerMeetingsPage() {
                               <div className="criterion-comments">
                                 {allComments.map((comment, idx) => (
                                   <div key={idx} className="criterion-comment">
-                                    <span className="criterion-comment-author">{comment.reviewer_name}:</span>
+                                    {comment.reviewer_name && (
+                                      <span className="criterion-comment-author">{comment.reviewer_name}:</span>
+                                    )}
                                     <span className="criterion-comment-text">{comment.comment?.replace(/^Nota \d\/5 - /, '') || comment.comment}</span>
                                   </div>
                                 ))}
                               </div>
+                            )}
+                            {canEditCriteria && (
+                              <textarea
+                                value={my?.replace(/^Nota \d\/5 - /, '') || ''}
+                                onChange={e => setCriterionReviews(prev => ({ ...prev, [c.id]: e.target.value }))}
+                                onBlur={() => handleSaveCriterionReview(c.id)}
+                                placeholder="Observações da ficha única..."
+                                rows={3}
+                                className="criterion-textarea"
+                                style={{ marginTop: 'var(--space-1)' }}
+                              />
                             )}
                           </div>
                         )
@@ -595,7 +688,7 @@ export default function ReviewerMeetingsPage() {
                   ))}
 
                   {/* ── Encerrar Reunião (2 botões) ── */}
-                  {isInDeliberation && (
+                  {isInDeliberation && canManageMeeting && (
                     <div className="eval-recommendation-section">
                       <h3>
                         <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>gavel</span>
@@ -714,6 +807,12 @@ export default function ReviewerMeetingsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+              {evaluationForm && !canAccessForm && (
+                <div className="eval-notice eval-notice--warning">
+                  <span className="material-symbols-outlined">lock</span>
+                  O preenchimento da ficha do Comité de Bioética está disponível apenas para o revisor principal.
                 </div>
               )}
               <div style={{ height: 40 }} />

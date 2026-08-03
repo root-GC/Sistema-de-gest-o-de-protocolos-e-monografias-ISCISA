@@ -1,7 +1,7 @@
 // src/pages/general-admin/GeneralAdminDashboard.tsx
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { generalAdminService, type DashboardStats } from '../../services/generalAdminService'
+import type { DashboardStats } from '../../services/generalAdminService'
 import '../../styles/global.css'
 
 export default function GeneralAdminDashboard() {

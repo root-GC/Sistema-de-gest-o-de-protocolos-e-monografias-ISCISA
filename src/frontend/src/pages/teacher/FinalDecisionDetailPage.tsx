@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
-import { evaluationService, type EvaluationForm, type EvaluationOpinionResult, type FormCriterion } from '../../services/evaluationService'
+import { evaluationService, type EvaluationForm, type EvaluationOrgan, type EvaluationOpinionResult, type FormCriterion } from '../../services/evaluationService'
 import { useAuth } from '../../context/AuthContext'
 import OnlyOfficeEditor from '../../components/OnlyOfficeEditor/OnlyOfficeEditor'
 import '../../styles/global.css'
@@ -15,6 +15,22 @@ function formatDate(dateStr?: string | null): string {
       day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
     })
   } catch { return dateStr || '' }
+}
+
+function organForEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): EvaluationOrgan {
+  if (form?.organ === 'comite_cientifico') return 'comite-cientifico'
+  if (form?.organ === 'comite_bioetica') return 'comite-bioetica'
+  return 'nucleo'
+}
+
+function isSharedCommitteeEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
+  return form?.organ === 'comite_cientifico' || form?.organ === 'comite_bioetica'
+}
+
+function committeeLabel(form?: Pick<EvaluationForm, 'organ'> | null): string {
+  if (form?.organ === 'comite_bioetica') return 'Comité de Bioética'
+  if (form?.organ === 'comite_cientifico') return 'Comité Científico'
+  return 'órgão'
 }
 
 type ExpandedPanel = 'both' | 'document' | 'form'
@@ -153,25 +169,31 @@ export default function FinalDecisionDetailPage() {
         } catch {}
       }
 
-      // Carregar comentários de TODOS os revisores
-      const allEvals = evaluation_form.reviewer_evaluations || []
       const reviews: Record<number, string> = {}
-      allEvals.forEach(rev => {
-        ;(rev.criterion_reviews || []).forEach(cr => {
-          if (cr.evaluation_form_criterion_id && cr.comment) {
-            // Se já existe, faz merge; senão, usa o comentário deste revisor
-            if (!reviews[cr.evaluation_form_criterion_id]) {
-              reviews[cr.evaluation_form_criterion_id] = cr.comment
-            } else {
-              // Merge: concatena se for diferente
-              const existing = reviews[cr.evaluation_form_criterion_id]
-              if (!existing.includes(cr.comment)) {
-                reviews[cr.evaluation_form_criterion_id] = existing + '\n---\n' + cr.comment
-              }
-            }
+      if (isSharedCommitteeEvaluation(evaluation_form) && evaluation_form.criteria_comments) {
+        evaluation_form.criteria_comments.forEach(item => {
+          const first = item.reviews?.find(review => review.comment)
+          if (item.form_criterion_id && first?.comment) {
+            reviews[item.form_criterion_id] = first.comment
           }
         })
-      })
+      } else {
+        const allEvals = evaluation_form.reviewer_evaluations || []
+        allEvals.forEach(rev => {
+          ;(rev.criterion_reviews || []).forEach(cr => {
+            if (cr.evaluation_form_criterion_id && cr.comment) {
+              if (!reviews[cr.evaluation_form_criterion_id]) {
+                reviews[cr.evaluation_form_criterion_id] = cr.comment
+              } else {
+                const existing = reviews[cr.evaluation_form_criterion_id]
+                if (!existing.includes(cr.comment)) {
+                  reviews[cr.evaluation_form_criterion_id] = existing + '\n---\n' + cr.comment
+                }
+              }
+            }
+          })
+        })
+      }
       setCriterionReviews(reviews)
 
     } catch (e: any) {
@@ -184,7 +206,7 @@ export default function FinalDecisionDetailPage() {
   async function handleSaveCriterionReview(fcId: number) {
     if (!form || form.status === 'concluded') return
     try {
-      await evaluationService.saveCriterionReview(form.id, fcId, criterionReviews[fcId] || null)
+      await evaluationService.saveCriterionReview(form.id, fcId, criterionReviews[fcId] || null, organForEvaluation(form))
     } catch (e: any) {
       // Silencioso no auto-save
     }
@@ -196,7 +218,7 @@ export default function FinalDecisionDetailPage() {
     setError(null)
     setSuccess(null)
     try {
-      const result = await evaluationService.decide(id, decision, null)
+      const result = await evaluationService.decide(id, decision, null, organForEvaluation(form))
       setOpinion(result.opinion || null)
       setForm(result.evaluation_form)
       setSuccess(result.message || 'Decisão registada com sucesso.')
@@ -212,9 +234,9 @@ export default function FinalDecisionDetailPage() {
     try { await evaluationService.openFile(url) } catch (e) {}
   }
 
-  async function downloadFile(url: string | null | undefined) {
+  async function downloadFile(url: string | null | undefined, name?: string) {
     if (!url) return
-    try { await evaluationService.downloadFile(url) } catch (e) {}
+    try { await evaluationService.downloadFile(url, name) } catch (e) {}
   }
 
   // ═══════════════════════════════════════════════
@@ -241,9 +263,13 @@ export default function FinalDecisionDetailPage() {
   if (!form) return null
 
   const alreadyDecided = form.status === 'concluded'
-  const canEdit = !alreadyDecided
+  const isSharedCommittee = isSharedCommitteeEvaluation(form)
+  const canAccessForm = form.organ !== 'comite_bioetica' || Boolean(form.can_access_form)
+  const canEdit = !alreadyDecided && !isSharedCommittee && canAccessForm
+  const canDecide = !alreadyDecided && canAccessForm
   const protocolCode = form.protocol?.code || protocol?.code || `#${form.protocol_id}`
   const docFileName = protocol?.latest_document?.file_name || `${protocolCode}.docx`
+  const evaluationFormDownloadUrl = `/api/v1/evaluation-forms/${form.id}/download`
 
   const criteriaMap = (form?.form_criteria || []).reduce<Record<string, FormCriterion[]>>((g, c) => {
     const k = c.group_name || 'Outros'
@@ -252,19 +278,33 @@ export default function FinalDecisionDetailPage() {
     return g
   }, {})
 
-  // Comentários separados por revisor
   const criteriaComments: Record<number, { reviewer_name: string; comment: string; is_mine: boolean }[]> = {}
-  ;(form?.reviewer_evaluations || []).forEach(rev => {
-    const reviewerName = rev.reviewer?.user?.name || 'Revisor'
-    const isMine = !!(user?.id && rev.reviewer?.user?.id === Number(user.id))
-    ;(rev.criterion_reviews || []).forEach(cr => {
-      if (cr.evaluation_form_criterion_id && cr.comment) {
-        if (!criteriaComments[cr.evaluation_form_criterion_id]) criteriaComments[cr.evaluation_form_criterion_id] = []
-        const exists = criteriaComments[cr.evaluation_form_criterion_id].some(c => c.reviewer_name === reviewerName)
-        if (!exists) criteriaComments[cr.evaluation_form_criterion_id].push({ reviewer_name: reviewerName, comment: cr.comment, is_mine: isMine })
-      }
+  if (isSharedCommittee && form.criteria_comments) {
+    form.criteria_comments.forEach(item => {
+      if (!item.form_criterion_id) return
+      item.reviews?.forEach(review => {
+        if (!review.comment) return
+        if (!criteriaComments[item.form_criterion_id!]) criteriaComments[item.form_criterion_id!] = []
+        criteriaComments[item.form_criterion_id!].push({
+          reviewer_name: review.reviewer_name || '',
+          comment: review.comment,
+          is_mine: false,
+        })
+      })
     })
-  })
+  } else {
+    ;(form?.reviewer_evaluations || []).forEach(rev => {
+      const reviewerName = rev.reviewer?.user?.name || 'Revisor'
+      const isMine = !!(user?.id && rev.reviewer?.user?.id === Number(user.id))
+      ;(rev.criterion_reviews || []).forEach(cr => {
+        if (cr.evaluation_form_criterion_id && cr.comment) {
+          if (!criteriaComments[cr.evaluation_form_criterion_id]) criteriaComments[cr.evaluation_form_criterion_id] = []
+          const exists = criteriaComments[cr.evaluation_form_criterion_id].some(c => c.reviewer_name === reviewerName)
+          if (!exists) criteriaComments[cr.evaluation_form_criterion_id].push({ reviewer_name: reviewerName, comment: cr.comment, is_mine: isMine })
+        }
+      })
+    })
+  }
 
   // ═══════════════════════════════════════════════
   // RENDER
@@ -415,12 +455,18 @@ export default function FinalDecisionDetailPage() {
                 <div>
                   <strong>{form.final_decision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Reprovado'}</strong>
                   <p>{form.conclusion_summary || 'Processo concluído.'}</p>
-                  {opinion?.download_url && (
+                  {(opinion?.download_url || evaluationFormDownloadUrl) && (
                     <div style={{ marginTop: 'var(--space-2)' }}>
-                      <a href={opinion.download_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', textDecoration: 'none' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>download</span>
-                        Descarregar Parecer
-                      </a>
+                      {opinion?.download_url && (
+                        <a href={opinion.download_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', textDecoration: 'none', marginRight: 'var(--space-1)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>download</span>
+                          Descarregar Parecer
+                        </a>
+                      )}
+                      <button type="button" className="btn btn-small" onClick={() => downloadFile(evaluationFormDownloadUrl, `ficha-${protocolCode}.pdf`)}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>assignment</span>
+                        Descarregar Ficha
+                      </button>
                     </div>
                   )}
                 </div>
@@ -428,17 +474,18 @@ export default function FinalDecisionDetailPage() {
             )}
 
             {/* ── Decisões dos Revisores ── */}
-            {form.reviewer_evaluations && form.reviewer_evaluations.length > 0 && (
-              <div className="eval-reviewer-status">
-                <h3><span className="material-symbols-outlined">group</span>Decisões dos Revisores</h3>
-                <div className="reviewer-chips-list">
-                  {form.reviewer_evaluations.map((re, i) => (
+              {form.reviewer_evaluations && form.reviewer_evaluations.length > 0 && (
+                <div className="eval-reviewer-status">
+                  <h3><span className="material-symbols-outlined">group</span>Decisões dos Revisores</h3>
+                  <div className="reviewer-chips-list">
+                    {form.reviewer_evaluations.map((re, i) => (
                     <span
                       key={re.id}
                       className={`reviewer-chip ${re.decision === 'approved' ? 'is-submitted' : ''}`}
                       style={re.decision === 'not_approved' ? { background: 'var(--error-container)', color: 'var(--on-error-container)' } : {}}
                     >
                       {re.reviewer?.user?.name || `Revisor #${i + 1}`}
+                      {re.is_primary && ' · Principal'}
                       {re.decision === 'approved' && ': ✓ Aprovou'}
                       {re.decision === 'not_approved' && ': ✗ Reprovou'}
                       {!re.decision && ': ○ Pendente'}
@@ -453,7 +500,7 @@ export default function FinalDecisionDetailPage() {
               <div className="eval-criteria-section">
                 <h3 className="criteria-section-title">
                   <span className="material-symbols-outlined">checklist</span>
-                  Critérios de Avaliação
+                  {isSharedCommittee ? `Ficha Única do ${committeeLabel(form)}` : 'Critérios de Avaliação'}
                   {canEdit && (
                     <span style={{ fontSize: 'var(--label-sm)', color: 'var(--tertiary)', fontWeight: 'var(--font-medium)', marginLeft: 'auto' }}>
                       Editável
@@ -508,9 +555,11 @@ export default function FinalDecisionDetailPage() {
                             <div className="criterion-comments">
                               {allComments.map((comment, idx) => (
                                 <div key={idx} className={`criterion-comment ${comment.is_mine ? 'is-mine' : 'is-other'}`}>
-                                  <span className="criterion-comment-author">
-                                    {comment.reviewer_name}{comment.is_mine ? ' (você)' : ''}:
-                                  </span>
+                                  {comment.reviewer_name && (
+                                    <span className="criterion-comment-author">
+                                      {comment.reviewer_name}{comment.is_mine ? ' (você)' : ''}:
+                                    </span>
+                                  )}
                                   <span className="criterion-comment-text">
                                     {comment.comment?.replace(/^Nota \d\/5 - /, '') || comment.comment}
                                   </span>
@@ -541,7 +590,14 @@ export default function FinalDecisionDetailPage() {
                 ))}
 
                 {/* ── Decisão Final (apenas botões) ── */}
-                {!alreadyDecided && (
+                {!canAccessForm && (
+                  <div className="eval-notice eval-notice--warning">
+                    <span className="material-symbols-outlined">lock</span>
+                    O preenchimento da ficha do Comité de Bioética está disponível apenas para o revisor principal.
+                  </div>
+                )}
+
+                {canDecide && (
                   <div className="eval-recommendation-section">
                     <h3>
                       <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>gavel</span>

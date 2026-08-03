@@ -62,6 +62,11 @@ export interface ApprovedTopic {
   status_label: string;
   submitted_at: string;
   has_protocol?: boolean;
+  has_any_protocol?: boolean;
+  can_resubmit_protocol?: boolean;
+  latest_protocol_id?: number | null;
+  latest_protocol_status?: string | null;
+  latest_protocol_status_label?: string | null;
   scientific_area?: { id: number; name: string };
   course?: { id: number; name: string; code?: string };
 }

@@ -1,6 +1,5 @@
 // src/pages/MonographPage.tsx
 import { useEffect, useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
 import { monographService, type Monograph, type MonographOpinion } from '../../services/monographService'
 import PdfPreviewModal from '../../components/PdfPreviewModal'
 import '../../styles/global.css'
@@ -34,8 +33,6 @@ function formatFileSize(bytes: number): string {
 // COMPONENTE
 // ============================================================
 export default function MonographPage() {
-  const { user } = useAuth()
-  
   const [monographs, setMonographs] = useState<Monograph[]>([])
   const [opinionsByMonograph, setOpinionsByMonograph] = useState<Record<number, MonographOpinion[]>>({})
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string; filename: string } | null>(null)

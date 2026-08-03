@@ -1,8 +1,7 @@
 // src/pages/reviewer/ReviewerMeetingsListPage.tsx
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { evaluationService, type EvaluationForm } from '../../services/evaluationService'
-import { useAuth } from '../../context/AuthContext'
 
 // ============================================================
 // TIPOS
@@ -56,8 +55,6 @@ function getStatusConfig(status: string) {
 // COMPONENTE PRINCIPAL
 // ============================================================
 export default function ReviewerMeetingsListPage() {
-  const navigate = useNavigate()
-  const { user } = useAuth()
   const [forms, setForms] = useState<EvaluationForm[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

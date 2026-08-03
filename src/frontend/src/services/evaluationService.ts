@@ -5,7 +5,7 @@ import { req } from './apiClient'
 // TIPOS
 // ═══════════════════════════════════════════════
 
-export type EvaluationOrgan = 'nucleo' | 'comite-cientifico'
+export type EvaluationOrgan = 'nucleo' | 'comite-cientifico' | 'comite-bioetica'
 
 function organBase(organ: EvaluationOrgan = 'nucleo'): string {
   return `/api/v1/${organ}`
@@ -43,10 +43,30 @@ export interface ReviewerEvaluation {
     }
   }
   status: string
+  is_evaluated?: boolean
+  is_primary?: boolean
+  role?: 'primary' | 'reviewer' | string
   decision: string | null
+  preliminary_decision?: string | null
+  overall_comment?: string | null
   deliberation_submitted?: boolean
   submitted_at: string | null
+  evaluated_at?: string | null
   criterion_reviews?: CriterionReview[]
+}
+
+export interface CriteriaComment {
+  form_criterion_id?: number
+  criterion_id: number
+  criterion_name: string
+  group_name: string | null
+  order_column: number
+  reviews: Array<{
+    reviewer_id: number | null
+    reviewer_name: string
+    comment: string | null
+    is_shared?: boolean
+  }>
 }
 
 export interface EvaluationForm {
@@ -57,8 +77,13 @@ export interface EvaluationForm {
   form_type: 'evaluation' | 'deliberation'
   parent_form_id: number | null
   organ: string
+  is_shared_form?: boolean
+  is_primary_reviewer?: boolean
+  can_access_form?: boolean
   status: string
   final_decision: string | null
+  harmonized_decision?: string | null
+  harmonized_at?: string | null
   decided_by: number | null
   decided_at: string | null
   conclusion_summary: string | null
@@ -92,6 +117,7 @@ export interface EvaluationForm {
   }
   form_criteria?: FormCriterion[]
   reviewer_evaluations?: ReviewerEvaluation[]
+  criteria_comments?: CriteriaComment[]
   child_forms?: EvaluationForm[]
 }
 
@@ -161,6 +187,22 @@ export const evaluationService = {
       overall_comment: overallComment || null,
     }) as Promise<{
       message: string
+      evaluation_form: EvaluationForm
+    }>,
+
+  markEvaluated: (
+    formId: number,
+    decision: 'approved' | 'not_approved',
+    overallComment?: string | null,
+    organ: EvaluationOrgan = 'comite-cientifico'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/mark-evaluated`, {
+      decision,
+      overall_comment: overallComment || null,
+    }) as Promise<{
+      message: string
+      reviewer_evaluation: ReviewerEvaluation
+      deliberation_pending: boolean
       evaluation_form: EvaluationForm
     }>,
 
@@ -234,6 +276,7 @@ export const evaluationService = {
   // ── Ficheiros ──────────────────────────────────────
 
   openFile: async (url: string, filename?: string) => {
+    void filename
     try {
       const response = await fetch(url)
       const blob = await response.blob()

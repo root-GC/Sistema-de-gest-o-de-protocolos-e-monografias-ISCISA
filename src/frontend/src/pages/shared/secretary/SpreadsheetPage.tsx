@@ -1,6 +1,7 @@
 // src/pages/secretary/SpreadsheetPage.tsx
 import { useEffect, useState } from 'react'
 import { protocolService } from '../../../services/protocolService'
+import { useAuth, type SecretaryProfile } from '../../../context/AuthContext'
 import '../../../styles/global.css'
 
 interface SpreadsheetRow {
@@ -21,6 +22,19 @@ interface SpreadsheetRow {
 }
 
 const STATUS_MAP: Record<string, string> = {
+  'protocol_pending_supervisor': 'Aguardando Supervisor',
+  'protocol_documents_pending_cc': 'Anexos em Validação (CC)',
+  'protocol_pending_nucleo': 'Aguardando Núcleo',
+  'protocol_in_review_nucleo': 'Em Revisão (Núcleo)',
+  'protocol_rejected_nucleo': 'Reprovado (Núcleo)',
+  'protocol_pending_comite_cientifico': 'Aguardando CC',
+  'protocol_in_review_comite_cientifico': 'Em Revisão (CC)',
+  'protocol_rejected_cc': 'Reprovado (CC)',
+  'protocol_pending_comite_bioetica': 'Aguardando Bioética',
+  'protocol_in_review_comite_bioetica': 'Em Revisão (Bioética)',
+  'protocol_rejected_bioetica': 'Reprovado (Bioética)',
+  'protocol_approved_final': 'Aprovado Final',
+  'protocol_rejected_final': 'Reprovado Final',
   'pending_nucleo': 'Aguardando Núcleo',
   'in_review_nucleo': 'Em Revisão (Núcleo)',
   'approved_nucleo': 'Aprovado (Núcleo)',
@@ -52,7 +66,25 @@ function getOrganFromStatus(status: string): string {
   return '—'
 }
 
+function getProtocolListForOrgan(organType?: string) {
+  if (organType === 'scientific_committee') return protocolService.listForSecretaryCC
+  if (organType === 'bioethics_committee') return protocolService.listForSecretaryBioetica
+  return protocolService.listForSecretary
+}
+
+function formatDate(value: string | null | undefined): string {
+  return value ? new Date(value).toLocaleDateString('pt-PT') : '—'
+}
+
+function formatVersionLabel(version: string): string {
+  return /^([A-Z]+_)?V\d+$/i.test(version) ? version : `v${version}`
+}
+
 export default function SpreadsheetPage() {
+  const { activeProfile } = useAuth()
+  const secretaryProfile = activeProfile as SecretaryProfile | null
+  const organType = secretaryProfile?.organ?.type
+
   const [rows, setRows] = useState<SpreadsheetRow[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -60,31 +92,35 @@ export default function SpreadsheetPage() {
   const [selectedCourse, setSelectedCourse] = useState('all')
   const [courses, setCourses] = useState<string[]>([])
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [organType])
 
   async function loadData() {
     setLoading(true)
     try {
-      const data = await protocolService.listForSecretary()
+      const data = await getProtocolListForOrgan(organType)()
       const mapped: SpreadsheetRow[] = data.protocols.map(p => {
         const submitted = p.submitted_at ? new Date(p.submitted_at) : null
-        const approved = p.status === 'approved_final' ? new Date() : null
-        const days = submitted ? Math.floor((Date.now() - submitted.getTime()) / (1000 * 60 * 60 * 24)) : 0
+        const tracking = p.organ_tracking
+        const finalDate = tracking?.latest_action_at || tracking?.approved_at || tracking?.rejected_at || null
+        const approvedDate = tracking?.approved_at || (p.status === 'protocol_approved_final' ? finalDate : null)
+        const end = finalDate ? new Date(finalDate).getTime() : Date.now()
+        const days = submitted ? Math.floor((end - submitted.getTime()) / (1000 * 60 * 60 * 24)) : 0
+
         return {
           id: p.id,
-          submissionDate: submitted?.toLocaleDateString('pt-PT') || '—',
+          submissionDate: formatDate(p.submitted_at),
           code: p.code || `PTM${String(p.id).padStart(4, '0')}E`,
           studentName: p.student?.name || '—',
           contact: p.student?.email || '—',
           title: p.topic?.title || '—',
-          versionNumber: p.version || '1',
+          versionNumber: tracking?.latest_opinion?.version || p.version || '1',
           meetingDate: null,
-          status: STATUS_MAP[p.status] || p.status_label || p.status,
-          statusRaw: p.status,
-          approvalDate: approved?.toLocaleDateString('pt-PT') || null,
+          status: tracking?.status_label || STATUS_MAP[p.status] || p.status_label || p.status,
+          statusRaw: tracking?.latest_action || p.status,
+          approvalDate: approvedDate ? formatDate(approvedDate) : null,
           timeSpent: submitted ? `${days} dias` : '—',
           course: (p.topic as any)?.course?.name || '—',
-          organ: getOrganFromStatus(p.status),
+          organ: tracking?.organ_name || getOrganFromStatus(p.status),
         }
       })
       const uniqueCourses = [...new Set(mapped.map(r => r.course))].filter(Boolean)
@@ -217,7 +253,7 @@ export default function SpreadsheetPage() {
                       <td style={{ ...tdStyle, fontWeight: 'var(--font-medium)', fontSize: '13px', whiteSpace: 'nowrap' }}>{row.studentName}</td>
                       <td style={{ ...tdStyle, fontSize: '12px', color: 'var(--on-surface-variant)', whiteSpace: 'nowrap' }}>{row.contact}</td>
                       <td style={{ ...tdStyle, maxWidth: '240px' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', fontSize: '13px' }} title={row.title}>{row.title}</span></td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}><span style={{ fontSize: '12px', fontWeight: 'var(--font-semibold)', color: 'var(--primary)', background: 'var(--primary-container)', padding: '2px 10px', borderRadius: 'var(--radius-full)' }}>v{row.versionNumber}</span></td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}><span style={{ fontSize: '12px', fontWeight: 'var(--font-semibold)', color: 'var(--primary)', background: 'var(--primary-container)', padding: '2px 10px', borderRadius: 'var(--radius-full)' }}>{formatVersionLabel(row.versionNumber)}</span></td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         {row.meetingDate ? (
                           <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 'var(--font-medium)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
@@ -251,7 +287,7 @@ export default function SpreadsheetPage() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-2)', padding: '0 var(--space-1)', fontSize: '11px', color: 'var(--on-surface-variant)' }}>
         <span>{filtered.length} de {rows.length} registos</span>
-        <span>ISCISA — Gestão Científica © {new Date().getFullYear()}</span>
+        <span>ISCISA — Direção Científica © {new Date().getFullYear()}</span>
       </div>
     </div>
   )

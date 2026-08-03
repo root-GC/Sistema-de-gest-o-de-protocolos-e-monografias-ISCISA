@@ -7,7 +7,7 @@ import {
   type TopicReviewComment,
 } from '../../services/topicService'
 import { protocolService, type Protocol } from '../../services/protocolService'
-import { evaluationService, type EvaluationForm, type EvaluationOpinionResult, type FormCriterion, type ReviewerEvaluation } from '../../services/evaluationService'
+import { evaluationService, type EvaluationForm, type EvaluationOrgan, type FormCriterion } from '../../services/evaluationService'
 import { useAuth } from '../../context/AuthContext'
 import TopicJustification from '../../components/TopicJustification'
 import OnlyOfficeEditor from '../../components/OnlyOfficeEditor/OnlyOfficeEditor'
@@ -36,7 +36,41 @@ function formatFileSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
-function getEvaluationState(evaluationForm: EvaluationForm | null, mySubmitted: boolean): {
+function organForEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): EvaluationOrgan {
+  if (form?.organ === 'comite_cientifico') return 'comite-cientifico'
+  if (form?.organ === 'comite_bioetica') return 'comite-bioetica'
+  return 'nucleo'
+}
+
+function isCcEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
+  return form?.organ === 'comite_cientifico'
+}
+
+function isBioeticaEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
+  return form?.organ === 'comite_bioetica'
+}
+
+function isSharedCommitteeEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
+  return isCcEvaluation(form) || isBioeticaEvaluation(form)
+}
+
+function committeeLabel(form?: Pick<EvaluationForm, 'organ'> | null): string {
+  if (isBioeticaEvaluation(form)) return 'Comité de Bioética'
+  if (isCcEvaluation(form)) return 'Comité Científico'
+  return 'órgão'
+}
+
+function isReviewerDone(status?: string, isEvaluated?: boolean): boolean {
+  return status === 'submitted' || Boolean(isEvaluated)
+}
+
+function preliminaryDecisionLabel(decision?: string | null): string {
+  if (decision === 'approved') return 'Aprovado'
+  if (decision === 'not_approved') return 'Não aprovado'
+  return 'Sem opinião'
+}
+
+function getEvaluationState(evaluationForm: EvaluationForm | null, mySubmitted: boolean, isScientificCommittee = false): {
   label: string
   className: string
   description: string
@@ -49,13 +83,17 @@ function getEvaluationState(evaluationForm: EvaluationForm | null, mySubmitted: 
       return {
         label: mySubmitted ? 'Aguardando outro revisor' : 'Em avaliação',
         className: mySubmitted ? 'is-submitted' : 'is-pending',
-        description: mySubmitted ? 'A sua avaliação foi submetida. Aguardando o outro revisor.' : 'Preencha os critérios e submeta a sua avaliação.',
+        description: isScientificCommittee
+          ? (mySubmitted ? 'A sua revisão foi marcada como avaliada. Aguardando o outro revisor.' : 'Revise o documento no OnlyOffice e marque como avaliado.')
+              : (mySubmitted ? 'A sua avaliação foi submetida. Aguardando o outro revisor.' : 'Preencha os critérios e submeta a sua avaliação.'),
       }
     case 'deliberation_pending':
       return {
         label: 'Deliberação Pendente',
         className: 'is-deliberation-pending',
-        description: 'Os revisores divergiram. A secretaria precisa agendar uma reunião de deliberação.',
+        description: isScientificCommittee
+          ? 'Os revisores concluíram a revisão prévia. A secretaria precisa agendar a reunião de deliberação.'
+          : 'Os revisores concluíram a avaliação. A secretaria precisa agendar uma reunião de deliberação.',
       }
     case 'deliberation_scheduled':
       return {
@@ -105,7 +143,7 @@ interface ImportedDocument {
 // ── Componente Principal ──────────────────────────────
 export default function EvaluationPage() {
   const { topicId, protocolId } = useParams<{ topicId: string; protocolId: string }>()
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const isProtocol = !!protocolId
   const id = Number(protocolId || topicId)
 
@@ -114,7 +152,6 @@ export default function EvaluationPage() {
   const [comments, setComments] = useState<TopicReviewComment[]>([])
   const [newComment, setNewComment] = useState('')
   const [decision, setDecision] = useState<'approved' | 'rejected' | ''>('')
-  const [myDecision, setMyDecision] = useState<'approved' | 'rejected' | null>(null)
   const [evaluationDone, setEvaluationDone] = useState(false)
 
   // ── Protocol state ──
@@ -125,8 +162,6 @@ export default function EvaluationPage() {
   const [overallComment, setOverallComment] = useState('')
   const [formConcluded, setFormConcluded] = useState(false)
   const [myEvaluationSubmitted, setMyEvaluationSubmitted] = useState(false)
-  const [protocolDecision, setProtocolDecision] = useState<string | null>(null)
-  const [opinionResult, setOpinionResult] = useState<EvaluationOpinionResult | null>(null)
   const [isSecretary, setIsSecretary] = useState(false)
 
   // ── Deliberation state ──
@@ -257,7 +292,6 @@ export default function EvaluationPage() {
       if (!t) throw new Error('Tema não encontrado.')
       setTopic(t)
       const dec = t.my_assignment?.evaluation?.decision ?? null
-      setMyDecision(dec)
       setEvaluationDone(Boolean(dec) || isTopicClosed(t.status))
       if (dec) setSuccess(`Avaliação: ${decisionLabel(dec)}.`)
       const r = await topicService.getComments(id)
@@ -293,7 +327,7 @@ export default function EvaluationPage() {
       if (!form) { setError('Ficha de avaliação não encontrada.'); setLoading(false); return }
 
       // 3. Buscar ficha completa
-      const full = await evaluationService.getForm(form.id)
+      const full = await evaluationService.getForm(form.id, organForEvaluation(form))
       const formData = full.evaluation_form
       setEvaluationForm(formData)
 
@@ -303,23 +337,38 @@ export default function EvaluationPage() {
       const me = evals.find(re => uid !== null && re.reviewer?.user?.id === uid)
       const concluded = formData.status === 'concluded'
       const isDeliberation = formData.status === 'deliberation_pending' || formData.status === 'deliberation_scheduled' || formData.status === 'in_deliberation'
-      const mySubmitted = me?.status === 'submitted'
+      const mySubmitted = isReviewerDone(me?.status, me?.is_evaluated)
 
       setFormConcluded(concluded)
       setMyEvaluationSubmitted(mySubmitted || isDeliberation) // Em deliberação, considera como submetido
-      setIsSecretary((user as any)?.hasPermission?.('protocol.assign') || false)
+      setIsSecretary(hasPermission('protocol.assign'))
 
       // 5. Resetar campos
       setRecommendation('')
       setOverallComment('')
       setCriterionReviews({})
-      setOpinionResult(null)
       setDeliberationDecision('')
       setDeliberationSummary(formData.conclusion_summary || '')
       setShowScheduleForm(false)
 
       // 6. Carregar comentários do revisor atual
-      if (me?.criterion_reviews) {
+      if (isSharedCommitteeEvaluation(formData)) {
+        const revs: Record<number, string> = {}
+        evals.forEach(re => {
+          ;(re.criterion_reviews || []).forEach(cr => {
+            if (cr.evaluation_form_criterion_id && cr.comment && !revs[cr.evaluation_form_criterion_id]) {
+              revs[cr.evaluation_form_criterion_id] = cr.comment
+            }
+          })
+        })
+        ;(formData.criteria_comments || []).forEach(item => {
+          const first = item.reviews?.find(review => review.comment)
+          if (item.form_criterion_id && first?.comment) {
+            revs[item.form_criterion_id] = first.comment
+          }
+        })
+        setCriterionReviews(revs)
+      } else if (me?.criterion_reviews) {
         const revs: Record<number, string> = {}
         me.criterion_reviews.forEach(cr => {
           if (cr.evaluation_form_criterion_id) revs[cr.evaluation_form_criterion_id] = cr.comment || ''
@@ -343,22 +392,6 @@ export default function EvaluationPage() {
         }
       }
 
-      // 8. Carregar pareceres
-      try {
-        const { opinions } = await protocolService.listOpinions(id)
-        if (opinions.length > 0) {
-          const o = opinions[0]
-          setOpinionResult({
-            id: o.id,
-            decision: o.decision,
-            issued_at: o.issued_at,
-            document_url: o.document_url || undefined,
-            download_url: o.download_url || undefined,
-            evaluation_form_download_url: o.evaluation_form_download_url || undefined,
-          })
-        }
-      } catch {}
-
       setError(null)
     } catch (e: any) { setError(e.message) } finally { setLoading(false) }
   }
@@ -368,7 +401,7 @@ export default function EvaluationPage() {
     if (myEvaluationSubmitted && evaluationForm.status !== 'in_deliberation') return
     if (formConcluded) return
     try {
-      await evaluationService.saveCriterionReview(evaluationForm.id, fcId, criterionReviews[fcId] || null)
+      await evaluationService.saveCriterionReview(evaluationForm.id, fcId, criterionReviews[fcId] || null, organForEvaluation(evaluationForm))
     } catch (e: any) { /* silencioso no auto-save */ }
   }
 
@@ -381,7 +414,10 @@ export default function EvaluationPage() {
     setError(null)
     try {
       if (importedDocument?.file) await protocolService.uploadReviewedDocument(id, importedDocument.file)
-      const result = await evaluationService.submit(evaluationForm.id, recommendation === 'approved' ? 'approved' : 'not_approved', overallComment || null)
+      const apiDecision = recommendation === 'approved' ? 'approved' : 'not_approved'
+      const result = isSharedCommitteeEvaluation(evaluationForm)
+        ? await evaluationService.markEvaluated(evaluationForm.id, apiDecision, overallComment || null, organForEvaluation(evaluationForm))
+        : await evaluationService.submit(evaluationForm.id, apiDecision, overallComment || null, organForEvaluation(evaluationForm))
       setSuccess(result.message)
       // Recarregar tudo
       await loadProtocolEvaluation()
@@ -394,7 +430,7 @@ export default function EvaluationPage() {
     if (!evaluationForm || !deliberationDate || !deliberationLocation) return
     setIsScheduling(true)
     try {
-      await evaluationService.scheduleDeliberation(evaluationForm.id, deliberationDate, deliberationLocation)
+      await evaluationService.scheduleDeliberation(evaluationForm.id, deliberationDate, deliberationLocation, organForEvaluation(evaluationForm))
       setSuccess('Deliberação agendada com sucesso.')
       setShowScheduleForm(false)
       setDeliberationDate('')
@@ -407,7 +443,7 @@ export default function EvaluationPage() {
     if (!evaluationForm) return
     setIsStartingDeliberation(true)
     try {
-      await evaluationService.startDeliberation(evaluationForm.id)
+      await evaluationService.startDeliberation(evaluationForm.id, organForEvaluation(evaluationForm))
       setSuccess('Reunião de deliberação iniciada. Os comentários são agora partilhados.')
       await loadProtocolEvaluation()
     } catch (e: any) { setError(e.message) } finally { setIsStartingDeliberation(false) }
@@ -417,7 +453,7 @@ export default function EvaluationPage() {
     if (!evaluationForm || !deliberationDecision) return
     setIsSubmittingDeliberation(true)
     try {
-      const result = await evaluationService.submitDeliberation(evaluationForm.id, deliberationDecision, deliberationSummary || null)
+      const result = await evaluationService.submitDeliberation(evaluationForm.id, deliberationDecision, deliberationSummary || null, organForEvaluation(evaluationForm))
       setSuccess(result.message)
       await loadProtocolEvaluation()
     } catch (e: any) { setError(e.message) } finally { setIsSubmittingDeliberation(false) }
@@ -508,12 +544,19 @@ export default function EvaluationPage() {
   // PROTOCOL EVALUATION (SPLIT-VIEW)
   // ═══════════════════════════════════════════════
   if (isProtocol && protocol) {
-    const finalProtocolDecision = evaluationForm?.final_decision || protocolDecision
-    const state = getEvaluationState(evaluationForm, myEvaluationSubmitted)
+    const finalProtocolDecision = evaluationForm?.final_decision
+    const isBioeticaForm = isBioeticaEvaluation(evaluationForm)
+    const isSharedCommitteeForm = isSharedCommitteeEvaluation(evaluationForm)
+    const isPrimaryReviewer = Boolean(evaluationForm?.is_primary_reviewer)
+    const canAccessForm = !isBioeticaForm || Boolean(evaluationForm?.can_access_form)
+    const state = getEvaluationState(evaluationForm, myEvaluationSubmitted, isSharedCommitteeForm)
     const isInDeliberation = evaluationForm?.status === 'in_deliberation'
     const isDeliberationScheduled = evaluationForm?.status === 'deliberation_scheduled'
     const isDeliberationPending = evaluationForm?.status === 'deliberation_pending'
-    const canEdit = !formConcluded && (!myEvaluationSubmitted || isInDeliberation)
+    const canEdit = !formConcluded && canAccessForm && (!myEvaluationSubmitted || isInDeliberation)
+    const canShowCriteria = !!evaluationForm && canAccessForm && (!isSharedCommitteeForm || isInDeliberation || evaluationForm.status === 'deliberated' || formConcluded)
+    const shouldShowInitialSubmission = !!evaluationForm && !formConcluded && !myEvaluationSubmitted && !isInDeliberation
+    const canStartOrSubmitDeliberation = !isBioeticaForm || isPrimaryReviewer
     const protocolCode = protocol.code || `ISC-P-${id}`
     const docFileName = protocol.latest_document?.file_name || `${protocolCode}.docx`
 
@@ -525,17 +568,32 @@ export default function EvaluationPage() {
     }, {})
 
     const criteriaComments: Record<number, { reviewer_name: string; comment: string; is_mine: boolean }[]> = {}
-    ;(evaluationForm?.reviewer_evaluations || []).forEach(rev => {
-      const reviewerName = rev.reviewer?.user?.name || 'Revisor'
-      const isMine = !!(user?.id && rev.reviewer?.user?.id === Number(user.id))
-      ;(rev.criterion_reviews || []).forEach(cr => {
-        if (cr.evaluation_form_criterion_id && cr.comment) {
-          if (!criteriaComments[cr.evaluation_form_criterion_id]) criteriaComments[cr.evaluation_form_criterion_id] = []
-          const exists = criteriaComments[cr.evaluation_form_criterion_id].some(c => c.reviewer_name === reviewerName)
-          if (!exists) criteriaComments[cr.evaluation_form_criterion_id].push({ reviewer_name: reviewerName, comment: cr.comment, is_mine: isMine })
-        }
+    if (isSharedCommitteeForm && evaluationForm?.criteria_comments) {
+      evaluationForm.criteria_comments.forEach(item => {
+        if (!item.form_criterion_id) return
+        item.reviews?.forEach(review => {
+          if (!review.comment) return
+          if (!criteriaComments[item.form_criterion_id!]) criteriaComments[item.form_criterion_id!] = []
+          criteriaComments[item.form_criterion_id!].push({
+            reviewer_name: review.reviewer_name || '',
+            comment: review.comment,
+            is_mine: false,
+          })
+        })
       })
-    })
+    } else {
+      ;(evaluationForm?.reviewer_evaluations || []).forEach(rev => {
+        const reviewerName = rev.reviewer?.user?.name || 'Revisor'
+        const isMine = !!(user?.id && rev.reviewer?.user?.id === Number(user.id))
+        ;(rev.criterion_reviews || []).forEach(cr => {
+          if (cr.evaluation_form_criterion_id && cr.comment) {
+            if (!criteriaComments[cr.evaluation_form_criterion_id]) criteriaComments[cr.evaluation_form_criterion_id] = []
+            const exists = criteriaComments[cr.evaluation_form_criterion_id].some(c => c.reviewer_name === reviewerName)
+            if (!exists) criteriaComments[cr.evaluation_form_criterion_id].push({ reviewer_name: reviewerName, comment: cr.comment, is_mine: isMine })
+          }
+        })
+      })
+    }
 
     return (
       <>
@@ -680,11 +738,15 @@ export default function EvaluationPage() {
                     <strong>Deliberação Agendada</strong>
                     <p>{formatDate(evaluationForm.deliberation_date)} — {evaluationForm.deliberation_location || 'Local não definido'}</p>
                   </div>
-                  <button className="btn btn-primary btn-sm" onClick={handleStartDeliberation} disabled={isStartingDeliberation}>
-                    {isStartingDeliberation ? 'A iniciar...' : 'Iniciar Deliberação'}
-                  </button>
-                </div>
-              )}
+	                  {canStartOrSubmitDeliberation ? (
+	                  <button className="btn btn-primary btn-sm" onClick={handleStartDeliberation} disabled={isStartingDeliberation}>
+	                    {isStartingDeliberation ? 'A iniciar...' : 'Iniciar Deliberação'}
+	                  </button>
+	                  ) : (
+	                    <span className="badge badge-warning">Apenas o revisor principal inicia</span>
+	                  )}
+	                </div>
+	              )}
 
               {/* ── Em Deliberação ── */}
               {isInDeliberation && (
@@ -715,20 +777,47 @@ export default function EvaluationPage() {
                   <div className="reviewer-chips-list">
                     {(evaluationForm.reviewer_evaluations || []).map((re, i) => {
                       const isMe = user?.id && re.reviewer?.user?.id === Number(user.id)
-                      return (
-                        <span key={re.id} className={`reviewer-chip ${re.status === 'submitted' ? 'is-submitted' : ''} ${isMe ? 'is-you' : ''}`}>
-                          {re.reviewer?.user?.name || `Revisor #${i + 1}`}{isMe ? ' (você)' : ''}: {re.status === 'submitted' ? '✓ Submetido' : '○ Pendente'}
-                        </span>
-                      )
+                      const done = isReviewerDone(re.status, re.is_evaluated)
+	                      const decisionText = isSharedCommitteeForm && re.preliminary_decision
+	                        ? ` · ${preliminaryDecisionLabel(re.preliminary_decision)}`
+	                        : ''
+	                      const roleText = re.is_primary ? ' · Principal' : ''
+	                      return (
+	                        <span key={re.id} className={`reviewer-chip ${done ? 'is-submitted' : ''} ${isMe ? 'is-you' : ''}`}>
+	                          {re.reviewer?.user?.name || `Revisor #${i + 1}`}{isMe ? ' (você)' : ''}{roleText}: {done ? (isSharedCommitteeForm ? '✓ Avaliado' : '✓ Submetido') : '○ Pendente'}{decisionText}
+	                        </span>
+	                      )
                     })}
                   </div>
                 </div>
               )}
 
+              {/* ── Revisão prévia do CC/Comité de Bioética ── */}
+              {isSharedCommitteeForm && shouldShowInitialSubmission && (
+	                <div className="eval-recommendation-section">
+	                  <h3><span className="material-symbols-outlined">rate_review</span>Revisão prévia</h3>
+	                  <div className="eval-state-description">
+	                    <span className="material-symbols-outlined">edit_document</span>
+	                    <p>Revise o documento no OnlyOffice com track changes e marque esta etapa como avaliada. A ficha do {committeeLabel(evaluationForm)} só fica disponível na deliberação{isBioeticaForm ? ' e apenas ao revisor principal.' : '.'}</p>
+	                  </div>
+                  <div className="eval-field">
+                    <label>Observação da revisão</label>
+                    <textarea value={overallComment} onChange={e => setOverallComment(e.target.value)} placeholder="Observação opcional..." rows={3} className="criterion-textarea" />
+                  </div>
+                  <div className="recommendation-choices">
+                    <label className={`recommendation-choice ${recommendation === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="rec" checked={recommendation === 'approved'} onChange={() => setRecommendation('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovado</label>
+                    <label className={`recommendation-choice ${recommendation === 'rejected' ? 'is-rejected' : ''}`}><input type="radio" name="rec" checked={recommendation === 'rejected'} onChange={() => setRecommendation('rejected')} /><span className="material-symbols-outlined">cancel</span>Não aprovado</label>
+                  </div>
+                  <button className="btn btn-primary btn-block btn-lg" onClick={handleSubmitEvaluation} disabled={!recommendation || submitting}>
+                    {submitting ? 'A registar...' : 'Marcar como avaliado'}
+                  </button>
+                </div>
+              )}
+
               {/* ── CRITÉRIOS ── */}
-              {evaluationForm && (
+              {evaluationForm && canShowCriteria && (
                 <div className="eval-criteria-section">
-                  <h3 className="criteria-section-title"><span className="material-symbols-outlined">checklist</span>Critérios de Avaliação</h3>
+	                  <h3 className="criteria-section-title"><span className="material-symbols-outlined">checklist</span>{isSharedCommitteeForm ? `Ficha Única do ${committeeLabel(evaluationForm)}` : 'Critérios de Avaliação'}</h3>
                   {Object.entries(criteriaMap).map(([group, criteria]) => (
                     <div key={group} className="criteria-group-block">
                       <h4 className="criteria-group-title">{group}</h4>
@@ -761,7 +850,9 @@ export default function EvaluationPage() {
                               <div className="criterion-comments">
                                 {allComments.map((comment, idx) => (
                                   <div key={idx} className={`criterion-comment ${comment.is_mine ? 'is-mine' : 'is-other'}`}>
-                                    <span className="criterion-comment-author">{comment.reviewer_name}{comment.is_mine ? ' (você)' : ''}:</span>
+                                    {comment.reviewer_name && (
+                                      <span className="criterion-comment-author">{comment.reviewer_name}{comment.is_mine ? ' (você)' : ''}:</span>
+                                    )}
                                     <span className="criterion-comment-text">{comment.comment?.replace(/^Nota \d\/5 - /, '') || comment.comment}</span>
                                   </div>
                                 ))}
@@ -774,7 +865,7 @@ export default function EvaluationPage() {
                   ))}
 
                   {/* ── Submeter Avaliação Individual ── */}
-                  {!formConcluded && !myEvaluationSubmitted && !isInDeliberation && (
+	                  {!isSharedCommitteeForm && shouldShowInitialSubmission && (
                     <div className="eval-recommendation-section">
                       <h3><span className="material-symbols-outlined">rate_review</span>Conclusão</h3>
                       <div className="eval-field"><label>Resumo</label><textarea value={overallComment} onChange={e => setOverallComment(e.target.value)} placeholder="Resumo geral..." rows={3} className="criterion-textarea" /></div>
@@ -789,19 +880,19 @@ export default function EvaluationPage() {
                   )}
 
                   {/* ── Submeter Deliberação ── */}
-                  {isInDeliberation && (
-                    <div className="eval-recommendation-section">
-                      <h3><span className="material-symbols-outlined">gavel</span>Decisão Final da Deliberação</h3>
+	                  {isInDeliberation && canStartOrSubmitDeliberation && (
+	                    <div className="eval-recommendation-section">
+	                      <h3><span className="material-symbols-outlined">gavel</span>{isSharedCommitteeForm ? 'Submissão da ficha de deliberação' : 'Decisão Final da Deliberação'}</h3>
                       <div className="eval-field"><label>Resumo da deliberação</label><textarea value={deliberationSummary} onChange={e => setDeliberationSummary(e.target.value)} placeholder="Resumo da discussão..." rows={3} className="criterion-textarea" /></div>
                       <div className="recommendation-choices">
                         <label className={`recommendation-choice ${deliberationDecision === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="delib-rec" checked={deliberationDecision === 'approved'} onChange={() => setDeliberationDecision('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovar</label>
                         <label className={`recommendation-choice ${deliberationDecision === 'not_approved' ? 'is-rejected' : ''}`}><input type="radio" name="delib-rec" checked={deliberationDecision === 'not_approved'} onChange={() => setDeliberationDecision('not_approved')} /><span className="material-symbols-outlined">cancel</span>Reprovar</label>
                       </div>
                       <button className="btn btn-primary btn-block btn-lg" onClick={handleSubmitDeliberation} disabled={!deliberationDecision || isSubmittingDeliberation}>
-                        {isSubmittingDeliberation ? 'A submeter...' : 'Submeter Decisão Final'}
-                      </button>
-                    </div>
-                  )}
+	                        {isSubmittingDeliberation ? 'A submeter...' : (isSharedCommitteeForm ? 'Submeter ficha' : 'Submeter Decisão Final')}
+	                      </button>
+	                    </div>
+	                  )}
                 </div>
               )}
               <div style={{ height: 40 }} />

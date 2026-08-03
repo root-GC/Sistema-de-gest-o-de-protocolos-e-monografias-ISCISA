@@ -1,6 +1,6 @@
 // src/pages/organ-president/OrganPresidentDashboard.tsx
 import { useEffect, useState } from 'react'
-import { organPresidentService, type OrganInfo, type OrganStats } from '../../services/organPresidentService'
+import type { OrganInfo, OrganStats } from '../../services/organPresidentService'
 import { getOrganConfig } from './organPresidentConfig'
 import '../../styles/global.css'
 

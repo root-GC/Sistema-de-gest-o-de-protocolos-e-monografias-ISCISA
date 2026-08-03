@@ -1383,6 +1383,10 @@ class ProtocolService
                 'decision' => $latestOpinion->decision,
                 'issued_at' => $latestOpinion->issued_at,
                 'version' => $latestOpinion->effectiveVersion(),
+                'download_url' => url("api/v1/opinions/{$latestOpinion->id}/download"),
+                'evaluation_form_download_url' => $latestOpinion->evaluation_form_id
+                    ? url("api/v1/evaluation-forms/{$latestOpinion->evaluation_form_id}/download")
+                    : null,
             ] : null,
         ];
     }

@@ -139,6 +139,16 @@ export const menuRegistry = [
     roles: ['coordinator'],
   },
 
+  // ── Agenda ────────────────────────────────────────────
+  {
+    id: 'agenda',
+    label: 'Agenda',
+    icon: 'ti-calendar-event',
+    route: '/agenda',
+    permission: null,
+    roles: ['teacher', 'reviewer', 'secretary', 'coordinator', 'admin'],
+  },
+
   // ── Secretary ─────────────────────────────────────────────────────
   {
     id: 'secretary_protocols',

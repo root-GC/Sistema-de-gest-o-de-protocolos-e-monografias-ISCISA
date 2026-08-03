@@ -33,6 +33,7 @@ const IN_REVIEW_NUCLEO = 'protocol_in_review_nucleo';
 
 const PENDING_CC = 'protocol_pending_comite_cientifico';
 const IN_REVIEW_CC = 'protocol_in_review_comite_cientifico';
+const DOCS_PENDING_CC = 'protocol_documents_pending_cc';
 
 const PENDING_CB = 'protocol_pending_comite_bioetica';
 const IN_REVIEW_CB = 'protocol_in_review_comite_bioetica';
@@ -44,9 +45,9 @@ const PENDING_SUPERVISOR = 'protocol_pending_supervisor';
 const REJECTED_SUPERVISOR = 'protocol_rejected_supervisor';
 
 function formatVersion(prefix: string, value?: number | null): string | null {
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined || Number(value) <= 0) return null;
   const n = Math.max(1, Number(value));
-  return `${prefix}${String(n).padStart(2, '0')}`;
+  return `${prefix}${n}`;
 }
 
 export function buildPipeline(protocol: PipelineInput): OrganStage[] {
@@ -59,7 +60,7 @@ export function buildPipeline(protocol: PipelineInput): OrganStage[] {
   const atNucleoPending = status === PENDING_NUCLEO || status === PENDING_SUPERVISOR;
   const atNucleoReview = status === IN_REVIEW_NUCLEO;
 
-  const atCcPending = status === PENDING_CC;
+  const atCcPending = status === PENDING_CC || status === DOCS_PENDING_CC;
   const atCcReview = status === IN_REVIEW_CC;
 
   const atCbPending = status === PENDING_CB;
@@ -67,7 +68,7 @@ export function buildPipeline(protocol: PipelineInput): OrganStage[] {
 
   const nucleoVersion = formatVersion('NC_V', protocol.nc_version);
   const ccVersion = formatVersion('CC_V', protocol.cc_version);
-  const cbVersion = formatVersion('CB_V', protocol.cb_version);
+  const cbVersion = formatVersion('CIBS_V', protocol.cb_version);
 
   const rejectedHere = isRejectedFinal || isRejectedAtSupervisor;
 
@@ -178,6 +179,7 @@ function getNucleoDetail(status: string, state: StageState): string {
 function getCcDetail(status: string, state: StageState): string {
   if (state === 'approved') return 'Aprovado pelo Comité Científico';
   if (state === 'rejected') return 'Rejeitado';
+  if (status === DOCS_PENDING_CC) return 'Aguardando documentos do estudante';
   if (status === IN_REVIEW_CC) return 'Em avaliação no Comité Científico';
   if (state === 'pending' || status === PENDING_CC) return 'Aguardando atribuição de revisores';
   if (state === 'not_started') return 'Ainda não chegou ao Comité';

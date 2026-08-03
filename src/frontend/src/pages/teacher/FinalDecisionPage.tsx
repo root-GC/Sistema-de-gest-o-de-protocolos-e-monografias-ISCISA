@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { evaluationService, type EvaluationForm } from '../../services/evaluationService'
-import { useAuth } from '../../context/AuthContext'
 
 // ============================================================
 // HELPERS
@@ -67,7 +66,6 @@ function formatDate(dateStr?: string | null): string {
 // ============================================================
 export default function FinalDecisionPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
   const [forms, setForms] = useState<EvaluationForm[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -81,9 +79,20 @@ export default function FinalDecisionPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await evaluationService.listPendingFinalDecision()
-      console.log('📊 Decisões Pendentes:', data)
-      setForms(data.evaluation_forms || [])
+      const [nucleoData, ccData, bioeticaData] = await Promise.all([
+        evaluationService.listPendingFinalDecision('nucleo'),
+        evaluationService.listPendingFinalDecision('comite-cientifico'),
+        evaluationService.listPendingFinalDecision('comite-bioetica'),
+      ])
+      const uniqueForms = [
+        ...(nucleoData.evaluation_forms || []),
+        ...(ccData.evaluation_forms || []),
+        ...(bioeticaData.evaluation_forms || []),
+      ]
+        .filter((form, index, all) => all.findIndex(item => item.id === form.id) === index)
+
+      console.log('📊 Decisões Pendentes:', uniqueForms)
+      setForms(uniqueForms)
     } catch (e: any) {
       setError(e.message)
     } finally {

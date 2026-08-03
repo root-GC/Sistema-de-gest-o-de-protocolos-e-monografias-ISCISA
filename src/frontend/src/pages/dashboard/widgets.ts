@@ -17,6 +17,7 @@ import { ReportsWidget } from './widgets/ReportsWidget';
 import { AdminPanelWidget } from './widgets/AdminPanelWidget';
 import { NotificationWidget } from './widgets/NotificationWidget';
 import { DeadlineWidget } from './widgets/DeadlineWidget';
+import { AgendaWidget } from './widgets/AgendaWidget';
 import { ProtocolWorkflowWidget } from './widgets/ProtocolWorkflowWidget';
 import { 
   JointReturnWidget,
@@ -265,6 +266,17 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
     component: DeadlineWidget,
     permissions: [],
     endpoint: '/api/deadlines'
+  },
+  {
+    id: 'agendaOverview',
+    title: 'Agenda',
+    description: 'Próximos eventos, reuniões e defesas',
+    category: 'general',
+    order: 3,
+    size: 'small',
+    component: AgendaWidget,
+    permissions: [],
+    endpoint: '/api/agenda-overview'
   },
    // Widgets Suave/Financeiros
   {

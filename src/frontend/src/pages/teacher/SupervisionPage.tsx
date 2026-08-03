@@ -161,24 +161,6 @@ export default function SupervisionPage() {
     return false
   }
 
-  // 🆕 Determina se é bloqueante (não permite nova submissão)
-  function isBlocking(phase: Phase, status?: string): boolean {
-    if (phase === 'none') return false
-    if (phase === 'topic') {
-      return status !== 'topic_rejected_supervisor' && status !== 'topic_rejected_nucleo' && status !== 'topic_rejected'
-    }
-    return false
-  }
-
-  // 🆕 Verifica se pode submeter novo (tema rejeitado)
-  function canResubmit(phase: Phase, status?: string): boolean {
-    if (phase === 'none') return true
-    if (phase === 'topic') {
-      return status === 'topic_rejected_supervisor' || status === 'topic_rejected_nucleo' || status === 'topic_rejected'
-    }
-    return false
-  }
-
   // Estatísticas
   const stats = {
     total: supervisees.length,

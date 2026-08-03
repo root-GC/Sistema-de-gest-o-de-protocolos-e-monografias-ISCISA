@@ -71,20 +71,6 @@ class EvaluationFormController extends Controller
         return Protocol::ORGAN_NUCLEO;
     }
 
-    private function isBioeticaPrimaryReviewer(User $user, EvaluationForm $form): bool
-    {
-        $teacherProfile = $user->teacherProfile;
-
-        if (! $teacherProfile) {
-            return false;
-        }
-
-        return $form->reviewerEvaluations()
-            ->where('reviewer_id', $teacherProfile->id)
-            ->whereHas('protocolReviewAssignment', fn($query) => $query->where('is_primary', true))
-            ->exists();
-    }
-
     public function show(EvaluationForm $form)
     {
         $this->authorize('view', $form);
@@ -399,10 +385,6 @@ class EvaluationFormController extends Controller
 
         if (! $protocol || ! $this->canAccessProtocolDocument($user, $protocol)) {
             abort(403);
-        }
-
-        if ($form->organ === Protocol::ORGAN_COMITE_BIOETICA && ! $this->isBioeticaPrimaryReviewer($user, $form)) {
-            abort(403, 'Apenas o revisor principal do Comité de Bioética pode baixar esta ficha.');
         }
 
         $path = $documentService->generateEvaluationFormPdf($form);
