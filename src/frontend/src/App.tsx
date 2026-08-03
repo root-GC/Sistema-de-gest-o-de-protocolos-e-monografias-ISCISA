@@ -4,10 +4,11 @@ import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './guards/ProtectedRoute.tsx'
 import { AppLayout } from './components/layout/AppLayout.tsx'
 import { GlobalLoader } from './components/GlobalLoader'
-import { lazy, Suspense } from 'react'
+import { lazy } from 'react'
 
 // Páginas públicas
 import LoginPage from './pages/LoginPage.tsx'
+
 
 // Páginas protegidas — lazy load
 const DashboardPage          = lazy(() => import('./pages/dashboard/DashboardPage'))
@@ -34,7 +35,6 @@ const ReviewerMeetingsPage = lazy(() => import('./pages/teacher/ReviewerMeetings
 const ReviewerMeetingsListPage = lazy(() => import('./pages/teacher/ReviewerMeetingsListPage'))
 const FinalDecisionPage = lazy(() => import('./pages/teacher/FinalDecisionPage'))
 const FinalDecisionDetailPage = lazy(() => import('./pages/teacher/FinalDecisionDetailPage'))
-
 // Coordinator
 const AssignPage             = lazy(() => import('./pages/coordinator/AssignPage'))
 const ProtocolsOverviewPage  = lazy(() => import('./pages/coordinator/ProtocolsOverviewPage'))
@@ -43,9 +43,16 @@ const ReportsPage            = lazy(() => import('./pages/coordinator/ReportsPag
 
 // Secretary
 const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtocolsPage'))
+<<<<<<< HEAD
 const AgendaPage = lazy(() => import('./pages/shared/AgendaPage'))
 const MeetingPage            = lazy(() => import('./pages/shared/secretary/MeetingPage'))
 const SpreadsheetPage        = lazy(() => import('./pages/shared/secretary/SpreadsheetPage'))
+=======
+
+// 🆕 NOVAS PÁGINAS DA SECRETÁRIA
+const MeetingPage            = lazy(() => import('./pages/shared/secretary/MeetingPage'))          // Marcar Reunião (substitui Harmonização)
+const SpreadsheetPage        = lazy(() => import('./pages/shared/secretary/SpreadsheetPage'))      // Planilha de Protocolos (substitui Revisões Concluídas)
+>>>>>>> origin/gc-branch
 
 // Admin
 const AdminUsersPage         = lazy(() => import('./pages/system-admin/AdminUsersPage'))
@@ -67,20 +74,27 @@ const VerifyOtpPage      = lazy(() => import('./pages/VerifyOtpPage'))
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'))
 
-const PageLoader = () => (
-  <div className="page-loader">
-    <div className="page-loader__spinner" />
-    <p className="page-loader__text">A carregar...</p>
-  </div>
-)
+// teste onlyoffice
+//const TestOnlyOfficePage  = lazy(() => import('./pages/TestOnlyOfficePage'))
+
+// 🆕 Loader melhorado
+// const PageLoader = () => (
+//   <div className="page-loader">
+//     <div className="page-loader__spinner" />
+//     <p className="page-loader__text">A carregar...</p>
+//   </div>
+// )
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <GlobalLoader />
-        <Suspense fallback={<PageLoader />}>
+     
           <Routes>
+            {/* Onlyoffice */}
+            {/* <Route path="/teste-office" element={<TestOnlyOfficePage />} /> */}
+            
             {/* ── Públicas ─────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/403"   element={<Page403 />} />
@@ -97,67 +111,105 @@ export default function App() {
                 <Route path="/dashboard" element={<DashboardPage />} />
 
                 {/* ── Student ─────────────────────────────────── */}
-                <Route path="/topic" element={<TopicPage />} />
-                <Route path="/protocol/mine"      element={<ProtocolPage />} />
-                <Route path="/protocol/submit"    element={<ProtocolPage />} />
-                <Route path="/protocol/documents" element={<DocumentsPage />} />
-                <Route path="/monograph" element={<MonographPage />} />
+                <Route element={<ProtectedRoute permission="topic.create" />}>
+                  <Route path="/topic" element={<TopicPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="protocol.create" />}>
+                  <Route path="/protocol/mine"      element={<ProtocolPage />} />
+                  <Route path="/protocol/submit"    element={<ProtocolPage />} />
+                  <Route path="/protocol/documents" element={<DocumentsPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="monograph.submit" />}>
+                  <Route path="/monograph" element={<MonographPage />} />
+                </Route>
 
                 {/* ── Supervisor ──────────────────────────────── */}
-                <Route path="/supervision"         element={<SupervisionPage />} />
-                <Route path="/supervision/list"    element={<SupervisionPage />} />
-                <Route path="/supervision/pending" element={<ValidationPage />} />
-                <Route path="/supervision/review/:type/:id" element={<SubmissionReviewPage />} />
-                <Route path="/supervisor" element={<SupervisorProtocolsPage />} />
-                <Route path="/supervisor/protocols/:protocolId" element={<SupervisorProtocolDetailPage />} />
+                <Route element={<ProtectedRoute permission="supervision.view" />}>
+                  <Route path="/supervision"         element={<SupervisionPage />} />
+                  <Route path="/supervision/list"    element={<SupervisionPage />} />
+                  <Route path="/supervision/pending" element={<ValidationPage />} />
+                  <Route path="/supervision/review/:type/:id" element={<SubmissionReviewPage />} />
+                </Route>
+
+                {/* Rotas do Supervisor (protocolos) */}
+                <Route element={<ProtectedRoute roles={['supervisor']} />}>
+                  <Route path="/supervisor" element={<SupervisorProtocolsPage />} />
+                  <Route path="/supervisor/protocols/:protocolId" element={<SupervisorProtocolDetailPage />} />
+                </Route>
 
                 {/* ── Teacher / Reviewer ──────────────────────── */}
-                <Route path="/workload" element={<WorkloadPage />} />
+                <Route element={<ProtectedRoute permission="workload.view" />}>
+                  <Route path="/workload" element={<WorkloadPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="protocol.evaluate" />}>
+                  {/* Reuniões - específicas primeiro */}
+                  <Route path="/reviewer/meetings/:protocolId" element={<ReviewerMeetingsPage />} />
+                  <Route path="/reviewer/meetings" element={<ReviewerMeetingsListPage />} />
 
-                {/* Reuniões - específicas primeiro */}
-                <Route path="/reviewer/meetings/:protocolId" element={<ReviewerMeetingsPage />} />
-                <Route path="/reviewer/meetings" element={<ReviewerMeetingsListPage />} />
+                  {/* Decisões Pendentes (nova aba) */}
+                    <Route path="/reviewer/final-decisions/:formId" element={<FinalDecisionDetailPage />} />
+                  <Route path="/reviewer/final-decisions" element={<FinalDecisionPage />} />
 
-                {/* Decisões Pendentes */}
-                <Route path="/reviewer/final-decisions/:formId" element={<FinalDecisionDetailPage />} />
-                <Route path="/reviewer/final-decisions" element={<FinalDecisionPage />} />
 
-                {/* Reviews - específicas primeiro */}
-                <Route path="/reviews/protocols/:protocolId" element={<EvaluationPage />} />
-                <Route path="/reviews/topics/:topicId" element={<EvaluationPage />} />
-                <Route path="/reviews/assigned" element={<ReviewsPage />} />
-                <Route path="/reviews/done" element={<ReviewsPage />} />
-                <Route path="/reviews/:topicId" element={<EvaluationPage />} />
-                <Route path="/reviews" element={<ReviewsPage />} />
+                  {/* Reviews - específicas primeiro */}
+                  <Route path="/reviews/protocols/:protocolId" element={<EvaluationPage />} />
+                  <Route path="/reviews/topics/:topicId" element={<EvaluationPage />} />
+                  <Route path="/reviews/assigned" element={<ReviewsPage />} />
+                  <Route path="/reviews/done" element={<ReviewsPage />} />
+                  <Route path="/reviews/:topicId" element={<EvaluationPage />} />
+                  <Route path="/reviews" element={<ReviewsPage />} />
+                </Route>
 
                 {/* ── Coordinator ─────────────────────────────── */}
-                <Route path="/protocols"        element={<ProtocolsOverviewPage />} />
-                <Route path="/protocols/assign" element={<AssignPage />} />
-                <Route path="/defense"          element={<DefensePage />} />
-                <Route path="/defense/schedule" element={<DefensePage />} />
-                <Route path="/reports" element={<ReportsPage />} />
+                <Route element={<ProtectedRoute permission="protocol.assign" />}>
+                  <Route path="/protocols"        element={<ProtocolsOverviewPage />} />
+                  <Route path="/protocols/assign" element={<AssignPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="defense.schedule" />}>
+                  <Route path="/defense"          element={<DefensePage />} />
+                  <Route path="/defense/schedule" element={<DefensePage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="reports.view" />}>
+                  <Route path="/reports" element={<ReportsPage />} />
+                </Route>
 
                 {/* ── Agenda (shared) ──────────────────────────── */}
                 <Route path="/agenda" element={<AgendaPage />} />
 
                 {/* ── Secretary ───────────────────────────────── */}
-                <Route path="/secretary/protocols" element={<SecretaryProtocolsPage />} />
-                <Route path="/secretary/meeting" element={<MeetingPage />} />
-                <Route path="/secretary/spreadsheet" element={<SpreadsheetPage />} />
+                <Route element={<ProtectedRoute permission="protocol.triage" />}>
+                  <Route path="/secretary/protocols" element={<SecretaryProtocolsPage />} />
+                  
+                  {/* 🆕 Marcar Reunião (substitui Harmonização) */}
+                  <Route path="/secretary/meeting" element={<MeetingPage />} />
+                  
+                  {/* 🆕 Planilha de Protocolos (substitui Revisões Concluídas) */}
+                  <Route path="/secretary/spreadsheet" element={<SpreadsheetPage />} />
+                </Route>
 
                 {/* ── Admin ───────────────────────────────────── */}
-                <Route path="/admin/users" element={<AdminUsersPage />} />
-                <Route path="/admin/organs" element={<AdminOrgansPage />} />
-                <Route path="/admin/system-status" element={<SystemStatusPage />} />
+                <Route element={<ProtectedRoute permission="admin.users" />}>
+                  <Route path="/admin/users" element={<AdminUsersPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="admin.organs" />}>
+                  <Route path="/admin/organs" element={<AdminOrgansPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="admin.settings" />}>
+                  <Route path="/admin/system-status" element={<SystemStatusPage />} />
+                </Route>
 
                 {/* ── General Admin / Direção Científica ──────── */}
-                <Route path="/general-admin" element={<GeneralAdminDashboard />} />
-                <Route path="/general-admin/personnel" element={<ManagePersonnelPage />} />
-                <Route path="/general-admin/courses" element={<CoursesManagementPage />} />
+                <Route element={<ProtectedRoute permission="admin.organs" />}>
+                  <Route path="/general-admin" element={<GeneralAdminDashboard />} />
+                  <Route path="/general-admin/personnel" element={<ManagePersonnelPage />} />
+                  <Route path="/general-admin/courses" element={<CoursesManagementPage />} />
+                </Route>
 
                 {/* ── Organ President ─────────────────────────── */}
-                <Route path="/organ-president" element={<OrganPresidentDashboard />} />
-                <Route path="/organ-president/members" element={<ManageOrganMembersPage />} />
+                <Route element={<ProtectedRoute permission="admin.organs" />}>
+                  <Route path="/organ-president" element={<OrganPresidentDashboard />} />
+                  <Route path="/organ-president/members" element={<ManageOrganMembersPage />} />
+                </Route>
 
               </Route>
             </Route>
@@ -167,7 +219,7 @@ export default function App() {
             <Route path="*"  element={<Navigate to="/dashboard" replace />} />
 
           </Routes>
-        </Suspense>
+      
       </AuthProvider>
     </BrowserRouter>
   )

@@ -1,8 +1,9 @@
 // src/components/layout/AppLayout.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { ContentSkeleton } from './ContentSkeleton'
 import '../../styles/global.css'
 
 export function AppLayout() {
@@ -102,7 +103,10 @@ export function AppLayout() {
           background: 'var(--background)',
           padding: 'var(--space-3) var(--gutter)'
         }}>
-          <Outlet />
+          <Suspense fallback={<ContentSkeleton />}>
+             <Outlet />
+          </Suspense>
+          
         </main>
       </div>
 

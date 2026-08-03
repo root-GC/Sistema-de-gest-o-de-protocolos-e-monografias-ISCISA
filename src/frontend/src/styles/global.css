@@ -4155,3 +4155,746 @@ a:hover {
   }
 }
 
+
+
+/* =========================================================
+   🔐 RESET PASSWORD PAGE
+   ========================================================= */
+
+.reset-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  font-family: var(--font-family);
+  padding: var(--space-4);
+}
+
+.reset-card {
+  text-align: center;
+  max-width: 480px;
+  padding: var(--space-5);
+}
+
+.reset-icon--error {
+  font-size: 64px;
+  color: var(--error);
+  margin-bottom: var(--space-2);
+}
+
+.reset-main {
+  width: 100%;
+  max-width: 480px;
+}
+
+.reset-header {
+  text-align: center;
+  margin-bottom: var(--space-4);
+}
+
+.reset-logo {
+  width: 5rem;
+  height: 5rem;
+  margin: 0 auto var(--space-3);
+  object-fit: contain;
+}
+
+.reset-header h1 {
+  font-size: var(--headline-lg);
+  font-weight: var(--font-semibold);
+  color: var(--primary);
+  margin-bottom: var(--space-1);
+}
+
+.reset-header p {
+  color: var(--on-surface-variant);
+  font-size: var(--body-md);
+}
+
+.reset-header strong {
+  color: var(--primary);
+}
+
+/* Timer */
+.reset-timer {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin: 0 auto var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reset-timer svg {
+  position: absolute;
+  transform: rotate(-90deg);
+}
+
+.reset-timer-icon {
+  font-size: 24px;
+  color: var(--primary);
+  z-index: 1;
+}
+
+.reset-timer-icon--shake {
+  color: var(--error);
+  animation: timerShake 0.5s ease-in-out infinite;
+}
+
+.reset-timer--urgent .reset-timer-icon {
+  color: var(--error);
+}
+
+.reset-timer-text {
+  position: absolute;
+  bottom: -40px;
+  text-align: center;
+  width: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.reset-timer-time {
+  display: block;
+  font-size: 20px;
+  font-weight: var(--font-bold);
+  font-family: 'Courier New', monospace;
+  letter-spacing: 2px;
+  color: var(--on-surface);
+}
+
+.reset-timer-time--urgent {
+  color: var(--error);
+  animation: pulse 1s infinite;
+}
+
+.reset-timer-label {
+  display: block;
+  font-size: 11px;
+  color: var(--on-surface-variant);
+  margin-top: 2px;
+}
+
+/* Form */
+.reset-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.reset-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.reset-field label {
+  font-size: var(--label-md);
+  font-weight: var(--font-medium);
+  color: var(--on-surface-variant);
+}
+
+.reset-input-wrapper {
+  position: relative;
+}
+
+.reset-input-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: var(--outline);
+  pointer-events: none;
+}
+
+.reset-input-wrapper input {
+  width: 100%;
+  padding: 14px 14px 14px 40px;
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  font-size: var(--body-md);
+  font-family: var(--font-family);
+  color: var(--on-surface);
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.reset-input-wrapper input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(0,105,51,0.15);
+}
+
+.input-match {
+  border-color: var(--primary) !important;
+}
+
+.input-mismatch {
+  border-color: var(--error) !important;
+}
+
+.reset-show-password {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--body-md);
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  user-select: none;
+}
+
+.reset-show-password input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+/* Requirements */
+.reset-requirements {
+  padding: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-lg);
+  font-size: var(--label-md);
+}
+
+.reset-requirements p {
+  font-weight: var(--font-medium);
+  margin-bottom: 8px;
+}
+
+.reset-requirements ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reset-requirements li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--on-surface-variant);
+}
+
+.reset-requirements li .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.req-met {
+  color: var(--primary) !important;
+}
+
+/* Back link */
+.reset-back-link {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--outline-variant);
+  text-align: center;
+}
+
+.reset-back-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  font-weight: var(--font-semibold);
+  text-decoration: none;
+}
+
+.reset-back-link a:hover {
+  text-decoration: underline;
+}
+
+/* Animations */
+@keyframes timerShake {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-10deg); }
+  75% { transform: rotate(10deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.btn-lg {
+  width: 100%;
+  padding: 16px;
+  font-size: var(--title-md);
+  font-weight: var(--font-semibold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* =========================================================
+   📧 OTP VERIFICATION PAGE
+   ========================================================= */
+
+.otp-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  font-family: var(--font-family);
+  padding: var(--space-4);
+}
+
+.otp-main {
+  width: 100%;
+  max-width: 440px;
+}
+
+.otp-header {
+  text-align: center;
+  margin-bottom: var(--space-4);
+}
+
+.otp-logo {
+  width: 4rem;
+  height: 4rem;
+  margin: 0 auto var(--space-2);
+  object-fit: contain;
+}
+
+.otp-header h1 {
+  font-size: var(--headline-lg);
+  font-weight: var(--font-semibold);
+  color: var(--primary);
+  margin-bottom: var(--space-1);
+}
+
+.otp-header p {
+  color: var(--on-surface-variant);
+  font-size: var(--body-md);
+  line-height: 1.5;
+}
+
+.otp-header strong {
+  color: var(--primary);
+  word-break: break-all;
+}
+
+/* Timer */
+.otp-timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-3);
+}
+
+.otp-timer .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--primary);
+}
+
+.otp-timer-icon--urgent {
+  color: var(--error) !important;
+  animation: pulse 1s infinite;
+}
+
+.otp-timer-text {
+  font-size: var(--body-md);
+  color: var(--on-surface-variant);
+  font-weight: var(--font-medium);
+}
+
+.otp-timer-text--urgent {
+  color: var(--error);
+  font-weight: var(--font-semibold);
+}
+
+/* Expired badge */
+.otp-expired {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: var(--space-3);
+  font-size: var(--body-md);
+}
+
+/* Error badge */
+.otp-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: var(--space-3);
+  font-size: var(--body-md);
+}
+
+/* Form */
+.otp-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.otp-input-wrapper {
+  position: relative;
+}
+
+.otp-input-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: var(--outline);
+  pointer-events: none;
+}
+
+.otp-input {
+  width: 100%;
+  padding: 14px 14px 14px 44px;
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  font-size: 24px;
+  font-family: 'Courier New', monospace;
+  font-weight: var(--font-bold);
+  color: var(--on-surface);
+  text-align: center;
+  letter-spacing: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  caret-color: var(--primary);
+}
+
+.otp-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(0,105,51,0.15);
+}
+
+.otp-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Display visual dos dígitos */
+.otp-display {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.otp-digit {
+  width: 48px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-container-low);
+  border: 2px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  font-size: 24px;
+  font-weight: var(--font-bold);
+  font-family: 'Courier New', monospace;
+  color: var(--on-surface);
+  transition: all 0.2s;
+}
+
+.otp-digit--filled {
+  border-color: var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.otp-digit--active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(0,105,51,0.2);
+}
+
+/* Resend */
+.otp-resend {
+  margin-top: var(--space-3);
+  text-align: center;
+}
+
+.otp-cooldown {
+  font-size: var(--body-md);
+  color: var(--on-surface-variant);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: var(--body-md);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: var(--font-family);
+}
+
+.btn-link:hover {
+  opacity: 0.8;
+}
+
+.btn-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Back link */
+.otp-back {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--outline-variant);
+  text-align: center;
+}
+
+.otp-back a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--on-surface-variant);
+  font-size: var(--body-md);
+  text-decoration: none;
+  font-weight: var(--font-medium);
+}
+
+.otp-back a:hover {
+  color: var(--primary);
+}
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Display dos dígitos - Agora são inputs diretos */
+.otp-display {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.otp-digit-input {
+  width: 52px;
+  height: 60px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: var(--font-bold);
+  font-family: 'Courier New', monospace;
+  color: var(--on-surface);
+  background: var(--surface-container-low);
+  border: 2px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  outline: none;
+  transition: all 0.2s ease;
+  caret-color: var(--primary);
+}
+
+.otp-digit-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 105, 51, 0.15);
+  background: var(--surface-container-lowest);
+}
+
+.otp-digit-input--filled {
+  border-color: var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.otp-digit-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Remove o spinner do input number */
+.otp-digit-input::-webkit-inner-spin-button,
+.otp-digit-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.otp-digit-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* ═══════════════════════════════════════════════
+   OTP DIGIT INPUTS MELHORADOS
+   ═══════════════════════════════════════════════ */
+
+.otp-display {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.otp-digit-wrapper {
+  position: relative;
+  width: 52px;
+  height: 60px;
+}
+
+.otp-digit-input {
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  font-size: 24px;
+  font-weight: var(--font-bold);
+  font-family: 'Courier New', monospace;
+  color: var(--on-surface);
+  background: var(--surface-container-low);
+  border: 2px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  outline: none;
+  transition: all 0.2s ease;
+  caret-color: transparent; /* Esconde o cursor nativo */
+  padding: 0;
+}
+
+.otp-digit-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 105, 51, 0.15);
+  background: var(--surface-container-lowest);
+}
+
+.otp-digit-input--filled {
+  border-color: var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.otp-digit-input--focused {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 105, 51, 0.2);
+  transform: scale(1.05);
+}
+
+.otp-digit-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Cursor piscante customizado */
+.otp-digit-cursor {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 28px;
+  background: var(--primary);
+  animation: cursorBlink 1s step-end infinite;
+  pointer-events: none;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Remove spinner */
+.otp-digit-input::-webkit-inner-spin-button,
+.otp-digit-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.otp-digit-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Seleção invisível */
+.otp-digit-input::selection {
+  background: transparent;
+}
+
+.otp-digit-input::-moz-selection {
+  background: transparent;
+}
+
+/* Responsivo */
+@media (max-width: 400px) {
+  .otp-display {
+    gap: 6px;
+  }
+  
+  .otp-digit-wrapper {
+    width: 44px;
+    height: 52px;
+  }
+  
+  .otp-digit-input {
+    font-size: 20px;
+  }
+}
+
+/* Barra de progresso do temporizador */
+.reset-timer-bar-wrapper {
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.reset-timer-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--surface-container-high);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.reset-timer-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 1s linear;
+}
+
+.reset-timer-bar-fill--urgent {
+  background: var(--error);
+  animation: pulse-bar 1s ease-in-out infinite;
+}
+
+@keyframes pulse-bar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.reset-timer-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  color: var(--on-surface-variant);
+}
+
+.reset-timer-bar-icon {
+  font-size: 16px;
+}
+
+.reset-timer-bar-icon--urgent {
+  color: var(--error);
+}
+
+.reset-timer-bar-text {
+  color: var(--on-surface-variant);
+}
+
+.reset-timer-bar-text--urgent {
+  color: var(--error);
+  font-weight: 500;
+}

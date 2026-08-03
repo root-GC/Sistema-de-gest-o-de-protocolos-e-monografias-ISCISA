@@ -2,6 +2,7 @@
 
 namespace Modules\Auth\app\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Auth\app\Builders\AuthPayloadBuilder;
 use Modules\Auth\app\Http\Requests\VerifyOtpRequest;
@@ -35,4 +36,21 @@ class VerifyOtpController extends Controller
             'user'    => $this->payloadBuilder->build($user),
         ]);
     }
+
+    // OtpController.php (ou onde já tratas o verifyOtp/resendOtp)
+
+public function status(Request $request, OtpService $otpService)
+{
+    $request->validate([
+        'email'   => ['required', 'email'],
+        'purpose' => ['nullable', 'string'],
+    ]);
+
+    $purpose = $request->purpose ?? 'register';
+
+    return response()->json([
+        'seconds_remaining' => $otpService->secondsRemaining($request->email, $purpose),
+        'resend_cooldown'   => $otpService->resendCooldownRemaining($request->email, $purpose),
+    ]);
+}
 }
