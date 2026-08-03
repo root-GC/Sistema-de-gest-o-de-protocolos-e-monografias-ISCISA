@@ -1,56 +1,110 @@
 <?php
 
-namespace Modules\Monograph\Http\Controllers;
+namespace Modules\Monograph\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Modules\Monograph\app\Models\Monograph;
+use Modules\Monograph\app\Services\MonographService;
+use Modules\Monograph\app\Http\Requests\{
+    SubmitMonographRequest,
+    EndorseMonographRequest,
+    VerifyMonographRequest
+};
 use Illuminate\Http\Request;
+use Modules\Monograph\app\Transformers\MonographResource;
 
 class MonographController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function __construct(private MonographService $service) {}
+
+  public function show(Monograph $monograph)
+  {
+    $this->authorize('view', $monograph);
+
+    return new MonographResource(
+        $monograph->load('student', 'supervisor.user')
+    );
+  }
+
+public function history(Monograph $monograph)
+{
+    $this->authorize('view', $monograph);
+
+    return $monograph->submissions()
+        ->with(['document', 'reviews.decidedBy', 'comments.author'])
+        ->get()
+        ->map(fn ($s) => [
+            'version'      => $s->version,
+            'submitted_at' => $s->submitted_at,
+            'file'         => $s->document->file_name,
+            'reviews'      => $s->reviews->map(fn ($r) => [
+                'stage'      => $r->stage,
+                'role'       => $r->decided_by_role,
+                'decision'   => $r->decision,
+                'reason'     => $r->reason,
+                'decided_at' => $r->decided_at,
+                'decided_by' => $r->decidedBy->name,
+            ]),
+            'comments' => $s->comments->map(fn ($c) => [
+                'role'       => $c->commented_by_role,
+                'comment'    => $c->comment,
+                'author'     => $c->author->name,
+                'created_at' => $c->created_at,
+            ]),
+        ]);
+}
+    public function submit(SubmitMonographRequest $request, Monograph $monograph)
     {
-        return view('monograph::index');
+        $m = $this->service->submit(
+            $monograph,
+            $request->user(),
+            $request->file('file')
+        );
+
+        return new MonographResource($m);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function endorse(EndorseMonographRequest $request, Monograph $monograph)
     {
-        return view('monograph::create');
+        $m = $this->service->endorse(
+            $monograph,
+            $request->user(),
+            $request->boolean('approved'),
+            $request->input('reason')
+        );
+
+        return new MonographResource($m);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request) {}
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
+    public function verify(VerifyMonographRequest $request, Monograph $monograph)
     {
-        return view('monograph::show');
+        $m = $this->service->verifyDocuments(
+            $monograph,
+            $request->user(),
+            $request->input('role'),
+            $request->boolean('approved'),
+            $request->input('reason')
+        );
+
+        return new MonographResource($m);
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('monograph::edit');
-    }
+    public function addComment(Request $request, Monograph $monograph)
+{
+    abort_unless($request->user()->hasPermission('monograph.comment'), 403);
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
+    $request->validate([
+        'role'    => ['required', 'in:supervisor,secretary,coordinator'],
+        'comment' => ['required', 'string', 'max:2000'],
+    ]);
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
+    $c = $this->service->addComment(
+        $monograph,
+        $request->user(),
+        $request->input('role'),
+        $request->input('comment')
+    );
+
+    return response()->json($c, 201);
+}
 }

@@ -20,23 +20,42 @@ class AuthService
      * Lança ValidationException (HTTP 422) se inválido —
      * o Laravel converte automaticamente para JSON.
      */
-    public function attempt(string $email, string $password): User
-    {
-        Log::info('[AUTH]', [
-    'step' => 'attempt_start',
-    'email' => $email,
-]);
+   public function attempt(string $email, string $password): User
+{
+    Log::info('[AUTH]', ['step' => '1']);
 
-        $user = User::where('email', $email)
-            ->where('status', 'active')
-            ->first();
+    $user = User::where('email', $email)
+        ->where('status', 'active')
+        ->first();
 
-        if (! $user || ! Hash::check($password, $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Credenciais inválidas ou conta inactiva.'],
-            ]);
-        }
+    Log::info('[AUTH]', [
+        'step' => '2',
+        'user_found' => $user !== null,
+    ]);
 
-        return $user;
+    if (! $user) {
+        throw ValidationException::withMessages([
+            'email' => ['Credenciais inválidas.'],
+        ]);
     }
+
+    Log::info('[AUTH]', ['step' => '3']);
+
+    $ok = Hash::check($password, $user->password);
+
+    Log::info('[AUTH]', [
+        'step' => '4',
+        'password_ok' => $ok,
+    ]);
+
+    if (! $ok) {
+        throw ValidationException::withMessages([
+            'email' => ['Password inválida.'],
+        ]);
+    }
+
+    Log::info('[AUTH]', ['step' => '5']);
+
+    return $user;
+}
 }

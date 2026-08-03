@@ -33,5 +33,4 @@ class StudentProfile extends Model
     {
         return $this->belongsTo(TeacherProfile::class, 'supervisor_id');
     }
-
 }

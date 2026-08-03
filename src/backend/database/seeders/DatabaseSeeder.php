@@ -23,8 +23,4 @@ class DatabaseSeeder extends Seeder
             DefenseDatabaseSeeder::class,
         ]);
     }
-
-    /**
-     * Seed the application's database.
-     */
 }

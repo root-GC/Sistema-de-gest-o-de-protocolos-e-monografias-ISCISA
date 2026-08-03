@@ -2,17 +2,19 @@
 
 namespace Modules\Monograph\app\Providers;
 
-use Illuminate\Support\ServiceProvider;
+use Nwidart\Modules\Support\ModuleServiceProvider;
+use Modules\Monograph\app\Providers\EventServiceProvider;
+use Modules\Monograph\app\Providers\RouteServiceProvider;
+use Modules\Monograph\app\Providers\AuthServiceProvider;
 
-class MonographServiceProvider extends ServiceProvider
+class MonographServiceProvider extends ModuleServiceProvider
 {
-    public function register(): void
-    {
-        // Bindings do container (opcional)
-    }
+    protected string $name = 'Monograph';
+    protected string $nameLower = 'monograph';
 
-    public function boot(): void
-    {
-        // Inicialização do módulo (rotas, eventos, etc.)
-    }
+    protected array $providers = [
+        EventServiceProvider::class,
+        RouteServiceProvider::class,
+        AuthServiceProvider::class,
+    ];
 }

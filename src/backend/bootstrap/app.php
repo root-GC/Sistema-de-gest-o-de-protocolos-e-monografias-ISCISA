@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Registar alias do middleware de permissão
         $middleware->alias([
             'permission' => \Shared\Core\Http\Middleware\PermissionMiddleware::class,
+            'technical.admin' => \Modules\Auth\app\Http\Middleware\EnsureTechnicalAdmin::class,
         ]);
 
         // APIs sem token devem responder 401, nao redirecionar para uma rota web.
@@ -28,11 +29,6 @@ return Application::configure(basePath: dirname(__DIR__))
         // Sanctum stateful domains para SPA (React)
         $middleware->statefulApi();
     })
-    ->withMiddleware(function (Middleware $middleware) {
-    $middleware->alias([
-        'technical.admin' => \Modules\Auth\app\Http\Middleware\EnsureTechnicalAdmin::class,
-    ]);
-})
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {

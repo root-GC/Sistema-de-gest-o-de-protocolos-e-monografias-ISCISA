@@ -1,18 +1,18 @@
 <?php
+// Modules/Defense/app/Providers/DefenseServiceProvider.php
 
 namespace Modules\Defense\app\Providers;
 
-use Illuminate\Support\ServiceProvider;
+use Nwidart\Modules\Support\ModuleServiceProvider;
 
-class DefenseServiceProvider extends ServiceProvider
+class DefenseServiceProvider extends ModuleServiceProvider
 {
-    public function register(): void
-    {
-        // Bindings do container (opcional)
-    }
+    protected string $name = 'Defense';
+    protected string $nameLower = 'defense';
 
-    public function boot(): void
-    {
-        // Inicialização do módulo (rotas, eventos, etc.)
-    }
+    protected array $providers = [
+        EventServiceProvider::class,
+        RouteServiceProvider::class,
+        AuthServiceProvider::class,
+    ];
 }
