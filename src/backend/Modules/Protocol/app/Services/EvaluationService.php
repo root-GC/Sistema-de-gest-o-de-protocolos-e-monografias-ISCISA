@@ -5,6 +5,7 @@ namespace Modules\Protocol\app\Services;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Modules\Protocol\app\Events\ProtocolApproved;
 use Modules\Protocol\app\Events\ProtocolStatusChanged;
 use Modules\Protocol\app\Models\EvaluationCriterion;
 use Modules\Protocol\app\Models\EvaluationCriterionReview;
@@ -238,7 +239,6 @@ class EvaluationService
             }
             //Não tinha
             return $form;
-
         });
     }
 
@@ -559,9 +559,9 @@ class EvaluationService
 
 
 
-//##########################################################################################
-//REVENDO LOGICA DE CHECK EVALUATION COMPLETION, POIS NAO ESTAVA FUNCIONANDO COMO ESPERADO##
-//##########################################################################################
+    //##########################################################################################
+    //REVENDO LOGICA DE CHECK EVALUATION COMPLETION, POIS NAO ESTAVA FUNCIONANDO COMO ESPERADO##
+    //##########################################################################################
     // private function checkEvaluationCompletion(EvaluationForm $form): array
     // {
     //     $form = $form->fresh();
@@ -644,7 +644,7 @@ class EvaluationService
             ReviewerEvaluation::DECISION_APPROVED,
             null
         );
-    }        
+    }
 
     public function scheduleDeliberation(EvaluationForm $form, User $secretary, string $date, string $location): EvaluationForm
     {
@@ -853,10 +853,10 @@ class EvaluationService
                     response()->json(['message' => 'A ficha ainda não está pronta para decisão final (reunião não foi encerrada com deliberação).'], 422)
                 );
             }
-            
+
             $teacherProfile = $decider->teacherProfile;
 
-            
+
             if (! $teacherProfile) {
                 throw new HttpResponseException(
                     response()->json(['message' => 'Apenas docentes podem decidir.'], 403)
@@ -994,6 +994,19 @@ class EvaluationService
 
             event(new ProtocolStatusChanged($protocol, $oldStatus, $protocol->status, $decider));
 
+            if ($decision === ReviewerEvaluation::DECISION_APPROVED && $protocol->status === Protocol::STATUS_APPROVED_FINAL) {
+                $protocol->loadMissing('topic');
+
+                event(new ProtocolApproved(
+                    submissionId: $protocol->id,
+                    studentId: $protocol->topic->student_id,
+                    supervisorId: $protocol->topic->supervisor_id,
+                    title: $protocol->topic->title,
+                    courseId: $protocol->topic->course_id,
+                    scientificAreaId: $protocol->topic->scientific_area_id,
+                ));
+            }
+
             if ($decision === ReviewerEvaluation::DECISION_APPROVED && $flow && $flow['next_organ_type']) {
                 $this->recordProtocolHistory(
                     $form,
@@ -1064,9 +1077,9 @@ class EvaluationService
                 'protocol.topic:id,title,status',
                 'protocol.topic.scientificArea:id,name',
                 'protocol.topic.course:id,name,code',
-                    'reviewerEvaluations' => fn($q) => $q
-                        ->where('reviewer_id', $teacherProfile->id)
-                        ->with(['criterionReviews.formCriterion', 'protocolReviewAssignment']),
+                'reviewerEvaluations' => fn($q) => $q
+                    ->where('reviewer_id', $teacherProfile->id)
+                    ->with(['criterionReviews.formCriterion', 'protocolReviewAssignment']),
                 'childForms.reviewerEvaluations' => fn($q) => $q
                     ->where('reviewer_id', $teacherProfile->id),
             ])
@@ -1137,111 +1150,109 @@ class EvaluationService
     }
 
     public function closeMeeting(EvaluationForm $form, User $user, ?string $result = null): EvaluationForm
-{
-    return DB::transaction(function () use ($form, $user, $result) {
-        $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
+    {
+        return DB::transaction(function () use ($form, $user, $result) {
+            $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
 
-        if ($form->status !== EvaluationForm::STATUS_IN_DELIBERATION) {
-            throw new HttpResponseException(
-                response()->json(['message' => 'A reunião não está em andamento.'], 422)
-            );
-        }
-
-        if (! $form->hasAllSubmitted()) {
-            throw new HttpResponseException(
-                response()->json(['message' => 'Todos os revisores devem submeter a decisão antes de encerrar a reunião.'], 422)
-            );
-        }
-
-        $teacherProfile = $user->teacherProfile;
-        $isReviewer = $teacherProfile && $form->reviewerEvaluations()
-            ->where('reviewer_id', $teacherProfile->id)
-            ->exists();
-
-        if (! $isReviewer) {
-            throw new HttpResponseException(
-                response()->json(['message' => 'Apenas um revisor atribuído pode encerrar a reunião.'], 403)
-            );
-        }
-
-        if ($this->isBioeticaForm($form) && ! $this->isPrimaryReviewer($form, $user)) {
-            throw new HttpResponseException(
-                response()->json(['message' => 'Apenas o revisor principal do Comité de Bioética pode encerrar a reunião.'], 403)
-            );
-        }
-
-        $decisions = $form->reviewerEvaluations()->pluck('decision')->filter()->unique();
-        $deliberated = $result
-            ? $result === EvaluationForm::STATUS_DELIBERATED
-            : $decisions->count() === 1; // compatibilidade com o fluxo antigo
-
-        if ($deliberated) {
-            // Houve consenso: fecha a reunião, liberta para a aba de decisão final.
-            $form->update(['status' => EvaluationForm::STATUS_DELIBERATED]);
-        } else {
-            // Sem consenso: volta ao ponto de partida para nova marcação pela secretaria.
-            $form->update([
-                'status' => EvaluationForm::STATUS_NOT_DELIBERATED,
-                'deliberation_date' => null,
-                'deliberation_location' => null,
-            ]);
-
-            if (! $this->isSharedCommitteeForm($form)) {
-                $form->reviewerEvaluations()->update([
-                    'decision' => null,
-                    'overall_comment' => null,
-                    'status' => ReviewerEvaluation::STATUS_PENDING,
-                    'submitted_at' => null,
-                ]);
-            }
-        }
-
-        $this->recordProtocolHistory(
-            $form,
-            'deliberation_closed',
-            $user,
-            $deliberated
-                ? 'Reuniao encerrada com deliberacao.'
-                : 'Reuniao encerrada sem deliberacao.',
-            [
-                'result' => $deliberated
-                    ? EvaluationForm::STATUS_DELIBERATED
-                    : EvaluationForm::STATUS_NOT_DELIBERATED,
-            ]
-        );
-
-        return $form->fresh()->load([
-            'reviewerEvaluations.reviewer.user:id,name',
-            'reviewerEvaluations.protocolReviewAssignment',
-            'protocol',
-        ]);
-    });
-}
-
-public function listPendingFinalDecision(User $user, ?string $organ = null): Collection
-{
-    $teacherProfile = $user->teacherProfile;
-    if (! $teacherProfile) return collect();
-
-    return EvaluationForm::query()
-        ->where('status', EvaluationForm::STATUS_DELIBERATED) // já não é 'deliberation_concluded'
-        ->when($organ, fn($q) => $q->where('organ', $organ))
-        ->whereHas('reviewerEvaluations', function ($query) use ($teacherProfile, $organ) {
-            $query->where('reviewer_id', $teacherProfile->id)
-                ->when(
-                    $organ === Protocol::ORGAN_COMITE_BIOETICA,
-                    fn($q) => $q->whereHas('protocolReviewAssignment', fn($assignmentQuery) => $assignmentQuery->where('is_primary', true))
+            if ($form->status !== EvaluationForm::STATUS_IN_DELIBERATION) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'A reunião não está em andamento.'], 422)
                 );
-        })
-        ->with([
-            'protocol.topic:id,title,status',
-            'protocol.student:id,name,email',
-            'reviewerEvaluations.protocolReviewAssignment',
-            'reviewerEvaluations.reviewer.user:id,name',
-        ])
-        ->latest('created_at')
-        ->get();
-}
+            }
 
+            if (! $form->hasAllSubmitted()) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Todos os revisores devem submeter a decisão antes de encerrar a reunião.'], 422)
+                );
+            }
 
+            $teacherProfile = $user->teacherProfile;
+            $isReviewer = $teacherProfile && $form->reviewerEvaluations()
+                ->where('reviewer_id', $teacherProfile->id)
+                ->exists();
+
+            if (! $isReviewer) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Apenas um revisor atribuído pode encerrar a reunião.'], 403)
+                );
+            }
+
+            if ($this->isBioeticaForm($form) && ! $this->isPrimaryReviewer($form, $user)) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Apenas o revisor principal do Comité de Bioética pode encerrar a reunião.'], 403)
+                );
+            }
+
+            $decisions = $form->reviewerEvaluations()->pluck('decision')->filter()->unique();
+            $deliberated = $result
+                ? $result === EvaluationForm::STATUS_DELIBERATED
+                : $decisions->count() === 1; // compatibilidade com o fluxo antigo
+
+            if ($deliberated) {
+                // Houve consenso: fecha a reunião, liberta para a aba de decisão final.
+                $form->update(['status' => EvaluationForm::STATUS_DELIBERATED]);
+            } else {
+                // Sem consenso: volta ao ponto de partida para nova marcação pela secretaria.
+                $form->update([
+                    'status' => EvaluationForm::STATUS_NOT_DELIBERATED,
+                    'deliberation_date' => null,
+                    'deliberation_location' => null,
+                ]);
+
+                if (! $this->isSharedCommitteeForm($form)) {
+                    $form->reviewerEvaluations()->update([
+                        'decision' => null,
+                        'overall_comment' => null,
+                        'status' => ReviewerEvaluation::STATUS_PENDING,
+                        'submitted_at' => null,
+                    ]);
+                }
+            }
+
+            $this->recordProtocolHistory(
+                $form,
+                'deliberation_closed',
+                $user,
+                $deliberated
+                    ? 'Reuniao encerrada com deliberacao.'
+                    : 'Reuniao encerrada sem deliberacao.',
+                [
+                    'result' => $deliberated
+                        ? EvaluationForm::STATUS_DELIBERATED
+                        : EvaluationForm::STATUS_NOT_DELIBERATED,
+                ]
+            );
+
+            return $form->fresh()->load([
+                'reviewerEvaluations.reviewer.user:id,name',
+                'reviewerEvaluations.protocolReviewAssignment',
+                'protocol',
+            ]);
+        });
+    }
+
+    public function listPendingFinalDecision(User $user, ?string $organ = null): Collection
+    {
+        $teacherProfile = $user->teacherProfile;
+        if (! $teacherProfile) return collect();
+
+        return EvaluationForm::query()
+            ->where('status', EvaluationForm::STATUS_DELIBERATED) // já não é 'deliberation_concluded'
+            ->when($organ, fn($q) => $q->where('organ', $organ))
+            ->whereHas('reviewerEvaluations', function ($query) use ($teacherProfile, $organ) {
+                $query->where('reviewer_id', $teacherProfile->id)
+                    ->when(
+                        $organ === Protocol::ORGAN_COMITE_BIOETICA,
+                        fn($q) => $q->whereHas('protocolReviewAssignment', fn($assignmentQuery) => $assignmentQuery->where('is_primary', true))
+                    );
+            })
+            ->with([
+                'protocol.topic:id,title,status',
+                'protocol.student:id,name,email',
+                'reviewerEvaluations.protocolReviewAssignment',
+                'reviewerEvaluations.reviewer.user:id,name',
+            ])
+            ->latest('created_at')
+            ->get();
+    }
 }
