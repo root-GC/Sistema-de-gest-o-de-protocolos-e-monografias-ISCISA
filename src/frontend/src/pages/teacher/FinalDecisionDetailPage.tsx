@@ -419,7 +419,7 @@ export default function FinalDecisionDetailPage() {
               <div className="eval-info-header">
                 <span className="eval-info-label">Decisão Final</span>
                 <span className={`eval-info-badge ${alreadyDecided ? (form.final_decision === 'approved' ? 'is-concluded' : 'is-rejected') : 'is-pending'}`}>
-                  {alreadyDecided ? (form.final_decision === 'approved' ? 'Aprovado' : 'Reprovado') : 'Pendente'}
+                  {alreadyDecided ? (form.final_decision === 'approved' ? 'Aprovado' : 'Não Aprovado') : 'Pendente'}
                 </span>
               </div>
               <span style={{
@@ -453,15 +453,15 @@ export default function FinalDecisionDetailPage() {
               <div className={`eval-outcome-banner ${form.final_decision === 'approved' ? 'is-approved' : 'is-rejected'}`}>
                 <span className="material-symbols-outlined">{form.final_decision === 'approved' ? 'check_circle' : 'cancel'}</span>
                 <div>
-                  <strong>{form.final_decision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Reprovado'}</strong>
+                  <strong>{form.final_decision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Não Aprovado'}</strong>
                   <p>{form.conclusion_summary || 'Processo concluído.'}</p>
                   {(opinion?.download_url || evaluationFormDownloadUrl) && (
                     <div style={{ marginTop: 'var(--space-2)' }}>
                       {opinion?.download_url && (
-                        <a href={opinion.download_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', textDecoration: 'none', marginRight: 'var(--space-1)' }}>
+                        <button type="button" className="btn btn-primary btn-sm" onClick={() => downloadFile(opinion.download_url, `parecer-${protocolCode}.pdf`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', marginRight: 'var(--space-1)' }}>
                           <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>download</span>
                           Descarregar Parecer
-                        </a>
+                        </button>
                       )}
                       <button type="button" className="btn btn-small" onClick={() => downloadFile(evaluationFormDownloadUrl, `ficha-${protocolCode}.pdf`)}>
                         <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>assignment</span>
@@ -487,7 +487,7 @@ export default function FinalDecisionDetailPage() {
                       {re.reviewer?.user?.name || `Revisor #${i + 1}`}
                       {re.is_primary && ' · Principal'}
                       {re.decision === 'approved' && ': ✓ Aprovou'}
-                      {re.decision === 'not_approved' && ': ✗ Reprovou'}
+                      {re.decision === 'not_approved' && ': ✗ Não Aprovou'}
                       {!re.decision && ': ○ Pendente'}
                     </span>
                   ))}
@@ -616,7 +616,7 @@ export default function FinalDecisionDetailPage() {
                       <label className={`recommendation-choice ${decision === 'not_approved' ? 'is-rejected' : ''}`}>
                         <input type="radio" name="final-decision" checked={decision === 'not_approved'} onChange={() => setDecision('not_approved')} />
                         <span className="material-symbols-outlined">cancel</span>
-                        Reprovado
+                        Não Aprovado
                       </label>
                     </div>
 

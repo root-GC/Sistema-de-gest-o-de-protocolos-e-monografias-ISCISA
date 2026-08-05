@@ -92,6 +92,10 @@ export interface ProtocolOrganTracking {
     version: string;
     download_url?: string | null;
     evaluation_form_download_url?: string | null;
+    is_signed?: boolean;
+    signed_at?: string | null;
+    signed_by?: string | null;
+    signed_download_url?: string | null;
   } | null;
 }
 
@@ -120,11 +124,37 @@ export const CC_REQUIRED_DOCUMENTS = [
   { key: 'academic_record_declaration', name: 'Declaração do registo académico' },
   { key: 'financial_statement_declaration', name: 'Declaração do extracto financeiro' },
   { key: 'authors_responsibility_list', name: 'Lista de autores e responsabilidade' },
+  { key: 'folha_info_instrucoes', name: 'Folha de informação ao participante – instruções de preenchimento' },
+  { key: 'folha_info_participante', name: 'Folha de informação ao participante' },
+  { key: 'consentimento_participante', name: 'Termo de consentimento livre e informado do participante' },
+  { key: 'carta_autorizacao_supervisor', name: 'Carta de autorização do supervisor para a submissão do protocolo (actualizada)' },
+  { key: 'cv_estudante', name: 'Curriculum Vitae do estudante ou pesquisador' },
+  { key: 'cv_supervisor', name: 'Curriculum Vitae do supervisor (e do co-supervisor, caso aplicável)' },
 ] as const;
 
 export type CCRequiredDocumentKey = typeof CC_REQUIRED_DOCUMENTS[number]['key'];
 
 export type CCRequiredDocumentFiles = Record<CCRequiredDocumentKey, File | null>;
+
+export const CIBS_REQUIRED_DOCUMENTS = [
+  { key: 'carta_revisao_bioetica_cibs', name: 'Carta de solicitação de revisão bioética ao CIBS-ISCISA' },
+  { key: 'declaracao_compromisso_bioetica_cibs', name: 'Declaração de compromisso do estudante ou investigador, em cumprir os princípios de bioética e aceitação das normas e procedimentos do CIBS-ISCISA' },
+  { key: 'declaracao_conflito_interesses', name: 'Declaração de comunicação de conflito de interesse' },
+] as const;
+
+export type CIBSDocumentKey = typeof CIBS_REQUIRED_DOCUMENTS[number]['key'];
+
+export type CIBSDocumentFiles = Record<CIBSDocumentKey, File | null>;
+
+export const OPTIONAL_DOCUMENTS = [
+  { key: 'consentimento_tutor', name: 'Termo de consentimento livre e informado do pai/mãe ou tutor legal da criança menor de dezoito anos de idade (caso aplicável)' },
+  { key: 'assentimento_menor', name: 'Termo de assentimento do participante menor, de doze a dezassete anos de idade (caso aplicável)' },
+] as const;
+
+export interface OtherDocument {
+  name: string;
+  file: File | null;
+}
 
 export interface ProtocolDocumentRequirement {
   id: number;
@@ -132,6 +162,7 @@ export interface ProtocolDocumentRequirement {
   document_key: CCRequiredDocumentKey | string;
   nome: string;
   required_for_organ: string;
+  is_optional?: boolean;
   file_path?: string | null;
   file_name?: string | null;
   file_url?: string | null;
@@ -216,6 +247,13 @@ export interface ProtocolOpinion {
   document_url?: string | null;
   download_url?: string | null;
   evaluation_form_download_url?: string | null;
+  is_signed?: boolean;
+  signed_at?: string | null;
+  signed_by?: {
+    id: number;
+    name: string;
+  } | null;
+  signed_download_url?: string | null;
 }
 
 // Tipo para o documento revisado enviado pelo revisor
@@ -232,7 +270,14 @@ export interface ReviewedDocument {
 
 export const protocolService = {
   // ── Submissão de protocolo ──────────────────────────
-  submit: (topicId: number, protocolType: string, file: File, requiredDocuments: CCRequiredDocumentFiles) => {
+  submit: (
+    topicId: number,
+    protocolType: string,
+    file: File,
+    requiredDocuments: CCRequiredDocumentFiles,
+    cibsDocuments?: CIBSDocumentFiles,
+    otherDocuments?: OtherDocument[],
+  ) => {
     const formData = new FormData();
     formData.append('topic_id', String(topicId));
     formData.append('protocol_type', protocolType);
@@ -241,6 +286,18 @@ export const protocolService = {
       const attachment = requiredDocuments[doc.key];
       if (attachment) {
         formData.append(`required_documents[${doc.key}]`, attachment);
+      }
+    });
+    CIBS_REQUIRED_DOCUMENTS.forEach(doc => {
+      const attachment = cibsDocuments?.[doc.key];
+      if (attachment) {
+        formData.append(`cibs_documents[${doc.key}]`, attachment);
+      }
+    });
+    (otherDocuments ?? []).forEach((other, index) => {
+      if (other.file) {
+        formData.append(`other_documents[${index}]`, other.file);
+        formData.append(`other_document_names[${index}]`, other.name);
       }
     });
     return reqFormData('POST', '/api/v1/protocols', formData) as Promise<{
@@ -287,6 +344,25 @@ export const protocolService = {
 
   listOpinions: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/opinions`) as Promise<{ opinions: ProtocolOpinion[] }>,
+
+  submitSignedParecer: (protocolId: number, opinionId: number, signedFile: File) => {
+    const formData = new FormData();
+    formData.append('signed_document', signedFile);
+    return reqFormData('POST', `/api/v1/protocols/${protocolId}/opinions/${opinionId}/sign`, formData) as Promise<{
+      message: string;
+      protocol: {
+        id: number;
+        status: string;
+        status_label: string;
+      };
+    }>;
+  },
+
+  downloadSignedOpinion: (opinionId: number) =>
+    downloadApiFile(`/api/v1/opinions/${opinionId}/signed-download`, 'parecer-assinado.pdf'),
+
+  openSignedOpinion: (opinionId: number) =>
+    openApiFile(`/api/v1/opinions/${opinionId}/signed-download?inline=1`, 'parecer-assinado.pdf'),
 
   // ── Ficheiros ───────────────────────────────────────
   openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),

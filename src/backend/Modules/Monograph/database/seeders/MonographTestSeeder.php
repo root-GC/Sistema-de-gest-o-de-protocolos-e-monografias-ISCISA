@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Monograph\Database\Seeders;
+/*namespace Modules\Monograph\Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\{DB, Schema};
@@ -38,7 +38,7 @@ class MonographTestSeeder extends Seeder
         | Portanto o cenário de teste deve respeitar essa regra.
         |
         */
-
+/*
         $coordinatorProfile = DB::table('coordinator_profiles')
             ->where('user_id', $coordinatorUserId)
             ->first();
@@ -64,11 +64,7 @@ class MonographTestSeeder extends Seeder
         }
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | Permissões
-        |--------------------------------------------------------------------------
-        */
+      
 
         $this->grantPermission(
             'monograph.endorse',
@@ -85,12 +81,7 @@ class MonographTestSeeder extends Seeder
         );
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | Perfil do supervisor
-        |--------------------------------------------------------------------------
-        */
-
+   
         DB::table('teacher_profiles')->updateOrInsert(
             [
                 'user_id' => $supervisorUserId
@@ -111,11 +102,7 @@ class MonographTestSeeder extends Seeder
             ->value('id');
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | Perfil da secretaria
-        |--------------------------------------------------------------------------
-        */
+
 
         $secretaryColumns = Schema::getColumnListing(
             'secretary_profiles'
@@ -145,11 +132,7 @@ class MonographTestSeeder extends Seeder
         );
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | Topic
-        |--------------------------------------------------------------------------
-        */
+     
 
         $topicId = DB::table('topics')->insertGetId([
             'student_id'             => $studentId,
@@ -171,11 +154,7 @@ class MonographTestSeeder extends Seeder
         ]);
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | Protocol
-        |--------------------------------------------------------------------------
-        */
+     
 
         $protocolId = DB::table('protocols')->insertGetId([
             'student'                => $studentId,
@@ -204,11 +183,6 @@ class MonographTestSeeder extends Seeder
         ]);
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | Monografia
-        |--------------------------------------------------------------------------
-        */
 
         $monographId = DB::table('monographs')->insertGetId([
             'protocol_id'   => $protocolId,
@@ -290,3 +264,4 @@ class MonographTestSeeder extends Seeder
         }
     }
 }
+ */

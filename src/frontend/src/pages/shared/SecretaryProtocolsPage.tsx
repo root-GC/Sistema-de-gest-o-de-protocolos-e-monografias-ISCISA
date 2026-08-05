@@ -5,6 +5,7 @@ import { protocolService, type Protocol } from '../../services/protocolService'
 import { monographService, type Monograph } from '../../services/monographService'
 import { TopicJustificationToggle } from '../../components/TopicJustification'
 import { RequiredDocumentsReviewPanel } from '../../components/protocol/RequiredDocumentsReviewPanel'
+import { SignatureParecerPanel } from '../../components/protocol/SignatureParecerPanel'
 import { useAuth, type SecretaryProfile } from '../../context/AuthContext'
 import '../../styles/global.css'
 
@@ -17,7 +18,7 @@ function getTopicStatusStyle(status: string) {
     topic_assigned_for_review: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Revisores atribuídos' },
     topic_in_review: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Em revisão' },
     topic_approved_nucleo: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado' },
-    topic_rejected: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado' },
+    topic_rejected: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovado' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }
@@ -27,16 +28,19 @@ function getProtocolStatusStyle(status: string) {
     protocol_pending_nucleo: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
     protocol_in_review_nucleo: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (Núcleo)' },
     protocol_documents_pending_cc: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Docs Pendentes (CC)' },
+    protocol_documents_pending_cibs: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Docs Pendentes (CIBS)' },
     protocol_pending_comite_cientifico: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (CC)' },
     protocol_in_review_comite_cientifico: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (CC)' },
+    protocol_parecer_pending_cc_signature: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Parecer CC p/ assinar' },
     protocol_pending_comite_bioetica: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (Bioética)' },
     protocol_in_review_comite_bioetica: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (Bioética)' },
+    protocol_parecer_pending_cibs_signature: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Parecer Bioética p/ assinar' },
     protocol_approved_nucleo: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado' },
-    protocol_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Núcleo)' },
-    protocol_rejected_cc: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (CC)' },
-    protocol_rejected_bioetica: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado (Bioética)' },
+    protocol_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovado (Núcleo)' },
+    protocol_rejected_cc: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovado (CC)' },
+    protocol_rejected_bioetica: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovado (Bioética)' },
     protocol_approved_final: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovado final' },
-    protocol_rejected_final: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado final' },
+    protocol_rejected_final: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovado final' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }
@@ -52,6 +56,39 @@ interface ReviewerWithLoad {
   active_works?: number
   currentLoad?: number  // Será preenchido quando a API retornar
   maxLoad?: number      // Será preenchido quando a API retornar
+  pending_reviews_count?: number
+  pending_topic_reviews_count?: number
+  pending_protocol_reviews_count?: number
+}
+
+function getReviewerLoad(r: ReviewerWithLoad): number {
+  if (r.currentLoad !== undefined) return r.currentLoad
+  if (r.pending_reviews_count !== undefined) return r.pending_reviews_count
+  if (r.active_works !== undefined) return r.active_works
+  return 0
+}
+
+function getLoadColor(load: number): string {
+  if (load >= 5) return 'var(--error)'
+  if (load >= 3) return 'var(--tertiary)'
+  return 'var(--primary)'
+}
+
+function LoadBadge({ reviewer }: { reviewer: ReviewerWithLoad }) {
+  const load = getReviewerLoad(reviewer)
+  return (
+    <span style={{
+      fontSize: 'var(--label-sm)',
+      padding: '2px 8px',
+      borderRadius: 'var(--radius-full)',
+      background: getLoadColor(load),
+      color: 'white',
+      whiteSpace: 'nowrap',
+      fontWeight: 'var(--font-medium)',
+    }} title={`${load} revisão(ões) pendente(s)`}>
+      {load} pendente{load !== 1 ? 's' : ''}
+    </span>
+  )
 }
 
 type TabType = 'topics' | 'protocols' | 'monographs'
@@ -168,12 +205,6 @@ function TopicsTab() {
   }
 
   // Função para cor da carga (preparada para o futuro)
-  function getLoadColor(c?: number, m?: number): string {
-    if (!c || !m) return 'transparent'
-    if (c >= m) return 'var(--error)'
-    if (c >= m * 0.8) return 'var(--tertiary)'
-    return 'var(--primary)'
-  }
 
   if (loading) return <Spinner text="A carregar temas..." />
 
@@ -274,8 +305,6 @@ function TopicsTab() {
                           }}>
                             {filteredReviewers.map(r => {
                               const checked = sel.includes(r.id)
-                              const loadColor = getLoadColor(r.currentLoad, r.maxLoad)
-                              const hasLoad = r.currentLoad !== undefined && r.maxLoad !== undefined
                               
                               return (
                                 <label key={r.id} style={{ 
@@ -302,19 +331,7 @@ function TopicsTab() {
                                       </span>
                                     )}
                                   </span>
-                                  {hasLoad && (
-                                    <span style={{ 
-                                      fontSize: 'var(--label-sm)', 
-                                      padding: '2px 8px', 
-                                      borderRadius: 'var(--radius-full)', 
-                                      background: loadColor, 
-                                      color: 'white', 
-                                      whiteSpace: 'nowrap',
-                                      fontWeight: 'var(--font-medium)' 
-                                    }}>
-                                      {r.currentLoad}/{r.maxLoad}
-                                    </span>
-                                  )}
+                                  <LoadBadge reviewer={r} />
                                 </label>
                               )
                             })}
@@ -474,7 +491,7 @@ function ProtocolsTab() {
     const reason = (requirementRejectionReasons[requirementId] ?? '').trim()
 
     if (!reason) {
-      setError('Informe o motivo da reprovação do anexo.')
+      setError('Informe o motivo da não aprovação do anexo.')
       return
     }
 
@@ -516,7 +533,10 @@ function ProtocolsTab() {
 
   const pending = protocols.filter(p => (
     p.status === org.pendingStatus ||
-    (organType === 'scientific_committee' && p.status === 'protocol_documents_pending_cc')
+    (organType === 'scientific_committee' && p.status === 'protocol_documents_pending_cc') ||
+    (organType === 'bioethics_committee' && p.status === 'protocol_documents_pending_cibs') ||
+    (organType === 'scientific_committee' && p.status === 'protocol_parecer_pending_cc_signature') ||
+    (organType === 'bioethics_committee' && p.status === 'protocol_parecer_pending_cibs_signature')
   ))
 
   function getFilteredReviewers(protocolId: number): ReviewerWithLoad[] {
@@ -531,13 +551,6 @@ function ProtocolsTab() {
       (r.email && r.email.toLowerCase().includes(searchLower)) ||
       (r.scientific_area_name && r.scientific_area_name.toLowerCase().includes(searchLower))
     )
-  }
-
-  function getLoadColor(c?: number, m?: number): string {
-    if (!c || !m) return 'transparent'
-    if (c >= m) return 'var(--error)'
-    if (c >= m * 0.8) return 'var(--tertiary)'
-    return 'var(--primary)'
   }
 
   if (loading) return <Spinner text="A carregar protocolos..." />
@@ -558,8 +571,15 @@ function ProtocolsTab() {
         const selectedBio = bioReviewerIds[p.id] ?? []
         const primaryBio = bioPrimary[p.id]
         const searchValue = reviewerSearch[p.id] ?? ''
-        const isDocumentValidation = organType === 'scientific_committee' && p.status === 'protocol_documents_pending_cc'
-        const isPending = p.status === org.pendingStatus || isDocumentValidation
+        const isDocumentValidation = (
+          (organType === 'scientific_committee' && p.status === 'protocol_documents_pending_cc') ||
+          (organType === 'bioethics_committee' && p.status === 'protocol_documents_pending_cibs')
+        )
+        const isSignaturePending = (
+          (organType === 'scientific_committee' && p.status === 'protocol_parecer_pending_cc_signature') ||
+          (organType === 'bioethics_committee' && p.status === 'protocol_parecer_pending_cibs_signature')
+        )
+        const isPending = p.status === org.pendingStatus || isDocumentValidation || isSignaturePending
 	        const isHistorical = Boolean(p.is_historical_for_organ || !isPending)
 	        const primaryReviewers = allReviewers.filter(r => r.is_same_scientific_area)
 	        const canAssign = isBioethics ? Boolean(primaryBio) : Boolean(sel1 && sel2 && sel1 !== sel2)
@@ -584,7 +604,13 @@ function ProtocolsTab() {
 	                  {p.organ_tracking?.latest_action_label || 'Último registo'}
 	                  {p.organ_tracking?.latest_action_at ? ` em ${new Date(p.organ_tracking.latest_action_at).toLocaleDateString('pt-PT')}` : ''}.
 	                </span>
-	                {latestOpinion?.download_url && (
+	                {latestOpinion?.signed_download_url && (
+	                  <button type="button" className="btn btn-small" onClick={() => downloadRequirement(latestOpinion.signed_download_url, `parecer-assinado-${p.code}.pdf`)}>
+	                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>verified</span>
+	                    Parecer assinado
+	                  </button>
+	                )}
+	                {latestOpinion?.download_url && !latestOpinion?.signed_download_url && (
 	                  <button type="button" className="btn btn-small" onClick={() => downloadRequirement(latestOpinion.download_url, `parecer-${p.code}.pdf`)}>
 	                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
 	                    Parecer
@@ -607,8 +633,16 @@ function ProtocolsTab() {
                   onApprove={approveRequirement}
                   onReject={rejectRequirement}
                   onDownload={downloadRequirement}
+                  organ={organType === 'bioethics_committee' ? 'comite_bioetica' : 'comite_cientifico'}
                 />
               </div>
+            ) : isSignaturePending ? (
+              <SignatureParecerPanel
+                protocol={p}
+                orgName={organType === 'bioethics_committee' ? 'Comité de Bioética' : 'Comité Científico'}
+                onDownloadParecer={downloadRequirement}
+                onDone={load}
+              />
             ) : (
             <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)' }}>
               {!reviewersByProtocol[p.id] ? (
@@ -673,11 +707,14 @@ function ProtocolsTab() {
                             style={{ width: '100%', padding: '10px var(--space-2)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: 'pointer' }}
                           >
                             <option value="">— Escolher revisor da área —</option>
-                            {primaryReviewers.map(r => (
-                              <option key={r.id} value={r.id}>
-                                {r.name}{r.scientific_area_name ? ` • ${r.scientific_area_name}` : ''}
-                              </option>
-                            ))}
+                            {primaryReviewers.map(r => {
+                              const load = getReviewerLoad(r)
+                              return (
+                                <option key={r.id} value={r.id}>
+                                  {r.name}{r.scientific_area_name ? ` • ${r.scientific_area_name}` : ''}{` [${load} pendente${load !== 1 ? 's' : ''}]`}
+                                </option>
+                              )
+                            })}
                           </select>
                           {primaryReviewers.length === 0 && (
                             <span style={{ fontSize: 'var(--label-sm)', color: 'var(--error)' }}>
@@ -694,8 +731,6 @@ function ProtocolsTab() {
                             {filteredReviewers.map(r => {
                               const checked = selectedBio.includes(r.id)
                               const isPrimary = primaryBio === r.id
-                              const hasLoad = r.currentLoad !== undefined && r.maxLoad !== undefined
-                              const loadColor = getLoadColor(r.currentLoad, r.maxLoad)
 
                               return (
                                 <label key={r.id} style={{
@@ -728,19 +763,7 @@ function ProtocolsTab() {
                                       </span>
                                     )}
                                   </span>
-                                  {hasLoad && (
-                                    <span style={{
-                                      fontSize: 'var(--label-sm)',
-                                      padding: '2px 8px',
-                                      borderRadius: 'var(--radius-full)',
-                                      background: loadColor,
-                                      color: 'white',
-                                      whiteSpace: 'nowrap',
-                                      fontWeight: 'var(--font-medium)'
-                                    }}>
-                                      {r.currentLoad}/{r.maxLoad}
-                                    </span>
-                                  )}
+                                  <LoadBadge reviewer={r} />
                                   {isPrimary && (
                                     <span style={{ fontSize: 'var(--label-sm)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--primary)', color: 'var(--on-primary)' }}>
                                       Principal
@@ -763,10 +786,10 @@ function ProtocolsTab() {
                         >
                           <option value="">— Escolher —</option>
                           {filteredReviewers.map(r => {
-                            const hasLoad = r.currentLoad !== undefined && r.maxLoad !== undefined
+                            const load = getReviewerLoad(r)
                             return (
                               <option key={r.id} value={r.id} disabled={sel2 === r.id}>
-                                {r.name}{r.scientific_area_name ? ` • ${r.scientific_area_name}` : ''}{hasLoad ? ` [${r.currentLoad}/${r.maxLoad}]` : ''}
+                                {r.name}{r.scientific_area_name ? ` • ${r.scientific_area_name}` : ''}{` [${load} pendente${load !== 1 ? 's' : ''}]`}
                               </option>
                             )
                           })}
@@ -782,10 +805,10 @@ function ProtocolsTab() {
                         >
                           <option value="">— Escolher —</option>
                           {filteredReviewers.map(r => {
-                            const hasLoad = r.currentLoad !== undefined && r.maxLoad !== undefined
+                            const load = getReviewerLoad(r)
                             return (
                               <option key={r.id} value={r.id} disabled={sel1 === r.id}>
-                                {r.name}{r.scientific_area_name ? ` • ${r.scientific_area_name}` : ''}{hasLoad ? ` [${r.currentLoad}/${r.maxLoad}]` : ''}
+                                {r.name}{r.scientific_area_name ? ` • ${r.scientific_area_name}` : ''}{` [${load} pendente${load !== 1 ? 's' : ''}]`}
                               </option>
                             )
                           })}

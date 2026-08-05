@@ -17,10 +17,13 @@ class Protocol extends Model
     public const STATUS_PENDING_NUCLEO = 'protocol_pending_nucleo';
     public const STATUS_IN_REVIEW_NUCLEO = 'protocol_in_review_nucleo';
     public const STATUS_DOCUMENTS_PENDING_CC = 'protocol_documents_pending_cc';
+    public const STATUS_DOCUMENTS_PENDING_CIBS = 'protocol_documents_pending_cibs';
     public const STATUS_PENDING_COMITE_CIENTIFICO = 'protocol_pending_comite_cientifico';
     public const STATUS_IN_REVIEW_COMITE_CIENTIFICO = 'protocol_in_review_comite_cientifico';
+    public const STATUS_PARECER_PENDING_CC_SIGNATURE = 'protocol_parecer_pending_cc_signature';
     public const STATUS_PENDING_COMITE_BIOETICA = 'protocol_pending_comite_bioetica';
     public const STATUS_IN_REVIEW_COMITE_BIOETICA = 'protocol_in_review_comite_bioetica';
+    public const STATUS_PARECER_PENDING_CIBS_SIGNATURE = 'protocol_parecer_pending_cibs_signature';
     public const STATUS_REJECTED_NUCLEO = 'protocol_rejected_nucleo';
     public const STATUS_REJECTED_CC = 'protocol_rejected_cc';
     public const STATUS_REJECTED_BIOETICA = 'protocol_rejected_bioetica';
@@ -115,19 +118,22 @@ class Protocol extends Model
     {
         return match ($this->status) {
             self::STATUS_PENDING_SUPERVISOR => 'Aguardando aprovacao do supervisor',
-            self::STATUS_REJECTED_SUPERVISOR => 'Rejeitado pelo supervisor',
+            self::STATUS_REJECTED_SUPERVISOR => 'Não aprovado pelo supervisor',
             self::STATUS_PENDING_NUCLEO => 'Encaminhado ao Nucleo Cientifico',
             self::STATUS_IN_REVIEW_NUCLEO => 'Em avaliacao pelo Nucleo Cientifico',
             self::STATUS_DOCUMENTS_PENDING_CC => 'Aguardando validacao dos anexos pelo Comite Cientifico',
+            self::STATUS_DOCUMENTS_PENDING_CIBS => 'Aguardando validacao dos anexos pelo Comite de Bioetica',
             self::STATUS_PENDING_COMITE_CIENTIFICO => 'Encaminhado ao Comite Cientifico',
             self::STATUS_IN_REVIEW_COMITE_CIENTIFICO => 'Em avaliacao pelo Comite Cientifico',
+            self::STATUS_PARECER_PENDING_CC_SIGNATURE => 'Parecer do Comite Cientifico a aguardar assinatura',
             self::STATUS_PENDING_COMITE_BIOETICA => 'Encaminhado ao Comite de Bioetica',
             self::STATUS_IN_REVIEW_COMITE_BIOETICA => 'Em avaliacao pelo Comite de Bioetica',
-            self::STATUS_REJECTED_NUCLEO => 'Rejeitado pelo Núcleo Científico',
-            self::STATUS_REJECTED_CC => 'Rejeitado pelo Comité Científico',
-            self::STATUS_REJECTED_BIOETICA => 'Rejeitado pelo Comite de Bioetica',
+            self::STATUS_PARECER_PENDING_CIBS_SIGNATURE => 'Parecer do Comite de Bioetica a aguardar assinatura',
+            self::STATUS_REJECTED_NUCLEO => 'Não aprovado pelo Núcleo Científico',
+            self::STATUS_REJECTED_CC => 'Não aprovado pelo Comité Científico',
+            self::STATUS_REJECTED_BIOETICA => 'Não aprovado pelo Comite de Bioetica',
             self::STATUS_APPROVED_FINAL => 'Aprovado',
-            self::STATUS_REJECTED_FINAL => 'Rejeitado (final)',
+            self::STATUS_REJECTED_FINAL => 'Não aprovado (final)',
             default => $this->status,
         };
     }

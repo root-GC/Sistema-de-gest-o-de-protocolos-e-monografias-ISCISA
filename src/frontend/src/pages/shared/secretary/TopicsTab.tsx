@@ -11,7 +11,7 @@ function getStatusStyle(status: string) {
     topic_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
     topic_pending_nucleo:     { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',     dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
     topic_approved_nucleo:    { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
-    topic_rejected:           { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado' },
+    topic_rejected:           { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }

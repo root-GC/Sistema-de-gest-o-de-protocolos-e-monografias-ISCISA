@@ -27,7 +27,7 @@ export default function TopicPage() {
   const studentNumber = studentProfile?.student_number
   const studentScientificArea = studentProfile?.scientific_area
 
-  // Status que bloqueiam nova submissão (não são rejeitados)
+  // Status que bloqueiam nova submissão (não são não aprovados)
   const blockingStatuses = [
     'topic_pending_supervisor',
     'topic_pending_nucleo',
@@ -38,7 +38,7 @@ export default function TopicPage() {
     'topic_approved',
   ]
 
-  // Status rejeitados (permitem nova submissão)
+  // Status não aprovados (permitem nova submissão)
   const rejectedStatuses = [
     'topic_rejected',
     'topic_rejected_supervisor',
@@ -189,23 +189,23 @@ export default function TopicPage() {
         icon: 'verified'
       },
 
-      // ❌ REJEITADO (Vermelho)
+      // ❌ NÃO APROVADO (Vermelho)
       topic_rejected: {
-        label: 'Rejeitado',
+        label: 'Não Aprovado',
         dot: 'var(--error)',
         background: 'var(--error-container)',
         color: 'var(--on-error-container)',
         icon: 'cancel'
       },
       topic_rejected_supervisor: {
-        label: 'Rejeitado pelo Supervisor',
+        label: 'Não Aprovado pelo Supervisor',
         dot: 'var(--error)',
         background: 'var(--error-container)',
         color: 'var(--on-error-container)',
         icon: 'cancel'
       },
       topic_rejected_nucleo: {
-        label: 'Rejeitado pelo Núcleo',
+        label: 'Não Aprovado pelo Núcleo',
         dot: 'var(--error)',
         background: 'var(--error-container)',
         color: 'var(--on-error-container)',
@@ -348,7 +348,7 @@ export default function TopicPage() {
         </div>
       )}
 
-      {/* Aviso de tema rejeitado */}
+      {/* Aviso de tema não aprovado */}
       {rejectedTopic && !hasBlockingTopic && (
         <div style={{
           display: 'flex',
@@ -374,7 +374,7 @@ export default function TopicPage() {
               {getStatusBadge(rejectedTopic.status).label}
             </p>
             <p>
-              O seu tema "{rejectedTopic.title}" foi rejeitado. 
+              O seu tema "{rejectedTopic.title}" não foi aprovado. 
               Pode submeter um novo tema abaixo.
             </p>
           </div>
@@ -566,7 +566,7 @@ export default function TopicPage() {
                   </div>
                 )}
 
-                {/* Mensagem para rejeitado */}
+                {/* Mensagem para não aprovado */}
                 {isRejected && (
                   <div style={{
                     display: 'flex',
@@ -584,7 +584,7 @@ export default function TopicPage() {
                       info
                     </span>
                     <span>
-                      Este tema foi rejeitado. Pode submeter um novo tema.
+                      Este tema não foi aprovado. Pode submeter um novo tema.
                     </span>
                   </div>
                 )}

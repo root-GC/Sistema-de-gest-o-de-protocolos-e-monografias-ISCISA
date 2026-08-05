@@ -24,36 +24,39 @@ interface SpreadsheetRow {
 const STATUS_MAP: Record<string, string> = {
   'protocol_pending_supervisor': 'Aguardando Supervisor',
   'protocol_documents_pending_cc': 'Anexos em Validação (CC)',
+  'protocol_documents_pending_cibs': 'Anexos em Validação (CIBS)',
   'protocol_pending_nucleo': 'Aguardando Núcleo',
   'protocol_in_review_nucleo': 'Em Revisão (Núcleo)',
-  'protocol_rejected_nucleo': 'Reprovado (Núcleo)',
+  'protocol_rejected_nucleo': 'Não Aprovado (Núcleo)',
   'protocol_pending_comite_cientifico': 'Aguardando CC',
   'protocol_in_review_comite_cientifico': 'Em Revisão (CC)',
-  'protocol_rejected_cc': 'Reprovado (CC)',
+  'protocol_rejected_cc': 'Não Aprovado (CC)',
+  'protocol_parecer_pending_cc_signature': 'Parecer CC aguardando assinatura',
   'protocol_pending_comite_bioetica': 'Aguardando Bioética',
   'protocol_in_review_comite_bioetica': 'Em Revisão (Bioética)',
-  'protocol_rejected_bioetica': 'Reprovado (Bioética)',
+  'protocol_rejected_bioetica': 'Não Aprovado (Bioética)',
+  'protocol_parecer_pending_cibs_signature': 'Parecer Bioética aguardando assinatura',
   'protocol_approved_final': 'Aprovado Final',
-  'protocol_rejected_final': 'Reprovado Final',
+  'protocol_rejected_final': 'Não Aprovado Final',
   'pending_nucleo': 'Aguardando Núcleo',
   'in_review_nucleo': 'Em Revisão (Núcleo)',
   'approved_nucleo': 'Aprovado (Núcleo)',
-  'rejected_nucleo': 'Reprovado (Núcleo)',
+  'rejected_nucleo': 'Não Aprovado (Núcleo)',
   'pending_comite_cientifico': 'Aguardando CC',
   'in_review_comite_cientifico': 'Em Revisão (CC)',
   'approved_comite_cientifico': 'Aprovado (CC)',
-  'rejected_cc': 'Reprovado (CC)',
+  'rejected_cc': 'Não Aprovado (CC)',
   'pending_comite_bioetica': 'Aguardando Bioética',
   'in_review_comite_bioetica': 'Em Revisão (Bioética)',
   'approved_final': 'Aprovado Final',
-  'rejected': 'Reprovado',
+  'rejected': 'Não Aprovado',
   'parecer_emitido_deliberacao': 'Parecer Emitido',
 }
 
 function getStatusConfig(status: string) {
   if (status === 'Parecer Emitido') return { dot: '#6a1b9a', bg: '#f3e5f5', text: '#4a148c' }
   if (status.includes('Aprovado')) return { dot: '#5d4037', bg: '#efebe9', text: '#3e2723' }
-  if (status.includes('Reprovado')) return { dot: '#b71c1c', bg: '#fce4ec', text: '#7f0000' }
+  if (status.includes('Não Aprovado')) return { dot: '#b71c1c', bg: '#fce4ec', text: '#7f0000' }
   if (status.includes('Revisão')) return { dot: 'var(--tertiary)', bg: 'var(--tertiary-container)', text: 'var(--on-tertiary-container)' }
   if (status.includes('Aguardando')) return { dot: 'var(--outline)', bg: 'var(--surface-container-high)', text: 'var(--on-surface-variant)' }
   return { dot: 'var(--outline)', bg: 'var(--surface-container)', text: 'var(--on-surface-variant)' }
@@ -140,7 +143,7 @@ export default function SpreadsheetPage() {
       if (!r.title.toLowerCase().includes(t) && !r.studentName.toLowerCase().includes(t) && !r.code.toLowerCase().includes(t)) return false
     }
     if (filterStatus === 'approved' && !r.status.includes('Aprovado') && r.status !== 'Parecer Emitido') return false
-    if (filterStatus === 'rejected' && !r.status.includes('Reprovado')) return false
+    if (filterStatus === 'rejected' && !r.status.includes('Não Aprovado')) return false
     if (filterStatus === 'reviewing' && !r.status.includes('Revisão') && !r.status.includes('Aguardando')) return false
     if (selectedCourse !== 'all' && r.course !== selectedCourse) return false
     return true
@@ -148,7 +151,7 @@ export default function SpreadsheetPage() {
 
   const approved = rows.filter(r => r.status.includes('Aprovado') || r.status === 'Parecer Emitido').length
   const reviewing = rows.filter(r => r.status.includes('Revisão') || r.status.includes('Aguardando')).length
-  const rejected = rows.filter(r => r.status.includes('Reprovado')).length
+  const rejected = rows.filter(r => r.status.includes('Não Aprovado')).length
 
   if (loading) {
     return (
@@ -168,7 +171,7 @@ export default function SpreadsheetPage() {
           Planilha de Protocolos
         </h1>
         <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', margin: 0 }}>
-          {rows.length} protocolos · {approved} aprovados · {reviewing} em revisão · {rejected} reprovados
+          {rows.length} protocolos · {approved} aprovados · {reviewing} em revisão · {rejected} não aprovados
         </p>
       </div>
 
@@ -197,7 +200,7 @@ export default function SpreadsheetPage() {
             fontSize: '13px', fontWeight: filterStatus === f ? 'var(--font-semibold)' : 'var(--font-regular)',
             fontFamily: 'var(--font-family)', cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
           }}>
-            {f === 'all' ? 'Todos' : f === 'reviewing' ? 'Em revisão' : f === 'approved' ? 'Aprovados' : 'Reprovados'}
+            {f === 'all' ? 'Todos' : f === 'reviewing' ? 'Em revisão' : f === 'approved' ? 'Aprovados' : 'Não Aprovados'}
           </button>
         ))}
         {searchTerm && (
@@ -242,7 +245,7 @@ export default function SpreadsheetPage() {
               ) : (
                 filtered.map((row, i) => {
                   const statusCfg = getStatusConfig(row.status)
-                  const isOverdue = parseInt(row.timeSpent) > 14 && !row.status.includes('Aprovado') && !row.status.includes('Reprovado') && row.status !== 'Parecer Emitido'
+                  const isOverdue = parseInt(row.timeSpent) > 14 && !row.status.includes('Aprovado') && !row.status.includes('Não Aprovado') && row.status !== 'Parecer Emitido'
                   return (
                     <tr key={row.id} style={{ borderBottom: '1px solid var(--outline-variant)', transition: 'background 0.1s' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-container-low)'}
@@ -327,7 +330,7 @@ function getMockData(): SpreadsheetRow[] {
     { id: 2, submissionDate: '18/03/2025', code: 'PTM0002E', studentName: 'Carlos Mavie', contact: 'carlos@iscisa.ac.mz', title: 'Estudo sobre desnutrição infantil', versionNumber: '2', meetingDate: '22/03/2025', status: 'Parecer Emitido', statusRaw: 'parecer_emitido_deliberacao', approvalDate: '25/03/2025', timeSpent: '10 dias', course: 'Mestrado em Saúde e Segurança no Trabalho', organ: 'Núcleo Científico' },
     { id: 3, submissionDate: '20/03/2025', code: 'PTM0003E', studentName: 'Ana Tembe', contact: 'ana@iscisa.ac.mz', title: 'Avaliação de políticas de saúde pública', versionNumber: '1', meetingDate: null, status: 'Aguardando CC', statusRaw: 'pending_comite_cientifico', approvalDate: null, timeSpent: '7 dias', course: 'Mestrado em Saúde Pública', organ: 'Comité Científico' },
     { id: 4, submissionDate: '22/03/2025', code: 'PTM0004E', studentName: 'Pedro Nkosi', contact: 'pedro@iscisa.ac.mz', title: 'Análise de dados epidemiológicos em saúde ocupacional', versionNumber: '3', meetingDate: '28/03/2025', status: 'Aprovado Final', statusRaw: 'approved_final', approvalDate: '01/04/2025', timeSpent: '17 dias', course: 'Mestrado em Saúde Pública', organ: 'Comité de Bioética' },
-    { id: 5, submissionDate: '25/03/2025', code: 'PTM0005E', studentName: 'Marta Chissano', contact: 'marta@iscisa.ac.mz', title: 'Estudo clínico sobre HIV/SIDA em adultos', versionNumber: '1', meetingDate: null, status: 'Reprovado', statusRaw: 'rejected', approvalDate: null, timeSpent: '5 dias', course: 'Licenciatura em Enfermagem', organ: 'Núcleo Científico' },
+    { id: 5, submissionDate: '25/03/2025', code: 'PTM0005E', studentName: 'Marta Chissano', contact: 'marta@iscisa.ac.mz', title: 'Estudo clínico sobre HIV/SIDA em adultos', versionNumber: '1', meetingDate: null, status: 'Não Aprovado', statusRaw: 'rejected', approvalDate: null, timeSpent: '5 dias', course: 'Licenciatura em Enfermagem', organ: 'Núcleo Científico' },
     { id: 6, submissionDate: '10/03/2025', code: 'PTM0006E', studentName: 'José Macamo', contact: 'jose@iscisa.ac.mz', title: 'Resistência antimicrobiana em hospitais centrais', versionNumber: '2', meetingDate: null, status: 'Em Revisão (CC)', statusRaw: 'in_review_comite_cientifico', approvalDate: null, timeSpent: '27 dias', course: 'Mestrado em Saúde Pública', organ: 'Comité Científico' },
   ]
 }

@@ -78,7 +78,9 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
 
     // Opinions (pareceres)
     Route::get('opinions/{opinion}/download', [EvaluationFormController::class, 'downloadOpinion'])->name('opinions.download');
+    Route::get('opinions/{opinion}/signed-download', [EvaluationFormController::class, 'downloadSignedOpinion'])->name('opinions.signed-download');
     Route::get('protocols/{protocol}/opinions', [EvaluationFormController::class, 'listOpinionsForProtocol'])->name('protocols.opinions.list');
+    Route::post('protocols/{protocol}/opinions/{opinion}/sign', [ProtocolApiController::class, 'submitSignedParecer'])->name('protocols.opinions.sign');
 
     // Evaluation forms - shared (download PDF)
     Route::get('evaluation-forms/{form}/download', [EvaluationFormController::class, 'downloadEvaluationForm'])->name('evaluation-forms.download');

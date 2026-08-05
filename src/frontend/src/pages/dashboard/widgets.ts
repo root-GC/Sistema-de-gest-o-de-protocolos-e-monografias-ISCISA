@@ -72,7 +72,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   {
     id: 'documentValidation',
     title: 'Validação Documental',
-    description: 'Documentos para validar ou rejeitar',
+    description: 'Documentos para validar ou não aprovar',
     category: 'workflow',
     order: 4,
     size: 'medium',

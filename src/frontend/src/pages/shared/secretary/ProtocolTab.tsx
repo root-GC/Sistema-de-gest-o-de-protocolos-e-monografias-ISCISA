@@ -13,20 +13,21 @@ function getStatusStyle(status: string) {
     protocol_submitted:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Submetido' },
     protocol_pending_supervisor:  { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
     protocol_approved_supervisor: { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado (Supervisor)' },
-    protocol_rejected_supervisor: { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado (Supervisor)' },
+    protocol_rejected_supervisor: { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado (Supervisor)' },
     protocol_in_review:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Em Revisão' },
     protocol_pending_nucleo:      { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Pendente (Núcleo)' },
     protocol_documents_pending_cc: { bg: 'var(--tertiary-fixed)',    color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Docs Pendentes (CC)' },
+    protocol_documents_pending_cibs: { bg: 'var(--tertiary-fixed)',   color: 'var(--on-tertiary-fixed)',   dot: 'var(--tertiary)', label: 'Docs Pendentes (CIBS)' },
     protocol_pending_comite_cientifico: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (CC)' },
     protocol_in_review_comite_cientifico: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (CC)' },
     protocol_pending_comite_bioetica: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Pendente (Bioética)' },
     protocol_in_review_comite_bioetica: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em Revisão (Bioética)' },
     protocol_approved_nucleo:     { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
-    protocol_rejected_nucleo:     { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado (Núcleo)' },
-    protocol_rejected_cc:         { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado (CC)' },
-    protocol_rejected_bioetica:   { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado (Bioética)' },
+    protocol_rejected_nucleo:     { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado (Núcleo)' },
+    protocol_rejected_cc:         { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado (CC)' },
+    protocol_rejected_bioetica:   { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado (Bioética)' },
     protocol_approved_final:      { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado final' },
-    protocol_rejected_final:      { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Rejeitado final' },
+    protocol_rejected_final:      { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado final' },
     protocol_resubmitted:         { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Re-submetido' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
@@ -172,7 +173,7 @@ export function ProtocolsTab() {
     const reason = (requirementRejectionReasons[requirementId] ?? '').trim()
 
     if (!reason) {
-      setError('Informe o motivo da reprovação do anexo.')
+      setError('Informe o motivo da não aprovação do anexo.')
       return
     }
 
@@ -214,7 +215,8 @@ export function ProtocolsTab() {
 
   const pendingCount = protocols.filter(p => (
     p.status === org.pendingStatus ||
-    (organType === 'scientific_committee' && p.status === 'protocol_documents_pending_cc')
+    (organType === 'scientific_committee' && p.status === 'protocol_documents_pending_cc') ||
+    (organType === 'bioethics_committee' && p.status === 'protocol_documents_pending_cibs')
   )).length
 
   // ============================================================
@@ -333,7 +335,10 @@ export function ProtocolsTab() {
         {protocols.map(p => {
           const s = getStatusStyle(p.status)
           const protocolReviewers = reviewersByProtocol[p.id]
-          const isDocumentValidation = organType === 'scientific_committee' && p.status === 'protocol_documents_pending_cc'
+          const isDocumentValidation = (
+            (organType === 'scientific_committee' && p.status === 'protocol_documents_pending_cc') ||
+            (organType === 'bioethics_committee' && p.status === 'protocol_documents_pending_cibs')
+          )
           const isPending = p.status === org.pendingStatus || isDocumentValidation
           const isHistorical = Boolean(p.is_historical_for_organ || !isPending)
           const isAssigning = assigningId === p.id
@@ -449,6 +454,7 @@ export function ProtocolsTab() {
                     onApprove={approveRequirement}
                     onReject={rejectRequirement}
                     onDownload={downloadRequirement}
+                    organ={organType === 'bioethics_committee' ? 'comite_bioetica' : 'comite_cientifico'}
                   />
                 ) : (
                   <div style={{

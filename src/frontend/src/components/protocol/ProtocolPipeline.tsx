@@ -23,7 +23,7 @@ const STATE_TO_ICON: Record<StageState, { icon: string; label: string }> = {
   in_review: { icon: 'rate_review', label: 'Em revisão' },
   current: { icon: 'pending', label: 'Em curso' },
   approved: { icon: 'check_circle', label: 'Aprovado' },
-  rejected: { icon: 'cancel', label: 'Rejeitado' },
+  rejected: { icon: 'cancel', label: 'Não Aprovado' },
 };
 
 const STATE_TO_LABEL: Record<StageState, string> = {
@@ -32,7 +32,7 @@ const STATE_TO_LABEL: Record<StageState, string> = {
   in_review: 'Em revisão',
   current: 'Em curso',
   approved: 'Concluído',
-  rejected: 'Rejeitado',
+  rejected: 'Não Aprovado',
 };
 
 type ConnectorState = 'pending' | 'in_progress' | 'done' | 'failed' | 'idle';

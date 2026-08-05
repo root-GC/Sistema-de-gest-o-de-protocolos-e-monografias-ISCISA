@@ -26,7 +26,7 @@ function decisionLabel(decision: 'approved' | 'rejected' | null | undefined) {
 
 function evaluationStatusMessage(topic: Topic): string {
   if (topic.status === 'topic_approved_nucleo') return 'Este tema foi aprovado pelo Núcleo Científico.'
-  if (topic.status === 'topic_rejected_nucleo') return 'Este tema foi rejeitado pelo Núcleo Científico.'
+  if (topic.status === 'topic_rejected_nucleo') return 'Este tema não foi aprovado pelo Núcleo Científico.'
   return ''
 }
 
@@ -109,7 +109,7 @@ function getEvaluationState(evaluationForm: EvaluationForm | null, mySubmitted: 
       }
     case 'concluded':
       return {
-        label: evaluationForm.final_decision === 'approved' ? 'Aprovado' : 'Reprovado',
+        label: evaluationForm.final_decision === 'approved' ? 'Aprovado' : 'Não Aprovado',
         className: evaluationForm.final_decision === 'approved' ? 'is-concluded' : 'is-rejected',
         description: evaluationForm.conclusion_summary || 'Processo concluído.',
       }
@@ -764,7 +764,7 @@ export default function EvaluationPage() {
                 <div className={`eval-outcome-banner ${finalProtocolDecision === 'approved' ? 'is-approved' : 'is-rejected'}`}>
                   <span className="material-symbols-outlined">{finalProtocolDecision === 'approved' ? 'check_circle' : 'cancel'}</span>
                   <div>
-                    <strong>{finalProtocolDecision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Reprovado'}</strong>
+                    <strong>{finalProtocolDecision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Não Aprovado'}</strong>
                     <p>{evaluationForm?.conclusion_summary || 'Processo concluído.'}</p>
                   </div>
                 </div>
@@ -871,7 +871,7 @@ export default function EvaluationPage() {
                       <div className="eval-field"><label>Resumo</label><textarea value={overallComment} onChange={e => setOverallComment(e.target.value)} placeholder="Resumo geral..." rows={3} className="criterion-textarea" /></div>
                       <div className="recommendation-choices">
                         <label className={`recommendation-choice ${recommendation === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="rec" checked={recommendation === 'approved'} onChange={() => setRecommendation('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovar</label>
-                        <label className={`recommendation-choice ${recommendation === 'rejected' ? 'is-rejected' : ''}`}><input type="radio" name="rec" checked={recommendation === 'rejected'} onChange={() => setRecommendation('rejected')} /><span className="material-symbols-outlined">cancel</span>Reprovar</label>
+                        <label className={`recommendation-choice ${recommendation === 'rejected' ? 'is-rejected' : ''}`}><input type="radio" name="rec" checked={recommendation === 'rejected'} onChange={() => setRecommendation('rejected')} /><span className="material-symbols-outlined">cancel</span>Não Aprovar</label>
                       </div>
                       <button className="btn btn-primary btn-block btn-lg" onClick={handleSubmitEvaluation} disabled={!recommendation || submitting}>
                         {submitting ? 'A submeter...' : 'Submeter Avaliação'}
@@ -886,7 +886,7 @@ export default function EvaluationPage() {
                       <div className="eval-field"><label>Resumo da deliberação</label><textarea value={deliberationSummary} onChange={e => setDeliberationSummary(e.target.value)} placeholder="Resumo da discussão..." rows={3} className="criterion-textarea" /></div>
                       <div className="recommendation-choices">
                         <label className={`recommendation-choice ${deliberationDecision === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="delib-rec" checked={deliberationDecision === 'approved'} onChange={() => setDeliberationDecision('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovar</label>
-                        <label className={`recommendation-choice ${deliberationDecision === 'not_approved' ? 'is-rejected' : ''}`}><input type="radio" name="delib-rec" checked={deliberationDecision === 'not_approved'} onChange={() => setDeliberationDecision('not_approved')} /><span className="material-symbols-outlined">cancel</span>Reprovar</label>
+                        <label className={`recommendation-choice ${deliberationDecision === 'not_approved' ? 'is-rejected' : ''}`}><input type="radio" name="delib-rec" checked={deliberationDecision === 'not_approved'} onChange={() => setDeliberationDecision('not_approved')} /><span className="material-symbols-outlined">cancel</span>Não Aprovar</label>
                       </div>
                       <button className="btn btn-primary btn-block btn-lg" onClick={handleSubmitDeliberation} disabled={!deliberationDecision || isSubmittingDeliberation}>
 	                        {isSubmittingDeliberation ? 'A submeter...' : (isSharedCommitteeForm ? 'Submeter ficha' : 'Submeter Decisão Final')}

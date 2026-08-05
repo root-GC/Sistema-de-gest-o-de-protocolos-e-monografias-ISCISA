@@ -5,18 +5,18 @@ import { LoadingSpinner } from '../../../components/LoadingSpinner';
 
 const STATUS_LABELS: Record<string, string> = {
   protocol_pending_supervisor: 'Aguardando supervisor',
-  protocol_rejected_supervisor: 'Rejeitado (supervisor)',
+  protocol_rejected_supervisor: 'Não Aprovado (supervisor)',
   protocol_pending_nucleo: 'Aguardando Núcleo',
   protocol_in_review_nucleo: 'Em avaliação — Núcleo',
   protocol_pending_comite_cientifico: 'Aguardando Comité Científico',
   protocol_in_review_comite_cientifico: 'Em avaliação — CC',
   protocol_pending_comite_bioetica: 'Aguardando Comité de Bioética',
   protocol_in_review_comite_bioetica: 'Em avaliação — Bioética',
-  protocol_rejected_nucleo: 'Rejeitado (Núcleo)',
-  protocol_rejected_cc: 'Rejeitado (CC)',
-  protocol_rejected_bioetica: 'Rejeitado (Bioética)',
+  protocol_rejected_nucleo: 'Não Aprovado (Núcleo)',
+  protocol_rejected_cc: 'Não Aprovado (CC)',
+  protocol_rejected_bioetica: 'Não Aprovado (Bioética)',
   protocol_approved_final: 'Aprovado',
-  protocol_rejected_final: 'Rejeitado (final)',
+  protocol_rejected_final: 'Não Aprovado (final)',
 };
 
 export function StatsDashboard({ title, loadingText }: { title: string; loadingText: string }) {

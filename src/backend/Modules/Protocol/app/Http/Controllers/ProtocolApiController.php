@@ -10,6 +10,7 @@ use Modules\Protocol\app\Http\Requests\SubmitProtocolRequest;
 use Modules\Protocol\app\Http\Resources\ProtocolResource;
 use Modules\Protocol\app\Http\Resources\ProtocolReviewerResource;
 use Modules\Protocol\app\Models\Document;
+use Modules\Protocol\app\Models\Opinion;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Models\ProtocolDocumentRequirement;
 use Modules\User\app\Models\User;
@@ -78,7 +79,10 @@ class ProtocolApiController extends Controller
             $topic,
             $request->file('document'),
             $validated['protocol_type'],
-            $request->file('required_documents', [])
+            $request->file('required_documents', []),
+            $request->file('cibs_documents', []),
+            $request->file('other_documents', []),
+            $request->input('other_document_names', [])
         );
 
         return response()->json([
@@ -220,7 +224,7 @@ class ProtocolApiController extends Controller
         $result = $this->protocolService()->rejectBySupervisor($protocol, $user, $validated['justification'] ?? null);
 
         return response()->json([
-            'message' => 'Protocolo rejeitado pelo supervisor.',
+            'message' => 'Protocolo nao aprovado pelo supervisor.',
             'protocol' => $result->load('topic:id,title,status')->toArray(),
         ]);
     }
@@ -251,8 +255,16 @@ class ProtocolApiController extends Controller
             abort(403);
         }
 
+        $requirements = $protocol->protocolDocumentRequirements;
+
+        if ($user->secretaryProfile && $user->secretaryProfile->organ) {
+            if ($user->secretaryProfile->organ->type === Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE) {
+                $requirements = $requirements->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO);
+            }
+        }
+
         return response()->json([
-            'documents' => $protocol->protocolDocumentRequirements->values(),
+            'documents' => $requirements->values(),
         ]);
     }
 
@@ -265,7 +277,7 @@ class ProtocolApiController extends Controller
             ->findOrFail($requirement);
 
         $request->validate([
-            'document' => 'required|file|mimes:pdf,doc,docx|max:10240',
+            'document' => 'required|file|mimes:pdf|mimetypes:application/pdf|max:10240',
         ]);
 
         $result = $this->protocolService()->uploadRequiredDocument(
@@ -319,7 +331,7 @@ class ProtocolApiController extends Controller
         );
 
         return response()->json([
-            'message' => 'Anexo reprovado com sucesso.',
+            'message' => 'Anexo nao aprovado com sucesso.',
             'protocol' => $result->toArray(),
         ]);
     }
@@ -816,5 +828,34 @@ class ProtocolApiController extends Controller
         }
 
         return Storage::disk('public')->download($requirement->file_path, $fileName);
+    }
+
+    public function submitSignedParecer(Request $request, Protocol $protocol, Opinion $opinion)
+    {
+        $user = $request->user();
+
+        if (! $user->hasPermission('protocol.assign')) {
+            abort(403, 'Apenas a secretaria pode assinar o parecer.');
+        }
+
+        $validated = $request->validate([
+            'signed_document' => ['required', 'file', 'mimes:pdf', 'max:20480'],
+        ]);
+
+        $protocol = $this->protocolService()->submitSignedParecer(
+            $protocol,
+            $opinion,
+            $user,
+            $validated['signed_document']
+        );
+
+        return response()->json([
+            'message' => 'Parecer assinado e enviado ao estudante.',
+            'protocol' => [
+                'id' => $protocol->id,
+                'status' => $protocol->status,
+                'status_label' => $protocol->status_label,
+            ],
+        ]);
     }
 }

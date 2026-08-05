@@ -64,14 +64,14 @@ class Topic extends Model
         return match ($this->status) {
             'topic_pending' => 'Aguardando aprovação do supervisor',
             'topic_approved' => 'Aguardando aprovação do Nucleo Cientifico',
-            'topic_rejected' => 'Rejeitado pelo supervisor',
+            'topic_rejected' => 'Não aprovado pelo supervisor',
             self::STATUS_PENDING_SUPERVISOR => 'Aguardando aprovação do supervisor',
             self::STATUS_PENDING_NUCLEO => 'Aguardando atribuição de avaliadores',
             self::STATUS_ASSIGNED => 'Avaliadores atribuídos, em revisão',
             self::STATUS_IN_REVIEW => 'Em revisão pelo Nucleo Cientifico',
             self::STATUS_APPROVED_NUCLEO => 'Aprovado pelo Nucleo Cientifico',
-            self::STATUS_REJECTED_SUPERVISOR => 'Rejeitado pelo supervisor',
-            self::STATUS_REJECTED_NUCLEO => 'Rejeitado pelo Nucleo Cientifico',
+            self::STATUS_REJECTED_SUPERVISOR => 'Não aprovado pelo supervisor',
+            self::STATUS_REJECTED_NUCLEO => 'Não aprovado pelo Nucleo Cientifico',
             default => $this->status,
         };
     }

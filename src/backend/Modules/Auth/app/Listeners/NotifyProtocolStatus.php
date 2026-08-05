@@ -18,14 +18,14 @@ class NotifyProtocolStatus
             match ($event->newStatus) {
                 Protocol::STATUS_PENDING_SUPERVISOR => $this->notifySupervisor($event),
                 Protocol::STATUS_PENDING_NUCLEO => $this->notifyStudent($event, 'aprovado', 'O supervisor aprovou o protocolo. Segue para analise do Nucleo Cientifico.'),
-                Protocol::STATUS_REJECTED_SUPERVISOR => $this->notifyStudent($event, 'rejeitado', $event->protocol->justification ?? 'O supervisor rejeitou o protocolo.'),
+                Protocol::STATUS_REJECTED_SUPERVISOR => $this->notifyStudent($event, 'nao aprovado', $event->protocol->justification ?? 'O supervisor nao aprovou o protocolo.'),
                 Protocol::STATUS_DOCUMENTS_PENDING_CC => $this->notifyStudent($event, 'autorizado pelo supervisor', 'O supervisor autorizou o protocolo. A secretaria do Comite Cientifico vai validar os anexos.'),
                 Protocol::STATUS_PENDING_COMITE_CIENTIFICO => $this->notifyStudent($event, 'anexos aprovados', 'Os anexos obrigatorios foram aprovados. O protocolo segue para revisao no Comite Cientifico.'),
                 Protocol::STATUS_PENDING_COMITE_BIOETICA => $this->notifyStudent($event, 'aprovado no Comite Cientifico', 'O Comite Cientifico aprovou o protocolo. Segue para o Comite de Bioetica.'),
                 Protocol::STATUS_APPROVED_FINAL => $this->notifyStudent($event, 'aprovado', 'O protocolo foi aprovado por todos os orgaos.'),
-                Protocol::STATUS_REJECTED_NUCLEO => $this->notifyStudent($event, 'rejeitado no Nucleo', 'O Nucleo Cientifico rejeitou o protocolo.'),
-                Protocol::STATUS_REJECTED_CC => $this->notifyStudent($event, 'rejeitado no Comite Cientifico', 'O Comite Cientifico rejeitou o protocolo.'),
-                Protocol::STATUS_REJECTED_BIOETICA => $this->notifyStudent($event, 'rejeitado no Comite de Bioetica', 'O Comite de Bioetica rejeitou o protocolo.'),
+                Protocol::STATUS_REJECTED_NUCLEO => $this->notifyStudent($event, 'nao aprovado no Nucleo', 'O Nucleo Cientifico nao aprovou o protocolo.'),
+                Protocol::STATUS_REJECTED_CC => $this->notifyStudent($event, 'nao aprovado no Comite Cientifico', 'O Comite Cientifico nao aprovou o protocolo.'),
+                Protocol::STATUS_REJECTED_BIOETICA => $this->notifyStudent($event, 'nao aprovado no Comite de Bioetica', 'O Comite de Bioetica nao aprovou o protocolo.'),
                 default => null,
             };
         } catch (\Throwable $e) {

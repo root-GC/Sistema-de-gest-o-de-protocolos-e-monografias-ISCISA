@@ -52,14 +52,14 @@ function getPhaseConfig(phase: Phase, status?: string) {
         textColor: 'var(--on-primary-container)',
       },
       topic_rejected_supervisor: {
-        label: 'Rejeitado pelo Supervisor',
+        label: 'Não Aprovado pelo Supervisor',
         icon: 'cancel',
         color: 'var(--error)',
         bg: 'var(--error-container)',
         textColor: 'var(--on-error-container)',
       },
       topic_rejected_nucleo: {
-        label: 'Rejeitado pelo Núcleo',
+        label: 'Não Aprovado pelo Núcleo',
         icon: 'cancel',
         color: 'var(--error)',
         bg: 'var(--error-container)',

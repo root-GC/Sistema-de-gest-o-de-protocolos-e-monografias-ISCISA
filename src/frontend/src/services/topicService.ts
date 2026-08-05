@@ -157,7 +157,7 @@ export const topicService = {
     req('PATCH', `/api/v1/topics/${topicId}/supervisor-approve`),
 
   // ---------------------------------------------------------------------------
-  // SUPERVISOR - Rejeitar tema
+  // SUPERVISOR - Não Aprovar tema
   // PATCH /api/v1/topics/{topicId}/supervisor-reject
   // ---------------------------------------------------------------------------
   rejectBySupervisor: (topicId: number, justification: string) =>

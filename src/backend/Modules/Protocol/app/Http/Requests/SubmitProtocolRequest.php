@@ -41,13 +41,48 @@ class SubmitProtocolRequest extends FormRequest
                 $allowsOptionalRequiredDocuments ? 'sometimes' : 'required',
                 'array',
             ],
+            'cibs_documents' => [
+                $allowsOptionalRequiredDocuments ? 'sometimes' : 'required',
+                'array',
+            ],
+            'other_documents' => [
+                'sometimes',
+                'array',
+            ],
+            'other_documents.*' => [
+                'nullable',
+                'file',
+                'mimes:pdf',
+                'mimetypes:application/pdf',
+                'max:10240',
+            ],
+            'other_document_names' => [
+                'sometimes',
+                'array',
+            ],
+            'other_document_names.*' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
         ];
 
         foreach (ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS as $key => $name) {
             $rules["required_documents.{$key}"] = [
                 $allowsOptionalRequiredDocuments ? 'sometimes' : 'required',
                 'file',
-                'mimes:pdf,doc,docx',
+                'mimes:pdf',
+                'mimetypes:application/pdf',
+                'max:10240',
+            ];
+        }
+
+        foreach (ProtocolDocumentRequirement::CIBS_REQUIRED_DOCUMENTS as $key => $name) {
+            $rules["cibs_documents.{$key}"] = [
+                $allowsOptionalRequiredDocuments ? 'sometimes' : 'required',
+                'file',
+                'mimes:pdf',
+                'mimetypes:application/pdf',
                 'max:10240',
             ];
         }
@@ -68,8 +103,19 @@ class SubmitProtocolRequest extends FormRequest
             'required_documents.required' => 'Os anexos obrigatorios do Comite Cientifico devem ser enviados.',
             'required_documents.array' => 'Os anexos obrigatorios devem ser enviados como lista de ficheiros.',
             'required_documents.*.required' => 'Todos os anexos obrigatorios do Comite Cientifico devem ser enviados.',
-            'required_documents.*.mimes' => 'Os anexos devem estar em PDF, DOC ou DOCX.',
+            'required_documents.*.mimes' => 'Os anexos devem estar em formato PDF.',
+            'required_documents.*.mimetypes' => 'Os anexos devem ser ficheiros PDF validos.',
             'required_documents.*.max' => 'Cada anexo nao pode exceder 10MB.',
+            'cibs_documents.required' => 'Os anexos do Comite de Bioetica (CIBS) devem ser enviados.',
+            'cibs_documents.array' => 'Os anexos do CIBS devem ser enviados como lista de ficheiros.',
+            'cibs_documents.*.required' => 'Todos os anexos do Comite de Bioetica (CIBS) devem ser enviados.',
+            'cibs_documents.*.mimes' => 'Os anexos do CIBS devem estar em formato PDF.',
+            'cibs_documents.*.mimetypes' => 'Os anexos do CIBS devem ser ficheiros PDF validos.',
+            'cibs_documents.*.max' => 'Cada anexo do CIBS nao pode exceder 10MB.',
+            'other_documents.*.mimes' => 'Os anexos adicionais devem estar em formato PDF.',
+            'other_documents.*.mimetypes' => 'Os anexos adicionais devem ser ficheiros PDF validos.',
+            'other_documents.*.max' => 'Cada anexo adicional nao pode exceder 10MB.',
+            'other_document_names.*.max' => 'O nome do anexo adicional nao pode exceder 255 caracteres.',
         ];
     }
 

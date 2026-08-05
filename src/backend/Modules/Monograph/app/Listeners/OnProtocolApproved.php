@@ -3,7 +3,7 @@
 // Modules/Monograph/app/Listeners/OnProtocolApproved.php
 namespace Modules\Monograph\app\Listeners;
 
-use Modules\Protocol\Events\ProtocolApproved;
+use Modules\Protocol\app\Events\ProtocolApproved;
 use Modules\Monograph\app\Models\Monograph;
 use Modules\Monograph\app\Enums\MonographStatus;
 use Modules\Shared\Services\NotificationService;

@@ -934,31 +934,47 @@ class EvaluationService
                     );
                 }
 
-                $protocolUpdates['status'] = $flow['next_status'];
+                $signaturePendingStatus = match ($form->organ) {
+                    Protocol::ORGAN_COMITE_CIENTIFICO => Protocol::STATUS_PARECER_PENDING_CC_SIGNATURE,
+                    Protocol::ORGAN_COMITE_BIOETICA => Protocol::STATUS_PARECER_PENDING_CIBS_SIGNATURE,
+                    default => null,
+                };
 
-                if ($flow['next_organ_type']) {
-                    $nextOrgan = Organ::query()
-                        ->where('type', $flow['next_organ_type'])
-                        ->first();
+                if ($signaturePendingStatus) {
+                    // O parecer do comité precisa de ser assinado pela secretaria
+                    // antes de seguir para o próximo órgão / aprovação final.
+                    $protocolUpdates['status'] = $signaturePendingStatus;
+                } else {
+                    $protocolUpdates['status'] = $flow['next_status'];
 
-                    if (! $nextOrgan) {
-                        throw new HttpResponseException(
-                            response()->json(['message' => "Proximo orgao nao encontrado: {$flow['next_organ_type']}"], 500)
-                        );
+                    if ($flow['next_organ_type'] === Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE) {
+                        $protocolUpdates['status'] = Protocol::STATUS_DOCUMENTS_PENDING_CIBS;
                     }
 
-                    $protocolUpdates['current_organ_id'] = $nextOrgan->id;
-                }
+                    if ($flow['next_organ_type']) {
+                        $nextOrgan = Organ::query()
+                            ->where('type', $flow['next_organ_type'])
+                            ->first();
 
-                if ($flow['version_field'] && $flow['version_prefix']) {
-                    $field = $flow['version_field'];
-                    $versionNumber = 1;
-                    $nextVersionLabel = Protocol::organVersionLabel($flow['next_organ_type'], $versionNumber);
+                        if (! $nextOrgan) {
+                            throw new HttpResponseException(
+                                response()->json(['message' => "Proximo orgao nao encontrado: {$flow['next_organ_type']}"], 500)
+                            );
+                        }
 
-                    $protocolUpdates[$field] = $versionNumber;
-                    $protocolUpdates['version'] = $nextVersionLabel;
-                } else {
-                    $protocolUpdates['version'] = 'APROVADO';
+                        $protocolUpdates['current_organ_id'] = $nextOrgan->id;
+                    }
+
+                    if ($flow['version_field'] && $flow['version_prefix']) {
+                        $field = $flow['version_field'];
+                        $versionNumber = 1;
+                        $nextVersionLabel = Protocol::organVersionLabel($flow['next_organ_type'], $versionNumber);
+
+                        $protocolUpdates[$field] = $versionNumber;
+                        $protocolUpdates['version'] = $nextVersionLabel;
+                    } else {
+                        $protocolUpdates['version'] = 'APROVADO';
+                    }
                 }
             }
 
@@ -980,7 +996,7 @@ class EvaluationService
                 $decider,
                 $decision === ReviewerEvaluation::DECISION_APPROVED
                     ? 'Protocolo aprovado pelo orgao.'
-                    : 'Protocolo reprovado pelo orgao.',
+                    : 'Protocolo nao aprovado pelo orgao.',
                 [
                     'decision' => $decision,
                     'conclusion_summary' => $conclusionSummary,
@@ -1007,7 +1023,7 @@ class EvaluationService
                 ));
             }
 
-            if ($decision === ReviewerEvaluation::DECISION_APPROVED && $flow && $flow['next_organ_type']) {
+            if ($decision === ReviewerEvaluation::DECISION_APPROVED && ! $signaturePendingStatus && $flow && $flow['next_organ_type']) {
                 $this->recordProtocolHistory(
                     $form,
                     'forwarded',

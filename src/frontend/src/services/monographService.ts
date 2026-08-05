@@ -136,12 +136,22 @@ export const monographService = {
     req<MonographListResponse>('GET', '/api/monographs'),
 
   /**
-   * Submeter nova monografia
+   * Submeter versão de uma monografia existente
+   * Nota: o backend expõe POST /api/monographs/{monograph}/submit
    */
-  submit: (file: File) => {
+  submit: (monographId: number, file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    return req<MonographSubmitResponse>('POST', '/api/monographs', formData, true)
+    return req<MonographSubmitResponse>('POST', `/api/monographs/${monographId}/submit`, formData, true)
+  },
+
+  /**
+   * Compatibilidade (antigo chamado sem id) - mantido para evitar que chamadas falhem
+   * -> redireciona para erro explícito
+   */
+  submitWithoutId: (file: File) => {
+    // This helper throws so callers that still call submit(file) get a clear message
+    return Promise.reject(new Error('Endpoint inválido: é necessário um monographId. Aguarde a criação da monografia pelo backend ou contacte o núcleo.'))
   },
 
   /**

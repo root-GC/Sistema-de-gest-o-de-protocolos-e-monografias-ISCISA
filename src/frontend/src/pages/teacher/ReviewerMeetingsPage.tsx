@@ -54,7 +54,7 @@ function getMeetingState(evaluationForm: EvaluationForm | null): {
     
     case 'concluded':
       return {
-        label: evaluationForm.final_decision === 'approved' ? 'Aprovado' : 'Reprovado',
+        label: evaluationForm.final_decision === 'approved' ? 'Aprovado' : 'Não Aprovado',
         className: evaluationForm.final_decision === 'approved' ? 'is-concluded' : 'is-rejected',
         description: evaluationForm.conclusion_summary || 'Processo concluído.',
       }
@@ -604,7 +604,7 @@ export default function ReviewerMeetingsPage() {
                 <div className={`eval-outcome-banner ${finalDecision === 'approved' ? 'is-approved' : 'is-rejected'}`}>
                   <span className="material-symbols-outlined">{finalDecision === 'approved' ? 'check_circle' : 'cancel'}</span>
                   <div>
-                    <strong>{finalDecision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Reprovado'}</strong>
+                    <strong>{finalDecision === 'approved' ? 'Protocolo Aprovado' : 'Protocolo Não Aprovado'}</strong>
                     <p>{evaluationForm?.conclusion_summary || 'Processo concluído.'}</p>
                   </div>
                 </div>

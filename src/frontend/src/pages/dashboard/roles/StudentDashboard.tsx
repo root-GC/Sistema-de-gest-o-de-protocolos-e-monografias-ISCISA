@@ -236,7 +236,7 @@ export function StudentDashboard() {
                   warning
                 </span>
                 <p style={{ lineHeight: 1.5 }}>
-                  O teu tema foi rejeitado nesta fase. Verifica os comentários e submete uma nova versão.
+                  O teu tema não foi aprovado nesta fase. Verifica os comentários e submete uma nova versão.
                 </p>
               </div>
             )}
@@ -310,7 +310,7 @@ export function StudentDashboard() {
                   warning
                 </span>
                 <p style={{ lineHeight: 1.5 }}>
-                  O protocolo foi rejeitado nesta fase. Verifica os pareceres para os próximos passos.
+                  O protocolo não foi aprovado nesta fase. Verifica os pareceres para os próximos passos.
                 </p>
               </div>
             ) : (

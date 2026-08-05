@@ -190,7 +190,7 @@ export default function FinalDecisionPage() {
             // Resumo das decisões dos revisores
             const reviewerDecisions = (form.reviewer_evaluations || []).map(re => ({
               name: re.reviewer?.user?.name || 'Revisor',
-              decision: re.decision === 'approved' ? 'Aprovou' : re.decision === 'not_approved' ? 'Reprovou' : 'Pendente',
+              decision: re.decision === 'approved' ? 'Aprovou' : re.decision === 'not_approved' ? 'Não Aprovou' : 'Pendente',
               isApproved: re.decision === 'approved',
             }))
 

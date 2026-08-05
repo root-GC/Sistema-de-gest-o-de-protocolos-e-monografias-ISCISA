@@ -8,7 +8,9 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\Protocol\app\Models\Document;
 use Modules\Protocol\app\Models\EvaluationForm;
+use Modules\Protocol\app\Models\Opinion;
 use Modules\Protocol\app\Models\Protocol;
+use Modules\Protocol\app\Events\ProtocolApproved;
 use Modules\Protocol\app\Events\ProtocolReviewersAssigned;
 use Modules\Protocol\app\Events\ProtocolStatusChanged;
 use Modules\Protocol\app\Models\ProtocolDocumentRequirement;
@@ -22,10 +24,19 @@ use Modules\User\app\Models\Organ;
 use Modules\User\app\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 class ProtocolService
 {
-    public function submit(User $user, Topic $topic, UploadedFile $document, string $protocolType, array $requiredDocuments = []): Protocol
-    {
+    public function submit(
+        User $user,
+        Topic $topic,
+        UploadedFile $document,
+        string $protocolType,
+        array $requiredDocuments = [],
+        array $requiredCIBSDocuments = [],
+        array $otherDocuments = [],
+        array $otherDocumentNames = []
+    ): Protocol {
         $topic->loadMissing('student', 'supervisor.user', 'scientificArea.organ');
 
         if ((int) $topic->student_id !== (int) $user->id) {
@@ -66,12 +77,14 @@ class ProtocolService
             ], 409));
         }
 
-        return DB::transaction(function () use ($user, $topic, $document, $protocolType, $requiredDocuments, $existing) {
+        return DB::transaction(function () use ($user, $topic, $document, $protocolType, $requiredDocuments, $requiredCIBSDocuments, $otherDocuments, $otherDocumentNames, $existing) {
             $currentOrganId = $topic->scientificArea?->organ_id;
 
             $oldStatus = null;
             $oldSubmissionNumber = null;
             $previousRequiredDocuments = collect();
+            $previousCIBSDocuments = collect();
+            $previousOtherDocuments = collect();
             $isResubmission = (bool) $existing;
 
             if ($existing) {
@@ -80,8 +93,18 @@ class ProtocolService
                 $oldSubmissionNumber = (int) ($protocol->submission_number ?: 1);
                 $previousRequiredDocuments = $protocol->protocolDocumentRequirements()
                     ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
+                    ->where('is_optional', false)
                     ->get()
                     ->keyBy('document_key');
+                $previousCIBSDocuments = $protocol->protocolDocumentRequirements()
+                    ->where('required_for_organ', Protocol::ORGAN_COMITE_BIOETICA)
+                    ->get()
+                    ->keyBy('document_key');
+                $previousOtherDocuments = $protocol->protocolDocumentRequirements()
+                    ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
+                    ->where('is_optional', true)
+                    ->get()
+                    ->keyBy(fn(ProtocolDocumentRequirement $requirement) => mb_strtolower(trim($requirement->nome)));
                 $nextSubmission = ((int) ($protocol->submission_number ?: 1)) + 1;
 
                 Document::query()
@@ -180,6 +203,19 @@ class ProtocolService
                 $previousRequiredDocuments
             );
 
+            $storedCIBSDocuments = $this->storeCIBSDocuments(
+                $protocol,
+                $requiredCIBSDocuments,
+                $previousCIBSDocuments
+            );
+
+            $storedOtherDocuments = $this->storeOtherDocuments(
+                $protocol,
+                $otherDocuments,
+                $otherDocumentNames,
+                $previousOtherDocuments
+            );
+
     //  $createdDocument = Document::create([
     //     'submited_by' => $user->id,
     //     'protocol_id' => $protocol->id,
@@ -212,6 +248,8 @@ class ProtocolService
                     'previous_submission_number' => $oldSubmissionNumber,
                     'protocol_type' => $protocolType,
                     'required_documents' => $storedRequiredDocuments,
+                    'cibs_documents' => $storedCIBSDocuments,
+                    'other_documents' => $storedOtherDocuments,
                 ]
             );
 
@@ -279,6 +317,7 @@ class ProtocolService
         if ($previousRequiredDocuments->isNotEmpty()) {
             $protocol->protocolDocumentRequirements()
                 ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
+                ->where('is_optional', false)
                 ->delete();
         }
 
@@ -303,6 +342,175 @@ class ProtocolService
                 'document_name' => $preparedDocument['nome'],
                 'file_name' => $preparedDocument['file_name'],
                 'source' => $preparedDocument['source'],
+            ];
+        }
+
+        return $storedDocuments;
+    }
+
+    private function storeCIBSDocuments(Protocol $protocol, array $files, ?Collection $previousCIBSDocuments = null): array
+    {
+        $submissionNumber = (int) ($protocol->submission_number ?: 1);
+        $previousCIBSDocuments = $previousCIBSDocuments ?? collect();
+        $preparedDocuments = [];
+
+        foreach (ProtocolDocumentRequirement::CIBS_REQUIRED_DOCUMENTS as $key => $name) {
+            $file = $files[$key] ?? null;
+            $safeKey = preg_replace('/[^a-z0-9_\\-]/i', '_', $key);
+            $fileName = null;
+
+            if ($file instanceof UploadedFile) {
+                $extension = $file->getClientOriginalExtension() ?: 'pdf';
+                $path = $file->storeAs(
+                    "protocols/{$protocol->id}/required-documents/S{$submissionNumber}",
+                    "{$safeKey}.{$extension}",
+                    'public'
+                );
+                $fileName = $file->getClientOriginalName();
+            } else {
+                $previousRequirement = $previousCIBSDocuments->get($key);
+
+                if (! $previousRequirement || ! $previousRequirement->file_path) {
+                    throw new HttpResponseException(response()->json([
+                        'message' => "O anexo '{$name}' nao foi enviado nem encontrado na versao anterior.",
+                    ], 422));
+                }
+
+                $extension = pathinfo($previousRequirement->file_path, PATHINFO_EXTENSION) ?: 'pdf';
+                $path = "protocols/{$protocol->id}/required-documents/S{$submissionNumber}/{$safeKey}.{$extension}";
+                Storage::disk('public')->copy($previousRequirement->file_path, $path);
+                $fileName = $previousRequirement->file_name ?: basename($previousRequirement->file_path);
+            }
+
+            $preparedDocuments[] = [
+                'document_key' => $key,
+                'nome' => $name,
+                'file_path' => $path,
+                'file_name' => $fileName,
+            ];
+        }
+
+        if ($previousCIBSDocuments->isNotEmpty()) {
+            $protocol->protocolDocumentRequirements()
+                ->where('required_for_organ', Protocol::ORGAN_COMITE_BIOETICA)
+                ->delete();
+        }
+
+        $storedDocuments = [];
+
+        foreach ($preparedDocuments as $preparedDocument) {
+            $requirement = ProtocolDocumentRequirement::create([
+                'protocol_id' => $protocol->id,
+                'document_key' => $preparedDocument['document_key'],
+                'nome' => $preparedDocument['nome'],
+                'required_for_organ' => Protocol::ORGAN_COMITE_BIOETICA,
+                'file_path' => $preparedDocument['file_path'],
+                'file_name' => $preparedDocument['file_name'],
+                'enviado' => true,
+                'aprovado' => null,
+                'rejection_reason' => null,
+                'is_optional' => false,
+            ]);
+
+            $storedDocuments[] = [
+                'requirement_id' => $requirement->id,
+                'document_key' => $preparedDocument['document_key'],
+                'document_name' => $preparedDocument['nome'],
+                'file_name' => $preparedDocument['file_name'],
+                'source' => isset($preparedDocument['source']) ? $preparedDocument['source'] : 'uploaded',
+            ];
+        }
+
+        return $storedDocuments;
+    }
+
+    private function storeOtherDocuments(
+        Protocol $protocol,
+        array $otherDocuments,
+        array $otherDocumentNames,
+        ?Collection $previousOtherDocuments = null
+    ): array {
+        $submissionNumber = (int) ($protocol->submission_number ?: 1);
+        $previousOtherDocuments = $previousOtherDocuments ?? collect();
+        $storedDocuments = [];
+
+        $protocol->protocolDocumentRequirements()
+            ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
+            ->where('is_optional', true)
+            ->delete();
+
+        $index = 0;
+
+        foreach ($otherDocuments as $key => $file) {
+            if (! $file instanceof UploadedFile) {
+                continue;
+            }
+
+            $index++;
+            $nome = isset($otherDocumentNames[$key]) && trim((string) $otherDocumentNames[$key]) !== ''
+                ? trim((string) $otherDocumentNames[$key])
+                : 'Outro documento';
+            $safeKey = preg_replace('/[^a-z0-9_\\-]/i', '_', Str::slug($nome));
+            $documentKey = 'optional_' . ($safeKey ?: 'doc') . '_' . $index;
+            $extension = $file->getClientOriginalExtension() ?: 'pdf';
+            $path = $file->storeAs(
+                "protocols/{$protocol->id}/required-documents/S{$submissionNumber}",
+                "{$documentKey}.{$extension}",
+                'public'
+            );
+
+            $requirement = ProtocolDocumentRequirement::create([
+                'protocol_id' => $protocol->id,
+                'document_key' => $documentKey,
+                'nome' => $nome,
+                'required_for_organ' => Protocol::ORGAN_COMITE_CIENTIFICO,
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'enviado' => true,
+                'aprovado' => null,
+                'rejection_reason' => null,
+                'is_optional' => true,
+            ]);
+
+            $storedDocuments[] = [
+                'requirement_id' => $requirement->id,
+                'document_key' => $documentKey,
+                'document_name' => $nome,
+                'file_name' => $requirement->file_name,
+                'source' => 'uploaded',
+            ];
+
+            $previousOtherDocuments->forget(mb_strtolower(trim($nome)));
+        }
+
+        foreach ($previousOtherDocuments as $previous) {
+            if (! $previous->file_path) {
+                continue;
+            }
+
+            $extension = pathinfo($previous->file_path, PATHINFO_EXTENSION) ?: 'pdf';
+            $path = "protocols/{$protocol->id}/required-documents/S{$submissionNumber}/{$previous->document_key}.{$extension}";
+            Storage::disk('public')->copy($previous->file_path, $path);
+
+            $requirement = ProtocolDocumentRequirement::create([
+                'protocol_id' => $protocol->id,
+                'document_key' => $previous->document_key,
+                'nome' => $previous->nome,
+                'required_for_organ' => Protocol::ORGAN_COMITE_CIENTIFICO,
+                'file_path' => $path,
+                'file_name' => $previous->file_name,
+                'enviado' => true,
+                'aprovado' => null,
+                'rejection_reason' => null,
+                'is_optional' => true,
+            ]);
+
+            $storedDocuments[] = [
+                'requirement_id' => $requirement->id,
+                'document_key' => $previous->document_key,
+                'document_name' => $previous->nome,
+                'file_name' => $requirement->file_name,
+                'source' => 'reused',
             ];
         }
 
@@ -386,9 +594,20 @@ class ProtocolService
             $protocol = Protocol::query()->lockForUpdate()->findOrFail($requirement->protocol_id);
             $secretaryProfile = $secretary->secretaryProfile;
 
-            if (! $secretaryProfile || $secretaryProfile->organ?->type !== Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE) {
+            if (! $secretaryProfile) {
                 throw new HttpResponseException(response()->json([
-                    'message' => 'Apenas secretarias do Comite Cientifico podem validar anexos.',
+                    'message' => 'Apenas secretarias podem validar anexos.',
+                ], 403));
+            }
+
+            $isCIBS = $requirement->required_for_organ === Protocol::ORGAN_COMITE_BIOETICA;
+            $expectedOrganType = $isCIBS
+                ? Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE
+                : Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE;
+
+            if ($secretaryProfile->organ?->type !== $expectedOrganType) {
+                throw new HttpResponseException(response()->json([
+                    'message' => "Apenas a secretaria do {$this->organTypeLabel($expectedOrganType)} pode validar este anexo.",
                 ], 403));
             }
 
@@ -398,9 +617,14 @@ class ProtocolService
                 ], 403));
             }
 
-            if ($protocol->status !== Protocol::STATUS_DOCUMENTS_PENDING_CC) {
+            $expectedStatus = $isCIBS
+                ? Protocol::STATUS_DOCUMENTS_PENDING_CIBS
+                : Protocol::STATUS_DOCUMENTS_PENDING_CC;
+            $expectedOrganLabel = $isCIBS ? 'Comite de Bioetica' : 'Comite Cientifico';
+
+            if ($protocol->status !== $expectedStatus) {
                 throw new HttpResponseException(response()->json([
-                    'message' => 'O protocolo nao esta em validacao documental do Comite Cientifico.',
+                    'message' => "O protocolo nao esta em validacao documental do {$expectedOrganLabel}.",
                 ], 422));
             }
 
@@ -413,6 +637,12 @@ class ProtocolService
             if (! $approved && ! trim((string) $reason)) {
                 throw new HttpResponseException(response()->json([
                     'message' => 'Informe o motivo da reprovacao do anexo.',
+                ], 422));
+            }
+
+            if (! $approved && $requirement->document_key === ProtocolDocumentRequirement::CIBS_AUTO_DOCUMENT_KEY) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'O parecer assinado do Comite Cientifico apenas pode ser confirmado.',
                 ], 422));
             }
 
@@ -432,7 +662,7 @@ class ProtocolService
                 $secretaryProfile->organ_id,
                 $oldStatus,
                 $protocol->status,
-                ($approved ? 'Anexo aprovado: ' : 'Anexo reprovado: ') . $requirement->nome . '.',
+                ($approved ? 'Anexo aprovado: ' : 'Anexo nao aprovado: ') . $requirement->nome . '.',
                 [
                     'requirement_id' => $requirement->id,
                     'document_key' => $requirement->document_key,
@@ -442,9 +672,13 @@ class ProtocolService
                 ]
             );
 
-            if ($this->areRequiredDocumentsApproved($protocol, Protocol::ORGAN_COMITE_CIENTIFICO)) {
+            if ($this->areRequiredDocumentsApproved($protocol, $requirement->required_for_organ)) {
+                $nextStatus = $isCIBS
+                    ? Protocol::STATUS_PENDING_COMITE_BIOETICA
+                    : Protocol::STATUS_PENDING_COMITE_CIENTIFICO;
+
                 $protocol->update([
-                    'status' => Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
+                    'status' => $nextStatus,
                     'justification' => null,
                 ]);
 
@@ -455,7 +689,7 @@ class ProtocolService
                     $secretaryProfile->organ_id,
                     $oldStatus,
                     $protocol->status,
-                    'Todos os anexos obrigatorios do Comite Cientifico foram aprovados.',
+                    "Todos os anexos obrigatorios do {$expectedOrganLabel} foram aprovados.",
                 );
 
                 event(new ProtocolStatusChanged($protocol, $oldStatus, $protocol->status, $secretary));
@@ -475,15 +709,31 @@ class ProtocolService
 
     public function areRequiredDocumentsApproved(Protocol $protocol, string $organ): bool
     {
+        $baseCount = $organ === Protocol::ORGAN_COMITE_BIOETICA
+            ? count(ProtocolDocumentRequirement::CIBS_REQUIRED_DOCUMENTS)
+            : count(ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS);
+
         $requirements = $protocol->protocolDocumentRequirements()
             ->where('required_for_organ', $organ)
+            ->where('is_optional', false)
             ->get();
 
-        if ($requirements->count() < count(ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS)) {
+        $hasAutoParecer = $requirements->contains(
+            fn(ProtocolDocumentRequirement $requirement) => $requirement->document_key === ProtocolDocumentRequirement::CIBS_AUTO_DOCUMENT_KEY
+        );
+
+        $expectedCount = $baseCount + ($hasAutoParecer ? 1 : 0);
+
+        if ($requirements->count() < $expectedCount) {
             return false;
         }
 
         return $requirements->every(fn(ProtocolDocumentRequirement $requirement) => $requirement->aprovado === true);
+    }
+
+    public function areCIBSDocumentsApproved(Protocol $protocol): bool
+    {
+        return $this->areRequiredDocumentsApproved($protocol, Protocol::ORGAN_COMITE_BIOETICA);
     }
 
     public function listForStudent(User $user)
@@ -616,7 +866,7 @@ class ProtocolService
                 $newStatus,
                 $decision === 'approved'
                     ? 'Protocolo autorizado pelo supervisor e encaminhado ao Comite Cientifico.'
-                    : 'Protocolo rejeitado pelo supervisor.',
+                    : 'Protocolo nao aprovado pelo supervisor.',
                 [
                     'justification' => $decision === 'approved' ? null : $justification,
                     'submission_number' => (int) $protocol->submission_number,
@@ -684,10 +934,13 @@ class ProtocolService
                 Protocol::STATUS_DOCUMENTS_PENDING_CC,
                 Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
                 Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
+                Protocol::STATUS_PARECER_PENDING_CC_SIGNATURE,
             ],
             Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE => [
+                Protocol::STATUS_DOCUMENTS_PENDING_CIBS,
                 Protocol::STATUS_PENDING_COMITE_BIOETICA,
                 Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
+                Protocol::STATUS_PARECER_PENDING_CIBS_SIGNATURE,
             ],
         ];
 
@@ -733,7 +986,7 @@ class ProtocolService
                     ->orderBy('id'),
                 'opinions' => fn($q) => $q
                     ->when($formOrgan, fn($opinionQuery) => $opinionQuery->where('organ', $formOrgan))
-                    ->with(['issuedBy:id,name,email', 'evaluationForm:id,version'])
+                    ->with(['issuedBy:id,name,email', 'signedBy:id,name,email', 'evaluationForm:id,version'])
                     ->latest('issued_at'),
                 'reviewAssignments' => fn($q) => $q
                     ->where('organ_id', $organ->id)
@@ -754,6 +1007,174 @@ class ProtocolService
             $protocol->setAttribute('is_historical_for_organ', ! $isActionableInOrgan);
 
             return $protocol;
+        });
+    }
+
+    public function submitSignedParecer(
+        Protocol $protocol,
+        Opinion $opinion,
+        User $user,
+        UploadedFile $signedFile
+    ): Protocol {
+        $secretaryProfile = $user->secretaryProfile;
+        $organ = $secretaryProfile?->organ;
+
+        if (! $secretaryProfile || ! $organ) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'Apenas a secretaria pode assinar o parecer.',
+            ], 403));
+        }
+
+        if ((int) $protocol->current_organ_id !== (int) $organ->id) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'O protocolo nao esta atualmente neste orgao.',
+            ], 403));
+        }
+
+        $isCCSignature = $protocol->status === Protocol::STATUS_PARECER_PENDING_CC_SIGNATURE;
+        $isCIBSSignature = $protocol->status === Protocol::STATUS_PARECER_PENDING_CIBS_SIGNATURE;
+
+        if (! $isCCSignature && ! $isCIBSSignature) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'O protocolo nao esta aguardando assinatura de parecer.',
+            ], 422));
+        }
+
+        $expectedOrgan = $isCCSignature ? Protocol::ORGAN_COMITE_CIENTIFICO : Protocol::ORGAN_COMITE_BIOETICA;
+
+        if ((int) $opinion->protocol_id !== (int) $protocol->id || $opinion->organ !== $expectedOrgan) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'O parecer informado nao pertence a este protocolo/orgao.',
+            ], 422));
+        }
+
+        if ($opinion->isSigned()) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'Este parecer ja foi assinado.',
+            ], 409));
+        }
+
+        return DB::transaction(function () use ($protocol, $opinion, $user, $signedFile, $organ, $isCCSignature, $isCIBSSignature) {
+            $extension = $signedFile->getClientOriginalExtension() ?: 'pdf';
+            $path = $signedFile->storeAs(
+                "protocols/{$protocol->id}/opinions/signed",
+                "opinion_{$opinion->id}_signed.{$extension}",
+                'public'
+            );
+
+            $opinion->update([
+                'signed_document_path' => $path,
+                'signed_file_name' => $signedFile->getClientOriginalName(),
+                'signed_by' => $user->id,
+                'signed_at' => now(),
+            ]);
+
+            $oldStatus = $protocol->status;
+
+            app(ProtocolHistoryService::class)->record(
+                $protocol,
+                'parecer_signed',
+                $user,
+                $organ->id,
+                $oldStatus,
+                $oldStatus,
+                'Parecer assinado pela secretaria.',
+                ['opinion_id' => $opinion->id]
+            );
+
+            if ($isCCSignature) {
+                $nextOrgan = Organ::query()
+                    ->where('type', Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE)
+                    ->first();
+
+                if (! $nextOrgan) {
+                    throw new HttpResponseException(
+                        response()->json(['message' => 'Comite de Bioetica nao encontrado.'], 500)
+                    );
+                }
+
+                $protocol->update([
+                    'status' => Protocol::STATUS_DOCUMENTS_PENDING_CIBS,
+                    'current_organ_id' => $nextOrgan->id,
+                    'cb_version' => 1,
+                    'version' => Protocol::organVersionLabel(Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE, 1),
+                ]);
+
+                ProtocolDocumentRequirement::create([
+                    'protocol_id' => $protocol->id,
+                    'document_key' => ProtocolDocumentRequirement::CIBS_AUTO_DOCUMENT_KEY,
+                    'nome' => ProtocolDocumentRequirement::CIBS_AUTO_DOCUMENT_NAME,
+                    'required_for_organ' => Protocol::ORGAN_COMITE_BIOETICA,
+                    'file_path' => $path,
+                    'file_name' => $opinion->signed_file_name,
+                    'enviado' => true,
+                    'aprovado' => null,
+                    'rejection_reason' => null,
+                    'is_optional' => false,
+                ]);
+
+                app(ProtocolHistoryService::class)->record(
+                    $protocol,
+                    'forwarded',
+                    $user,
+                    $nextOrgan->id,
+                    $oldStatus,
+                    $protocol->status,
+                    'Protocolo encaminhado ao Comite de Bioetica.',
+                    ['to_organ_id' => $nextOrgan->id, 'from_organ_id' => $organ->id]
+                );
+
+                app(EvaluationService::class)->createForProtocol(
+                    $protocol->fresh(),
+                    [],
+                    $user,
+                    Protocol::ORGAN_COMITE_BIOETICA,
+                    EvaluationForm::FORM_TYPE_EVALUATION
+                );
+
+                app(ProtocolHistoryService::class)->record(
+                    $protocol,
+                    'parecer_sent_to_student',
+                    $user,
+                    $organ->id,
+                    $oldStatus,
+                    $protocol->status,
+                    'Parecer assinado do Comite Cientifico enviado ao estudante.',
+                    ['opinion_id' => $opinion->id]
+                );
+
+                event(new ProtocolStatusChanged($protocol, $oldStatus, $protocol->status, $user));
+            } else {
+                $protocol->loadMissing('topic');
+                $protocol->update([
+                    'status' => Protocol::STATUS_APPROVED_FINAL,
+                    'version' => 'APROVADO',
+                ]);
+
+                app(ProtocolHistoryService::class)->record(
+                    $protocol,
+                    'parecer_sent_to_student',
+                    $user,
+                    $organ->id,
+                    $oldStatus,
+                    $protocol->status,
+                    'Parecer assinado do Comite de Bioetica enviado ao estudante.',
+                    ['opinion_id' => $opinion->id]
+                );
+
+                event(new ProtocolStatusChanged($protocol, $oldStatus, $protocol->status, $user));
+
+                event(new ProtocolApproved(
+                    submissionId: $protocol->id,
+                    studentId: $protocol->topic?->student_id,
+                    supervisorId: $protocol->topic?->supervisor_id,
+                    title: $protocol->topic?->title,
+                    courseId: $protocol->topic?->course_id,
+                    scientificAreaId: $protocol->topic?->scientific_area_id,
+                ));
+            }
+
+            return $protocol->fresh();
         });
     }
 
@@ -1387,6 +1808,12 @@ class ProtocolService
                 'evaluation_form_download_url' => $latestOpinion->evaluation_form_id
                     ? url("api/v1/evaluation-forms/{$latestOpinion->evaluation_form_id}/download")
                     : null,
+                'is_signed' => $latestOpinion->isSigned(),
+                'signed_at' => $latestOpinion->signed_at,
+                'signed_by' => $latestOpinion->signedBy ? $latestOpinion->signedBy->name : null,
+                'signed_download_url' => $latestOpinion->isSigned()
+                    ? url("api/v1/opinions/{$latestOpinion->id}/signed-download")
+                    : null,
             ] : null,
         ];
     }
@@ -1398,7 +1825,7 @@ class ProtocolService
         }
 
         if ($latestAction === 'rejected' || $latestDecision === ReviewerEvaluation::DECISION_NOT_APPROVED) {
-            return "Reprovado no {$organName}";
+            return "Nao aprovado no {$organName}";
         }
 
         if ($latestAction) {
@@ -1418,10 +1845,10 @@ class ProtocolService
             'submitted' => 'Submetido',
             'resubmitted' => 'Ressubmetido',
             'supervisor_approved' => 'Autorizado pelo supervisor',
-            'supervisor_rejected' => 'Rejeitado pelo supervisor',
+            'supervisor_rejected' => 'Nao aprovado pelo supervisor',
             'required_document_uploaded' => 'Anexo reenviado',
             'required_document_approved' => 'Anexo aprovado',
-            'required_document_rejected' => 'Anexo reprovado',
+            'required_document_rejected' => 'Anexo nao aprovado',
             'required_documents_approved' => 'Anexos aprovados',
             'reviewers_assigned' => 'Revisores atribuídos',
             'reviewer_submitted_evaluation' => 'Revisor submeteu avaliação',
@@ -1431,8 +1858,10 @@ class ProtocolService
             'deliberation_started' => 'Deliberação iniciada',
             'deliberation_closed' => 'Deliberação encerrada',
             'approved' => 'Aprovado',
-            'rejected' => 'Reprovado',
+            'rejected' => 'Nao aprovado',
             'forwarded' => 'Encaminhado',
+            'parecer_signed' => 'Parecer assinado',
+            'parecer_sent_to_student' => 'Parecer assinado enviado ao estudante',
             default => $action,
         };
     }
@@ -1445,19 +1874,22 @@ class ProtocolService
 
         return match ($status) {
             Protocol::STATUS_PENDING_SUPERVISOR => 'Aguardando aprovacao do supervisor',
-            Protocol::STATUS_REJECTED_SUPERVISOR => 'Rejeitado pelo supervisor',
+            Protocol::STATUS_REJECTED_SUPERVISOR => 'Nao aprovado pelo supervisor',
             Protocol::STATUS_PENDING_NUCLEO => 'Encaminhado ao Nucleo Cientifico',
             Protocol::STATUS_IN_REVIEW_NUCLEO => 'Em avaliacao pelo Nucleo Cientifico',
             Protocol::STATUS_DOCUMENTS_PENDING_CC => 'Aguardando validacao dos anexos pelo Comite Cientifico',
+            Protocol::STATUS_DOCUMENTS_PENDING_CIBS => 'Aguardando validacao dos anexos pelo Comite de Bioetica',
             Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Encaminhado ao Comite Cientifico',
             Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO => 'Em avaliacao pelo Comite Cientifico',
+            Protocol::STATUS_PARECER_PENDING_CC_SIGNATURE => 'Parecer do Comite Cientifico a aguardar assinatura',
             Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Encaminhado ao Comite de Bioetica',
             Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA => 'Em avaliacao pelo Comite de Bioetica',
-            Protocol::STATUS_REJECTED_NUCLEO => 'Rejeitado pelo Nucleo Cientifico',
-            Protocol::STATUS_REJECTED_CC => 'Rejeitado pelo Comite Cientifico',
-            Protocol::STATUS_REJECTED_BIOETICA => 'Rejeitado pelo Comite de Bioetica',
+            Protocol::STATUS_PARECER_PENDING_CIBS_SIGNATURE => 'Parecer do Comite de Bioetica a aguardar assinatura',
+            Protocol::STATUS_REJECTED_NUCLEO => 'Nao aprovado pelo Nucleo Cientifico',
+            Protocol::STATUS_REJECTED_CC => 'Nao aprovado pelo Comite Cientifico',
+            Protocol::STATUS_REJECTED_BIOETICA => 'Nao aprovado pelo Comite de Bioetica',
             Protocol::STATUS_APPROVED_FINAL => 'Aprovado',
-            Protocol::STATUS_REJECTED_FINAL => 'Rejeitado',
+            Protocol::STATUS_REJECTED_FINAL => 'Nao aprovado',
             default => $status,
         };
     }

@@ -56,8 +56,20 @@ async function readError(response: Response, fallbackMessage: string): Promise<H
   return err;
 }
 
+const BACKEND_HOSTNAMES = ['localhost', '127.0.0.1', '0.0.0.0', 'host.docker.internal'];
+
 function toApiUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url);
+      if (BACKEND_HOSTNAMES.includes(parsed.hostname)) {
+        return `${parsed.pathname}${parsed.search}`;
+      }
+    } catch {
+      return url;
+    }
+    return url;
+  }
   return `${API_BASE_URL}${url}`;
 }
 

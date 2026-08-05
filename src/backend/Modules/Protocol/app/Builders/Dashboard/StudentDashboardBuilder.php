@@ -20,6 +20,7 @@ class StudentDashboardBuilder implements DashboardBuilder
         Protocol::STATUS_IN_REVIEW_NUCLEO         => 'Em avaliação — Núcleo Científico',
         Protocol::STATUS_PENDING_COMITE_CIENTIFICO    => 'Encaminhado ao Comité Científico',
         Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO  => 'Em avaliação — Comité Científico',
+        Protocol::STATUS_DOCUMENTS_PENDING_CIBS        => 'Validação documental — Comité de Bioética',
         Protocol::STATUS_PENDING_COMITE_BIOETICA      => 'Encaminhado ao Comité de Bioética',
         Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA    => 'Em avaliação — Comité de Bioética',
         Protocol::STATUS_APPROVED_FINAL           => 'Aprovado',

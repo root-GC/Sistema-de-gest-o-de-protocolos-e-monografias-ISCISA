@@ -616,7 +616,7 @@ export function ProtocolWorkflowWidget({ data }: WidgetProps) {
                       }}>
                         {step.status === 'completed' ? 'Concluído' :
                          step.status === 'active' ? 'Em Andamento' :
-                         step.status === 'rejected' ? 'Rejeitado' : 'Pendente'}
+                         step.status === 'rejected' ? 'Não Aprovado' : 'Pendente'}
                       </span>
                     </div>
 
@@ -699,7 +699,7 @@ export function ProtocolWorkflowWidget({ data }: WidgetProps) {
                                     'var(--on-surface-variant)'
                             }}>
                               {doc.status === 'approved' ? 'Aprovado' :
-                               doc.status === 'rejected' ? 'Rejeitado' : 'Pendente'}
+                               doc.status === 'rejected' ? 'Não Aprovado' : 'Pendente'}
                             </span>
                           </div>
                         ))}

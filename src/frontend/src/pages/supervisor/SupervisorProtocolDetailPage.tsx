@@ -346,7 +346,7 @@ export default function SupervisorProtocolDetailPage() {
               >
                 <div>
                   <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>
-                    {opinion.organ} • {opinion.decision === 'approved' ? 'Aprovado' : 'Reprovado'}
+                    {opinion.organ} • {opinion.decision === 'approved' ? 'Aprovado' : 'Não Aprovado'}
                   </p>
                   <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
                     Versão {opinion.version}
@@ -418,7 +418,7 @@ export default function SupervisorProtocolDetailPage() {
               const justification = prompt('Justificação da rejeição (opcional):')
               try {
                 await protocolService.rejectBySupervisor(protocol.id, justification || undefined)
-                alert('Protocolo rejeitado.')
+                alert('Protocolo não aprovado.')
                 load()
               } catch (e) {
                 alert((e as Error).message)
@@ -443,7 +443,7 @@ export default function SupervisorProtocolDetailPage() {
             }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>cancel</span>
-            Rejeitar / Devolver
+            Não Aprovar / Devolver
           </button>
         </div>
       )}

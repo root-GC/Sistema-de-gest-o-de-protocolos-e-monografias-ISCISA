@@ -140,6 +140,7 @@ class EvaluationFormController extends Controller
 
             $messages = [
                 Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
+                Protocol::STATUS_DOCUMENTS_PENDING_CIBS => 'Protocolo aprovado. Aguardando validação dos anexos pelo Comité de Bioética.',
                 Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
                 Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
                 Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado pelo Núcleo Científico.',
@@ -273,7 +274,8 @@ class EvaluationFormController extends Controller
 
         $messages = [
             Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
-            Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
+            Protocol::STATUS_DOCUMENTS_PENDING_CIBS => 'Protocolo aprovado. Aguardando validação dos anexos pelo Comité de Bioética.',
+                Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
             Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
             Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado pelo Núcleo Científico.',
             Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado pelo Comité Científico.',
@@ -317,7 +319,8 @@ class EvaluationFormController extends Controller
         $protocol = $result['evaluation_form']->protocol;
         $messages = [
             Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
-            Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
+            Protocol::STATUS_DOCUMENTS_PENDING_CIBS => 'Protocolo aprovado. Aguardando validação dos anexos pelo Comité de Bioética.',
+                Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
             Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
             Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado.',
             Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado.',
@@ -372,6 +375,34 @@ class EvaluationFormController extends Controller
         }
 
         return Storage::disk('public')->download($opinion->document_path, $fileName, $headers);
+    }
+
+    public function downloadSignedOpinion(Request $request, Opinion $opinion)
+    {
+        $user = $request->user();
+        $opinion->loadMissing('protocol');
+        $protocol = $opinion->protocol;
+
+        if (! $protocol || ! $this->canAccessProtocolDocument($user, $protocol)) {
+            abort(403);
+        }
+
+        if (! $opinion->isSigned() || ! Storage::disk('public')->exists($opinion->signed_document_path)) {
+            abort(404);
+        }
+
+        $fileName = $opinion->signed_file_name ?: basename($opinion->signed_document_path);
+        $inline = $request->query('inline') === '1';
+        $headers = [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment') . '; filename="' . $fileName . '"',
+        ];
+
+        if ($inline) {
+            return Storage::disk('public')->response($opinion->signed_document_path, $fileName, $headers);
+        }
+
+        return Storage::disk('public')->download($opinion->signed_document_path, $fileName, $headers);
     }
 
     public function downloadEvaluationForm(
@@ -447,7 +478,7 @@ class EvaluationFormController extends Controller
 
         $opinions = Opinion::query()
             ->where('protocol_id', $protocol->id)
-            ->with(['issuedBy:id,name,email', 'evaluationForm:id,version'])
+            ->with(['issuedBy:id,name,email', 'signedBy:id,name,email', 'evaluationForm:id,version'])
             ->latest('issued_at')
             ->get()
             ->map(fn($o) => [
@@ -465,6 +496,15 @@ class EvaluationFormController extends Controller
                 'download_url' => url("api/v1/opinions/{$o->id}/download"),
                 'evaluation_form_download_url' => $o->evaluation_form_id
                     ? url("api/v1/evaluation-forms/{$o->evaluation_form_id}/download")
+                    : null,
+                'is_signed' => $o->isSigned(),
+                'signed_at' => $o->signed_at,
+                'signed_by' => $o->signedBy ? [
+                    'id' => $o->signedBy->id,
+                    'name' => $o->signedBy->name,
+                ] : null,
+                'signed_download_url' => $o->isSigned()
+                    ? url("api/v1/opinions/{$o->id}/signed-download")
                     : null,
             ]);
 

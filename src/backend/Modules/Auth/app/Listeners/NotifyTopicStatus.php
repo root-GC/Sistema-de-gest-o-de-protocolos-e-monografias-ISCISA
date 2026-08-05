@@ -20,7 +20,7 @@ class NotifyTopicStatus
                 Topic::STATUS_PENDING_NUCLEO => $this->notifyStudentApproved($event),
                 Topic::STATUS_REJECTED_SUPERVISOR => $this->notifyStudentRejected($event),
                 Topic::STATUS_APPROVED_NUCLEO => $this->notifyStudentNucleoDecision($event, 'aprovado'),
-                Topic::STATUS_REJECTED_NUCLEO => $this->notifyStudentNucleoDecision($event, 'rejeitado'),
+                Topic::STATUS_REJECTED_NUCLEO => $this->notifyStudentNucleoDecision($event, 'nao aprovado'),
                 default => null,
             };
         } catch (\Throwable $e) {
@@ -94,7 +94,7 @@ class NotifyTopicStatus
         $html = View::make('auth::emails.topic-student-notification', [
             'name' => $student->name,
             'topicTitle' => $topic->title,
-            'decision' => 'rejeitado',
+            'decision' => 'nao aprovado',
             'supervisorName' => $topic->supervisor?->user?->name ?? 'Supervisor',
             'nextStep' => $topic->supervisor_comment
                 ? 'Justificacao do supervisor: ' . $topic->supervisor_comment
@@ -104,7 +104,7 @@ class NotifyTopicStatus
 
         $this->mailer->send(
             ['email' => $student->email, 'name' => $student->name],
-            'Tema rejeitado pelo supervisor — SGPMC ISCISA',
+            'Tema nao aprovado pelo supervisor — SGPMC ISCISA',
             $html
         );
     }
@@ -125,7 +125,7 @@ class NotifyTopicStatus
             'supervisorName' => '',
             'nextStep' => $decision === 'aprovado'
                 ? 'O Nucleo Cientifico aprovou o seu tema. Pode agora submeter o protocolo.'
-                : 'O Nucleo Cientifico rejeitou o seu tema. Contacte a secretaria para mais informacoes.',
+                : 'O Nucleo Cientifico nao aprovou o seu tema. Contacte a secretaria para mais informacoes.',
             'link' => rtrim(config('app.frontend_url'), '/') . '/student/topics/' . $topic->id,
         ])->render();
 

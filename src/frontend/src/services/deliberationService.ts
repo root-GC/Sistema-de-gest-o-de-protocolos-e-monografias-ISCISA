@@ -52,7 +52,7 @@ export const deliberationService = {
    * — candidatos a entrar numa reunião de deliberação.
    * 
    * FLUXO: Se ambos revisores aprovam → auto-approve.
-   *        Se algum revisor rejeita → deliberation_pending → reunião obrigatória.
+   *        Se algum revisor não aprova → deliberation_pending → reunião obrigatória.
    * 
    * Usa a rota existente da secretaria e filtra por status.
    */
@@ -149,7 +149,7 @@ export const deliberationService = {
 
   /**
    * Submete a decisão da deliberação (qualquer um dos dois revisores pode fazê-lo).
-   * Gera parecer PDF e avança/rejeita o protocolo automaticamente no backend.
+   * Gera parecer PDF e avança/não aprova o protocolo automaticamente no backend.
    */
   submitDeliberation: (
     deliberationFormId: number,
