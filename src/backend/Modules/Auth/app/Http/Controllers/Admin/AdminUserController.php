@@ -89,8 +89,24 @@ class AdminUserController extends Controller
             ], 403);
         }
 
-        if ($targetOrgan->adminProfiles()->exists()) {
-            return response()->json(['message' => 'Este órgão já tem um executivo atribuído.'], 422);
+        // if ($targetOrgan->adminProfiles()->exists()) {
+        //     return response()->json(['message' => 'Este órgão já tem um executivo atribuído.'], 422);
+        // }
+
+        // Verifica se já existe um executivo ativo neste órgão.
+        // Executivos inativos ou eliminados (deleted_at) permitem nova criação.
+        $hasActiveExecutive = $targetOrgan
+            ->adminProfiles()
+            ->whereHas('user', function ($query) {
+                $query->where('status', 'active')
+                    ->whereNull('deleted_at');
+            })
+            ->exists();
+
+        if ($hasActiveExecutive) {
+            return response()->json([
+                'message' => 'Este órgão já possui um executivo ativo.',
+            ], 422);
         }
 
         try {

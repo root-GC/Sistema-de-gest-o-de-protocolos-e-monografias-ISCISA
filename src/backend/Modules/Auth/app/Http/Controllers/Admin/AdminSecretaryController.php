@@ -45,10 +45,14 @@ class AdminSecretaryController extends Controller
     {
         $organ = $this->actorOrgan($request);
 
-        $users = User::with('secretaryProfile')
-            ->whereHas('roles', fn ($q) => $q->where('name', 'secretary'))
-            ->whereHas('secretaryProfile', fn ($q) => $q->where('organ_id', $organ->id))
-            ->get();
+        $users = User::with([
+            'roles',
+            'secretaryProfile.organ',
+            'secretaryProfile.scientificArea',
+        ])
+        ->whereHas('roles', fn ($q) => $q->where('name', 'secretary'))
+        ->whereHas('secretaryProfile', fn ($q) => $q->where('organ_id', $organ->id))
+        ->get();
 
         return response()->json(['data' => $users]);
     }
@@ -91,4 +95,46 @@ class AdminSecretaryController extends Controller
 
         return $secretary;
     }
+
+    public function update(Request $request, int $id)
+{
+    $organ = $this->actorOrgan($request);
+
+    $secretary = $this->findOwnSecretary($id, $organ->id);
+
+    $data = $request->validate([
+        'scientific_area_id' => ['nullable', 'integer', 'exists:scientific_areas,id'],
+        'office' => ['nullable', 'string', 'max:150'],
+    ]);
+
+    $secretary->secretaryProfile()->update($data);
+
+    return response()->json([
+        'message' => 'Secretária atualizada.',
+        'user' => $secretary->fresh()->load(
+            'secretaryProfile.organ',
+            'secretaryProfile.scientificArea',
+            'roles'
+        ),
+    ]);
+}
+
+public function destroy(Request $request, int $id)
+{
+    $organ = $this->actorOrgan($request);
+
+    $secretary = $this->findOwnSecretary($id, $organ->id);
+
+    if ($secretary->id === $request->user()->id) {
+        return response()->json([
+            'message' => 'Não pode eliminar a sua própria conta.'
+        ], 422);
+    }
+
+    $secretary->delete();
+
+    return response()->json([
+        'message' => 'Secretária eliminada com sucesso.'
+    ]);
+}
 }

@@ -61,13 +61,53 @@ class AdminCoordinatorController extends Controller
     }
 
     public function index(Request $request)
-    {
-        $this->assertDirecaoCientifica($request);
+{
+    $this->assertDirecaoCientifica($request);
 
-        $users = User::with('coordinatorProfile.course.scientificArea')
-            ->whereHas('roles', fn ($q) => $q->where('name', 'coordinator'))
-            ->get();
+    $users = User::with([
+        'roles',
+        'coordinatorProfile.course.scientificArea',
+    ])
+    ->whereHas('roles', fn ($q) => $q->where('name', 'coordinator'))
+    ->get();
 
-        return response()->json(['data' => $users]);
-    }
+    return response()->json([
+        'data' => $users->map(function (User $user) {
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'status' => $user->status,
+                'roles' => $user->roles,
+
+                'coordinator_profile' => $user->coordinatorProfile ? [
+                    'id' => $user->coordinatorProfile->id,
+                    'office' => $user->coordinatorProfile->office,
+
+                    'scientific_area_id' => $user->coordinatorProfile->scientific_area_id,
+                    'scientific_area' => $user->coordinatorProfile->course?->scientificArea,
+
+                    'course_id' => $user->coordinatorProfile->course_id,
+                    'course' => $user->coordinatorProfile->course,
+                ] : null,
+            ];
+        }),
+    ]);
+}
+
+public function destroy(Request $request, int $id)
+{
+    $this->assertDirecaoCientifica($request);
+
+    $user = User::findOrFail($id);
+
+    abort_unless($user->hasRole('coordinator'), 404);
+
+    $user->delete();
+
+    return response()->json([
+        'message' => 'Coordenador eliminado com sucesso.'
+    ]);
+}
+
 }

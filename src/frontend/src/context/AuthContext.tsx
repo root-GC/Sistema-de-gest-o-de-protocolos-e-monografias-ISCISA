@@ -63,6 +63,7 @@ export interface SecretaryProfile {
 export interface AdminProfile {
   id: number;
   access_scope?: string;
+  organ_id?: number;  // 🆕 ADICIONADO
   organ: OrganInfo | null;
 }
 
@@ -127,10 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<UserPayload['profiles']>({});
   const [activeRole, setActiveRole] = useState<Role | null>(null);
-  const [loading, setLoading] = useState(true);  // ✅ Começa como true
+  const [loading, setLoading] = useState(true);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-  // 🆕 Hidratar sessão ao carregar - SINCRONIZADO
+  // Hidratar sessão ao carregar
   useEffect(() => {
     const token = localStorage.getItem('sgpmc_token');
     const saved = localStorage.getItem('sgpmc_user');
@@ -145,11 +146,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clear();
       }
     } else {
-      // Se não tem token, limpa tudo
       clear();
     }
     
-    // ✅ Só termina o loading DEPOIS de processar
     setLoading(false);
   }, []);
 
@@ -172,11 +171,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissions(data.permissions ?? []);
     setProfiles(data.profiles ?? {});
 
-    // Define o activeRole
     const savedRole = localStorage.getItem('sgpmc_active_role') as Role | null;
     const firstRole = data.roles?.[0] ?? null;
     
-    // Usa o role salvo se existir nos roles do usuário
     const roleToSet = (savedRole && data.roles?.includes(savedRole)) 
       ? savedRole 
       : firstRole;
@@ -184,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveRole(roleToSet);
     
     console.log('✅ Active role:', roleToSet);
+    console.log('👤 Admin profile:', data.profiles?.admin);
   }
 
   const login = useCallback(async (email: string, password: string): Promise<UserPayload> => {
@@ -193,14 +191,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('🔑 Login bem-sucedido:', userData);
 
-      // Persiste os dados
       localStorage.setItem('sgpmc_token', token);
       localStorage.setItem('sgpmc_user', JSON.stringify(userData));
 
-      // Hidrata o estado
       hydrate(userData);
 
-      // Pequeno delay para garantir que o React processou
       await new Promise<void>(resolve => {
         setTimeout(() => resolve(), 50);
       });
@@ -295,35 +290,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return hasAllPermissions(requiredPermissions);
   }, [hasAnyPermission, hasAllPermissions]);
 
-  // 🆕 Pega o perfil ativo baseado no activeRole
   const activeProfile = activeRole ? (profiles[activeRole] ?? null) : null;
 
-  // ✅ Só está carregando se loading OU authenticating
   const isLoading = loading || isAuthenticating;
 
-  console.log('📊 Auth State:', {
-    user: user?.name,
-    activeRole,
-    rolesCount: roles.length,
-    permissionsCount: permissions.length,
-    profilesCount: Object.keys(profiles).length,
-    loading,
-    isAuthenticating,
-    isLoading
-  });
-
   const value = useMemo(() => ({
-  user, roles, permissions, profiles, activeRole, activeProfile,
-  loading: isLoading, login, completeAuth, logout, switchRole,
-  refresh, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget,
-}), [user, roles, permissions, profiles, activeRole, activeProfile, isLoading, login, completeAuth, logout, switchRole, refresh, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget]);
+    user, roles, permissions, profiles, activeRole, activeProfile,
+    loading: isLoading, login, completeAuth, logout, switchRole,
+    refresh, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget,
+  }), [user, roles, permissions, profiles, activeRole, activeProfile, isLoading, login, completeAuth, logout, switchRole, refresh, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget]);
 
-
-return (
-  <AuthContext.Provider value={value}>
-    {children}
-  </AuthContext.Provider>
-);
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = (): AuthContextType => {

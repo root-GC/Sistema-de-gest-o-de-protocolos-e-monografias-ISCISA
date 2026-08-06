@@ -199,4 +199,5 @@ export const generalAdminService = {
   // ── Organs (para dropdowns) ───────────────────────────────
   listOrgans: () =>
     req('GET', `${BASE}/organs`) as Promise<{ data: Organ[] }>,
+
 }

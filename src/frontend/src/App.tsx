@@ -35,6 +35,7 @@ const ReviewerMeetingsPage = lazy(() => import('./pages/teacher/ReviewerMeetings
 const ReviewerMeetingsListPage = lazy(() => import('./pages/teacher/ReviewerMeetingsListPage'))
 const FinalDecisionPage = lazy(() => import('./pages/teacher/FinalDecisionPage'))
 const FinalDecisionDetailPage = lazy(() => import('./pages/teacher/FinalDecisionDetailPage'))
+
 // Coordinator
 const AssignPage = lazy(() => import('./pages/coordinator/AssignPage'))
 const ProtocolsOverviewPage = lazy(() => import('./pages/coordinator/ProtocolsOverviewPage'))
@@ -46,8 +47,8 @@ const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtoc
 const AgendaPage = lazy(() => import('./pages/shared/AgendaPage'))
 
 // 🆕 NOVAS PÁGINAS DA SECRETÁRIA
-const MeetingPage = lazy(() => import('./pages/shared/secretary/MeetingPage'))          // Marcar Reunião (substitui Harmonização)
-const SpreadsheetPage = lazy(() => import('./pages/shared/secretary/SpreadsheetPage'))      // Planilha de Protocolos (substitui Revisões Concluídas)
+const MeetingPage = lazy(() => import('./pages/shared/secretary/MeetingPage'))
+const SpreadsheetPage = lazy(() => import('./pages/shared/secretary/SpreadsheetPage'))
 
 // Admin
 const AdminUsersPage = lazy(() => import('./pages/system-admin/AdminUsersPage'))
@@ -62,23 +63,13 @@ const CoursesManagementPage = lazy(() => import('./pages/general-admin/CoursesMa
 // Organ President
 const OrganPresidentDashboard = lazy(() => import('./pages/organ-president/OrganPresidentDashboard'))
 const ManageOrganMembersPage = lazy(() => import('./pages/organ-president/ManageOrganMembersPage'))
+const InviteReviewersPage = lazy(() => import('./pages/organ-president/InviteReviewersPage')) // 🆕 NOVA IMPORTAÇÃO
 
 // Páginas públicas
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const VerifyOtpPage = lazy(() => import('./pages/VerifyOtpPage'))
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
-
-// teste onlyoffice
-//const TestOnlyOfficePage  = lazy(() => import('./pages/TestOnlyOfficePage'))
-
-// 🆕 Loader melhorado
-// const PageLoader = () => (
-//   <div className="page-loader">
-//     <div className="page-loader__spinner" />
-//     <p className="page-loader__text">A carregar...</p>
-//   </div>
-// )
 
 export default function App() {
   return (
@@ -87,9 +78,6 @@ export default function App() {
         <GlobalLoader />
 
         <Routes>
-          {/* Onlyoffice */}
-          {/* <Route path="/teste-office" element={<TestOnlyOfficePage />} /> */}
-
           {/* ── Públicas ─────────────────────────────────────── */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/403" element={<Page403 />} />
@@ -141,10 +129,9 @@ export default function App() {
                 <Route path="/reviewer/meetings/:protocolId" element={<ReviewerMeetingsPage />} />
                 <Route path="/reviewer/meetings" element={<ReviewerMeetingsListPage />} />
 
-                {/* Decisões Pendentes (nova aba) */}
+                {/* Decisões Pendentes */}
                 <Route path="/reviewer/final-decisions/:formId" element={<FinalDecisionDetailPage />} />
                 <Route path="/reviewer/final-decisions" element={<FinalDecisionPage />} />
-
 
                 {/* Reviews - específicas primeiro */}
                 <Route path="/reviews/protocols/:protocolId" element={<EvaluationPage />} />
@@ -174,11 +161,7 @@ export default function App() {
               {/* ── Secretary ───────────────────────────────── */}
               <Route element={<ProtectedRoute permission="protocol.triage" />}>
                 <Route path="/secretary/protocols" element={<SecretaryProtocolsPage />} />
-
-                {/* 🆕 Marcar Reunião (substitui Harmonização) */}
                 <Route path="/secretary/meeting" element={<MeetingPage />} />
-
-                {/* 🆕 Planilha de Protocolos (substitui Revisões Concluídas) */}
                 <Route path="/secretary/spreadsheet" element={<SpreadsheetPage />} />
               </Route>
 
@@ -204,6 +187,7 @@ export default function App() {
               <Route element={<ProtectedRoute permission="admin.organs" />}>
                 <Route path="/organ-president" element={<OrganPresidentDashboard />} />
                 <Route path="/organ-president/members" element={<ManageOrganMembersPage />} />
+                <Route path="/organ-president/reviewers" element={<InviteReviewersPage />} /> {/* 🆕 NOVA ROTA */}
               </Route>
 
             </Route>

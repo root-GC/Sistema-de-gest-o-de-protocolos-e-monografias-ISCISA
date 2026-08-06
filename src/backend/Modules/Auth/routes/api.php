@@ -99,10 +99,13 @@ Route::prefix('api/v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('coordinators', [AdminCoordinatorController::class, 'index']);
     Route::post('coordinators', [AdminCoordinatorController::class, 'store']);
     Route::put('coordinators/{id}', [AdminCoordinatorController::class, 'update']);
+    Route::delete('coordinators/{id}', [AdminCoordinatorController::class, 'destroy']);
 
     // 🆕 Secretárias — cada executivo gere as do seu próprio órgão (gate no controller)
     Route::get('secretaries', [AdminSecretaryController::class, 'index']);
     Route::post('secretaries', [AdminSecretaryController::class, 'store']);
+    Route::put('secretaries/{id}', [AdminSecretaryController::class, 'update']);
+    Route::delete('secretaries/{id}', [AdminSecretaryController::class, 'destroy']);
     Route::post('secretaries/{id}/permissions', [AdminSecretaryController::class, 'grantPermission']);
     Route::delete('secretaries/{id}/permissions/{code}', [AdminSecretaryController::class, 'revokePermission']);
 
