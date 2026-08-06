@@ -44,10 +44,20 @@ export default function CoursesManagementPage() {
         generalAdminService.listAllAreas(),
         generalAdminService.listOrgans(),
       ])
-      setCourses(coursesData.data || [])
-      setAreas(areasData.data || [])
-      setOrgans(organsData.data || [])
+      
+      // Garantir que os dados sejam arrays
+      const coursesArray = Array.isArray(coursesData?.data) ? coursesData.data : 
+                           Array.isArray(coursesData) ? coursesData : []
+      const areasArray = Array.isArray(areasData?.data) ? areasData.data : 
+                         Array.isArray(areasData) ? areasData : []
+      const organsArray = Array.isArray(organsData?.data) ? organsData.data : 
+                          Array.isArray(organsData) ? organsData : []
+      
+      setCourses(coursesArray)
+      setAreas(areasArray)
+      setOrgans(organsArray)
     } catch (e) {
+      console.error('Erro ao carregar dados:', e)
       // Mock data
       setOrgans([
         { id: 1, name: 'Núcleo Científico', type: 'nucleus', description: 'Ponto de entrada dos protocolos' },
@@ -166,8 +176,13 @@ export default function CoursesManagementPage() {
     }
   }
 
-  // Filtros
-  const filteredCourses = courses.filter(c => {
+  // Função auxiliar para garantir que estamos trabalhando com um array
+  const safeArray = <T,>(data: T[]): T[] => {
+    return Array.isArray(data) ? data : []
+  }
+
+  // Filtros (com proteção adicional)
+  const filteredCourses = safeArray(courses).filter(c => {
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
@@ -177,7 +192,7 @@ export default function CoursesManagementPage() {
     )
   })
 
-  const filteredAreas = areas.filter(a => {
+  const filteredAreas = safeArray(areas).filter(a => {
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
@@ -354,9 +369,9 @@ export default function CoursesManagementPage() {
                   {area.description && (
                     <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '4px 0 0' }}>{area.description}</p>
                   )}
-                  {/* Contagem de cursos */}
+                  {/* Contagem de cursos (com proteção) */}
                   <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
-                    {courses.filter(c => c.scientific_area_id === area.id).length} curso{courses.filter(c => c.scientific_area_id === area.id).length !== 1 ? 's' : ''} associado{courses.filter(c => c.scientific_area_id === area.id).length !== 1 ? 's' : ''}
+                    {safeArray(courses).filter(c => c.scientific_area_id === area.id).length} curso{safeArray(courses).filter(c => c.scientific_area_id === area.id).length !== 1 ? 's' : ''} associado{safeArray(courses).filter(c => c.scientific_area_id === area.id).length !== 1 ? 's' : ''}
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-1)' }}>

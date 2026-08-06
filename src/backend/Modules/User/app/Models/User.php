@@ -12,6 +12,7 @@ use Modules\User\app\Models\Permission;
 use Modules\User\app\Models\Role;
 use Modules\User\app\Models\TeacherProfile;
 use Modules\User\app\Models\StudentProfile;
+use Modules\User\Database\Factories\UserFactory;
 use Modules\Organization\app\Models\AdminProfile;
 use Modules\Organization\app\Models\CoordinatorProfile;
 use Modules\Organization\app\Models\SecretaryProfile;

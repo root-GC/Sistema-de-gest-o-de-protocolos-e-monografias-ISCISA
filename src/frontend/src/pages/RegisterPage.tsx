@@ -9,7 +9,23 @@ import '../styles/global.css'
 
 type UserType = 'student' | 'teacher'
 
-interface Option { id: number; name: string }
+interface Option { 
+  id: number
+  name: string 
+}
+
+interface ScientificAreaOption extends Option {
+  organ_id?: number
+  organ?: {
+    id: number
+    name: string
+    type: string
+  }
+}
+
+interface SupervisorOption extends Option {
+  academic_degree?: string
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -29,11 +45,10 @@ export default function RegisterPage() {
   // Docente
   const [scientificAreaId, setScientificAreaId] = useState('')
   const [academicDegree, setAcademicDegree] = useState('')
-  const [department, setDepartment] = useState('')
 
   const [courses, setCourses] = useState<Option[]>([])
-  const [scientificAreas, setScientificAreas] = useState<Option[]>([])
-  const [supervisors, setSupervisors] = useState<Option[]>([])
+  const [scientificAreas, setScientificAreas] = useState<ScientificAreaOption[]>([])
+  const [supervisors, setSupervisors] = useState<SupervisorOption[]>([])
 
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -82,10 +97,15 @@ export default function RegisterPage() {
         payload.course_id = Number(courseId)
         payload.supervisor_id = Number(supervisorId)
         payload.student_number = studentNumber
+        
+        // O órgão será determinado automaticamente pelo backend
+        // baseado na área científica do curso
       } else {
         payload.scientific_area_id = Number(scientificAreaId)
         payload.academic_degree = academicDegree
-        if (department) payload.department = department
+        
+        // O órgão será determinado automaticamente pelo backend
+        // baseado na área científica selecionada
       }
 
       const res = await authService.register(payload as any)
@@ -488,7 +508,11 @@ export default function RegisterPage() {
                         disabled={loading}
                       >
                         <option value="">Seleccione o supervisor</option>
-                        {supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        {supervisors.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}{s.academic_degree ? ` (${s.academic_degree})` : ''}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -504,8 +528,20 @@ export default function RegisterPage() {
                         disabled={loading}
                       >
                         <option value="">Seleccione a área</option>
-                        {scientificAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        {scientificAreas.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                            {a.organ?.name && ` (${a.organ.name})`}
+                          </option>
+                        ))}
                       </select>
+                      <span style={{ 
+                        fontSize: 'var(--label-sm)', 
+                        color: 'var(--on-surface-variant)',
+                        marginTop: '2px'
+                      }}>
+                        A área científica determina automaticamente o teu órgão (Núcleo Científico)
+                      </span>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -523,28 +559,12 @@ export default function RegisterPage() {
                         <option value="doutoramento">Doutoramento</option>
                       </select>
                     </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <label style={labelStyle}>Departamento (opcional)</label>
-                      <input
-                        style={inputStyle}
-                        placeholder="Ex: Departamento de Enfermagem"
-                        value={department}
-                        onChange={e => setDepartment(e.target.value)}
-                        disabled={loading}
-                        onFocus={e => {
-                          e.target.style.borderColor = 'var(--primary)'
-                          e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
-                        }}
-                        onBlur={e => {
-                          e.target.style.borderColor = 'var(--outline-variant)'
-                          e.target.style.boxShadow = 'none'
-                        }}
-                      />
-                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Info sobre o órgão */}
+             
 
               {/* Botão Submeter */}
               <button

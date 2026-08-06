@@ -1,45 +1,87 @@
 // src/pages/organ-president/OrganPresidentDashboard.tsx
 import { useEffect, useState } from 'react'
-import type { OrganInfo, OrganStats } from '../../services/organPresidentService'
+import { useAuth } from '../../context/AuthContext'
+import { adminService } from '../../services/adminService'
+import type { OrganInfo } from '../../services/organPresidentService'
 import { getOrganConfig } from './organPresidentConfig'
 import '../../styles/global.css'
 
+interface OrganStats {
+  total_members: number
+  active_protocols: number
+  completed_reviews: number
+  pending_reviews: number
+  members_by_role: Record<string, number>
+}
+
 export default function OrganPresidentDashboard() {
+  const { user, profiles } = useAuth()
   const [organ, setOrgan] = useState<OrganInfo | null>(null)
   const [stats, setStats] = useState<OrganStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadData()
+    loadOrganData()
   }, [])
 
-  async function loadData() {
+  async function loadOrganData() {
     setLoading(true)
+    setError(null)
     try {
-      // ⚠️ Mock data - AINDA NÃO EXISTE ROTA 'my-organ' nem 'stats'
+      // Obter órgão do perfil admin do utilizador
+      const adminProfile = profiles?.admin
+      const organId = (adminProfile as any)?.organ_id || adminProfile?.organ?.id
+      
+      if (!organId) {
+        setError('Órgão não encontrado no perfil.')
+        setLoading(false)
+        return
+      }
+
+      // Buscar dados do órgão
+      const organResponse = await adminService.getOrgan(organId)
+      const organData = (organResponse as any)?.data || organResponse
+
+      // Buscar membros do órgão (todos os users com adminProfile neste órgão)
+      const usersResponse = await adminService.listUsers({ role: 'admin' })
+      const usersData = Array.isArray(usersResponse?.data) ? usersResponse.data : 
+                        Array.isArray(usersResponse) ? usersResponse : []
+      
+      // Filtrar membros deste órgão
+      const organMembers = usersData.filter((u: any) => {
+        const adminProf = u.profiles?.admin || u.adminProfile || u.admin_profile
+        return adminProf?.organ_id === organId
+      })
+
+      // Contar por role
+      const membersByRole: Record<string, number> = {
+        president: 1,
+        vice_president: 0,
+        reviewer: 0,
+        member: 0,
+        secretary: 0,
+      }
+
       setOrgan({
-        id: 2,
-        name: 'Comité Científico',
-        type: 'scientific_committee',
-        description: 'Avalia o mérito científico dos protocolos aprovados pelo Núcleo.',
-        members_count: 8,
-        president: { id: 1, name: 'Dr. João Santos', email: 'joao.santos@iscisa.ac.mz' },
+        id: organData.id,
+        name: organData.name,
+        type: organData.type,
+        description: organData.description,
+        members_count: organMembers.length,
+        president: { id: user ? Number(user.id) : 0, name: user ? user.name : '', email: user ? user.email : '' },
       })
+
       setStats({
-        total_members: 8,
-        active_protocols: 12,
-        completed_reviews: 45,
-        pending_reviews: 7,
-        members_by_role: {
-          president: 1,
-          vice_president: 1,
-          reviewer: 4,
-          member: 1,
-          secretary: 1,
-        },
+        total_members: organMembers.length,
+        active_protocols: 0,
+        completed_reviews: 0,
+        pending_reviews: 0,
+        members_by_role: membersByRole,
       })
+
     } catch (e) {
+      console.error('Erro ao carregar dados do órgão:', e)
       setError((e as Error).message)
     } finally {
       setLoading(false)
@@ -70,7 +112,6 @@ export default function OrganPresidentDashboard() {
         border: '1px solid var(--outline-variant)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-          {/* Ícone do órgão */}
           <div style={{
             width: '64px', height: '64px', borderRadius: 'var(--radius-xl)',
             background: 'var(--primary-container)', display: 'flex', alignItems: 'center',
@@ -79,7 +120,6 @@ export default function OrganPresidentDashboard() {
             <span className="material-symbols-outlined" style={{ color: 'var(--on-primary-container)', fontSize: '32px' }}>account_balance</span>
           </div>
           
-          {/* Nome e descrição */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
               <span style={{ 
@@ -103,8 +143,7 @@ export default function OrganPresidentDashboard() {
             )}
           </div>
           
-          {/* Info do Presidente */}
-          {organ?.president && (
+          {user && (
             <div style={{ 
               textAlign: 'right', 
               flexShrink: 0,
@@ -114,8 +153,8 @@ export default function OrganPresidentDashboard() {
               border: '1px solid var(--outline-variant)'
             }}>
               <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 0 }}>Presidente</p>
-              <p style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', margin: '2px 0 0' }}>{organ.president.name}</p>
-              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 0 }}>{organ.president.email}</p>
+              <p style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', margin: '2px 0 0' }}>{user.name}</p>
+              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 0 }}>{user.email}</p>
             </div>
           )}
         </div>
@@ -159,29 +198,15 @@ export default function OrganPresidentDashboard() {
             </p>
           </div>
         ))}
-        {Object.keys(stats?.members_by_role || {}).length === 0 && (
-          <div className="card" style={{ padding: 'var(--space-3)', textAlign: 'center', gridColumn: '1 / -1' }}>
-            <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>Nenhum membro registado</p>
-          </div>
-        )}
       </div>
     </div>
   )
 }
 
-// ============================================================
-// COMPONENTES AUXILIARES
-// ============================================================
 function Loader() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <span style={{ 
-        width: '24px', height: '24px', 
-        border: '3px solid var(--outline-variant)', 
-        borderTopColor: 'var(--primary)', 
-        borderRadius: '50%', 
-        animation: 'spin 0.8s linear infinite' 
-      }} />
+      <span style={{ width: '24px', height: '24px', border: '3px solid var(--outline-variant)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
@@ -189,14 +214,7 @@ function Loader() {
 
 function Alert({ type, children }: { type: 'error' | 'success'; children: React.ReactNode }) {
   return (
-    <div style={{ 
-      padding: 'var(--space-2) var(--space-3)', 
-      marginBottom: 'var(--space-4)', 
-      borderRadius: 'var(--radius-lg)', 
-      background: type === 'error' ? 'var(--error-container)' : 'var(--primary-container)', 
-      color: type === 'error' ? 'var(--on-error-container)' : 'var(--on-primary-container)', 
-      fontSize: 'var(--body-md)' 
-    }}>
+    <div style={{ padding: 'var(--space-2) var(--space-3)', marginBottom: 'var(--space-4)', borderRadius: 'var(--radius-lg)', background: type === 'error' ? 'var(--error-container)' : 'var(--primary-container)', color: type === 'error' ? 'var(--on-error-container)' : 'var(--on-primary-container)', fontSize: 'var(--body-md)' }}>
       {children}
     </div>
   )
@@ -205,15 +223,9 @@ function Alert({ type, children }: { type: 'error' | 'success'; children: React.
 function StatCard({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
   return (
     <div className="card" style={{ padding: 'var(--space-3)', textAlign: 'center', border: `1px solid ${color}` }}>
-      <span className="material-symbols-outlined" style={{ fontSize: '28px', color, marginBottom: 'var(--space-1)' }}>
-        {icon}
-      </span>
-      <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color, margin: 0 }}>
-        {value}
-      </p>
-      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 'var(--space-1) 0 0' }}>
-        {label}
-      </p>
+      <span className="material-symbols-outlined" style={{ fontSize: '28px', color, marginBottom: 'var(--space-1)' }}>{icon}</span>
+      <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color, margin: 0 }}>{value}</p>
+      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 'var(--space-1) 0 0' }}>{label}</p>
     </div>
   )
 }
