@@ -22,7 +22,9 @@ class DefenseWorkflowTest extends TestCase
         parent::setUp();
         $this->seed(); // corre AuthDatabaseSeeder, OrganizationDatabaseSeeder, MonographTestSeeder, DefenseTestSeeder
 
-        $this->defense = Defense::first();
+        // procura a defesa associada à monografia gerada pelo seeder
+        $monographCode = 'ISCISA-M001-' . now()->year;
+        $this->defense = Defense::whereHas('monograph', fn($q) => $q->where('code', $monographCode))->first();
         $this->coordinator = User::where('email', 'coord@iscisa.ac.mz')->first();
 
         $this->attachRole($this->coordinator, 'coordinator');

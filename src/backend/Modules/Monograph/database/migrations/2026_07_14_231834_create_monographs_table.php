@@ -14,6 +14,7 @@ return new class extends Migration
             $table->foreignId('protocol_id')->constrained('protocols');
             $table->foreignId('student_id')->constrained('users');
             $table->foreignId('supervisor_id')->constrained('teacher_profiles');
+            $table->string('code')->unique();
             $table->string('title');
             $table->string('status')->default('aguarda_submissao');
             $table->timestamp('supervisor_endorsed_at')->nullable();

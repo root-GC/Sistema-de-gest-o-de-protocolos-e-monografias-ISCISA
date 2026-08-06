@@ -22,7 +22,7 @@ class MonographController extends Controller
     $this->authorize('view', $monograph);
 
     return new MonographResource(
-        $monograph->load('student', 'supervisor.user')
+        $monograph->load('student', 'supervisor.user', 'defense')
     );
   }
 

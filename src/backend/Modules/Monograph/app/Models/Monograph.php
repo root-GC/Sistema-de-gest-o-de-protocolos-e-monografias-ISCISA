@@ -15,6 +15,7 @@ class Monograph extends Model
         'protocol_id',
         'student_id',
         'supervisor_id',
+        'code',
         'title',
         'status',
         'supervisor_endorsed_at',
@@ -45,5 +46,10 @@ class Monograph extends Model
     public function latestSubmission(): HasOne
     {
         return $this->hasOne(MonographSubmission::class)->latestOfMany('version');
+    }
+
+    public function defense(): HasOne
+    {
+        return $this->hasOne(\Modules\Defense\app\Models\Defense::class);
     }
 }

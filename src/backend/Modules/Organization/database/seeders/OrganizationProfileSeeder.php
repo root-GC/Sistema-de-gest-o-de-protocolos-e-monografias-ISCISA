@@ -126,6 +126,16 @@ class OrganizationProfileSeeder extends Seeder
             'updated_at'         => $now,
         ]);
 
+        // Secretaria da Direcção Científica — ligada ao organ 'scientific_direction'
+        DB::table('secretary_profiles')->insert([
+            'user_id'            => $user('sdireccao@iscisa.ac.mz'),
+            'organ_id'           => $direcaoId,
+            'scientific_area_id' => null,
+            'office'             => 'Secretaria da Direcção Científica',
+            'created_at'         => $now,
+            'updated_at'         => $now,
+        ]);
+
         // ── 5. admin_profiles ─────────────────────────────────────────────
 
         DB::table('admin_profiles')->insert([
@@ -155,6 +165,8 @@ class OrganizationProfileSeeder extends Seeder
 
             // Bioética
             ['organ_id' => $bioeticaId, 'user_id' => $user('revisora@iscisa.ac.mz'),   'role' => 'member'],
+            // Direcção Científica
+            ['organ_id' => $direcaoId,  'user_id' => $user('sdireccao@iscisa.ac.mz'), 'role' => 'member'],
         ];
 
         foreach ($members as $member) {

@@ -4,6 +4,7 @@ namespace Modules\Monograph\app\Policies;
 
 use Modules\User\app\Models\User;
 use Modules\Monograph\app\Models\Monograph;
+use Illuminate\Support\Facades\DB;
 
 class MonographPolicy
 {
@@ -30,6 +31,35 @@ class MonographPolicy
 
     public function verifyDocuments(User $user, Monograph $m): bool
     {
-        return $user->hasPermission('monograph.validate');
+        if (!$user->hasPermission('monograph.validate')) {
+            return false;
+        }
+
+        // Secretária só pode validar se pertencer à Direção Científica
+        if ($user->secretaryProfile) {
+            return $user->secretaryProfile->organ?->type === 'scientific_direction';
+        }
+
+        // Coordenador pode validar se for coordenador da área/curso do tópico
+        if ($user->coordinatorProfile) {
+            $coordinatorProfile = $user->coordinatorProfile;
+
+            $topicData = DB::table('topics')
+                ->join('protocols', 'protocols.topic_id', '=', 'topics.id')
+                ->where('protocols.id', $m->protocol_id)
+                ->select('topics.scientific_area_id', 'topics.course_id')
+                ->first();
+
+            if (!$topicData) {
+                return false;
+            }
+
+            $sameScientificArea = (int) ($coordinatorProfile->scientific_area_id ?? 0) === (int) ($topicData->scientific_area_id ?? 0);
+            $sameCourse = (int) ($coordinatorProfile->course_id ?? 0) === (int) ($topicData->course_id ?? 0);
+
+            return $sameScientificArea || $sameCourse;
+        }
+
+        return false;
     }
 }

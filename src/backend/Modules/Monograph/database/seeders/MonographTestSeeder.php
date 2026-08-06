@@ -27,7 +27,7 @@ class MonographTestSeeder extends Seeder
 
         /*
         |--------------------------------------------------------------------------
-        | Usa o curso e área do coordenador
+        | Usa a área e o curso do estudante para o cenário de teste
         |--------------------------------------------------------------------------
         |
         | A DefensePolicy valida:
@@ -36,8 +36,30 @@ class MonographTestSeeder extends Seeder
         | coordinatorProfile.scientific_area_id == topic.scientific_area_id
         |
         | Portanto o cenário de teste deve respeitar essa regra.
+        | Para evitar conflitos, o seeder usa o mesmo curso/área do estudante.
         |
         */
+
+        $studentProfile = DB::table('student_profiles')
+            ->where('user_id', $studentId)
+            ->first();
+
+        if (!$studentProfile) {
+            $this->command->error(
+                'Estudante não possui StudentProfile.'
+            );
+            return;
+        }
+
+        $courseId = $studentProfile->course_id;
+        $course = DB::table('courses')->where('id', $courseId)->first();
+
+        if (!$course) {
+            $this->command->error('Curso do estudante não encontrado.');
+            return;
+        }
+
+        $areaId = $course->scientific_area_id;
 
         $coordinatorProfile = DB::table('coordinator_profiles')
             ->where('user_id', $coordinatorUserId)
@@ -50,8 +72,11 @@ class MonographTestSeeder extends Seeder
             return;
         }
 
-        $areaId   = $coordinatorProfile->scientific_area_id;
-        $courseId = $coordinatorProfile->course_id;
+        DB::table('coordinator_profiles')->where('user_id', $coordinatorUserId)->update([
+            'scientific_area_id' => $areaId,
+            'course_id'          => $courseId,
+            'updated_at'         => $now,
+        ]);
 
 
         $organId = DB::table('organs')->value('id');
@@ -217,6 +242,8 @@ class MonographTestSeeder extends Seeder
 
             'supervisor_id' => $teacherProfileId,
 
+            'code'          => 'ISCISA-M001-' . now()->year,
+
             'title'         => 'Monografia de Teste',
 
             'status'        => 'aguarda_submissao',
@@ -236,6 +263,10 @@ class MonographTestSeeder extends Seeder
 
         $this->command->info(
             "Curso usado: {$courseId}"
+        );
+
+        $this->command->info(
+            'Coordenador alinhado ao estudante para o teste.'
         );
 
         $this->command->info(

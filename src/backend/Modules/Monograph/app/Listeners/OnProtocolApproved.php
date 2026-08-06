@@ -18,6 +18,7 @@ class OnProtocolApproved
             'protocol_id'   => $event->submissionId,
             'student_id'    => $event->studentId,
             'supervisor_id' => $event->supervisorId,
+            'code'          => $this->generateCode(),
             'title'         => $event->title,
             'status'        => MonographStatus::AguardaSubmissao,
         ]);
@@ -28,5 +29,18 @@ class OnProtocolApproved
             title: 'Protocolo aprovado — pode submeter a monografia',
             body: 'Realize o trabalho de campo e submeta a monografia quando estiver pronta.',
         );
+    }
+
+    private function generateCode(): string
+    {
+        $year = now()->year;
+        $lastCode = Monograph::withTrashed()->latest('id')->value('code');
+
+        $number = 1;
+        if ($lastCode && preg_match('/ISCISA-M(\d{3,})-(\d{4})$/', $lastCode, $matches)) {
+            $number = (int) $matches[1] + 1;
+        }
+
+        return sprintf('ISCISA-M%03d-%d', $number, $year);
     }
 }

@@ -11,8 +11,8 @@ class DefenseDatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-         $this->call([
-        DefenseTestSeeder::class,
-    ]);
+    //      $this->call([
+    //     DefenseTestSeeder::class,
+    // ]);
     }
 }
