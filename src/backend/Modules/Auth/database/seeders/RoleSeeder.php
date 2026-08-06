@@ -60,7 +60,7 @@ class RoleSeeder extends Seeder
                     // Documentos
                     'document.upload',        // fazer upload de declarações, CV, etc.
                     'document.view',          // ver os seus próprios documentos
-                    'document.resubmit',      // reenviar documento rejeitado (RF-045)
+                    'document.resubmit',      // reenviar documento nao aprovado (RF-045)
 
                     // Pareceres — só o resultado final, nunca durante revisão
                     'evaluation.view.own',    // ver parecer final do seu processo (não identidade dos revisores)

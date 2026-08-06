@@ -1,7 +1,7 @@
 // src/pages/general-admin/GeneralAdminDashboard.tsx
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { generalAdminService, type DashboardStats } from '../../services/generalAdminService'
+import type { DashboardStats } from '../../services/generalAdminService'
 import '../../styles/global.css'
 
 export default function GeneralAdminDashboard() {
@@ -17,7 +17,7 @@ export default function GeneralAdminDashboard() {
   async function loadStats() {
     setLoading(true)
     try {
-      // Mock data enquanto a API não está pronta
+      // ⚠️ Mock data enquanto a API (rota dashboard) não existe
       setStats({
         total_coordinators: 4,
         total_secretaries: 6,

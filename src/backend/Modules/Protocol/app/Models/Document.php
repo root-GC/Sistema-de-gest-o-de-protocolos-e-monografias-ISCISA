@@ -19,12 +19,16 @@ class Document extends Model
         'file_path',
         'pages',
         'version',
+        'version_label',
+        'rejected_by',
+        'rejected_at',
         'status',
     ];
 
     protected $casts = [
         'pages' => 'integer',
         'version' => 'integer',
+        'rejected_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -41,5 +45,15 @@ class Document extends Model
     public function submitter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'submited_by');
+    }
+
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
+    }
+
+    public function getVersionLabelAttribute($value): string
+    {
+        return $value ?: 'V' . $this->version;
     }
 }

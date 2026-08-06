@@ -29,7 +29,7 @@ export function DocumentValidationWidget({ data }: WidgetProps) {
         </div>
         <div className="stat-item completed">
           <span className="stat-value">{stats.rejected_today || 0}</span>
-          <span className="stat-label">Rejeitados</span>
+          <span className="stat-label">Não Aprovados</span>
         </div>
       </div>
 
@@ -48,7 +48,7 @@ export function DocumentValidationWidget({ data }: WidgetProps) {
               </div>
               <div className="triage-meta">
                 <span className={`badge badge-${doc.status === 'pending' ? 'warning' : doc.status === 'validated' ? 'success' : 'error'}`}>
-                  {doc.status === 'pending' ? 'Pendente' : doc.status === 'validated' ? 'Validado' : 'Rejeitado'}
+                  {doc.status === 'pending' ? 'Pendente' : doc.status === 'validated' ? 'Validado' : 'Não Aprovado'}
                 </span>
                 <button className="btn btn-small btn-primary">Validar</button>
               </div>

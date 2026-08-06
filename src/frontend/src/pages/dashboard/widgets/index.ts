@@ -14,3 +14,4 @@ export { ReportsWidget } from './ReportsWidget';
 export { AdminPanelWidget } from './AdminPanelWidget';
 export { NotificationWidget } from './NotificationWidget';
 export { DeadlineWidget } from './DeadlineWidget';
+export { AgendaWidget } from './AgendaWidget';

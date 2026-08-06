@@ -52,14 +52,14 @@ function getPhaseConfig(phase: Phase, status?: string) {
         textColor: 'var(--on-primary-container)',
       },
       topic_rejected_supervisor: {
-        label: 'Rejeitado pelo Supervisor',
+        label: 'Não Aprovado pelo Supervisor',
         icon: 'cancel',
         color: 'var(--error)',
         bg: 'var(--error-container)',
         textColor: 'var(--on-error-container)',
       },
       topic_rejected_nucleo: {
-        label: 'Rejeitado pelo Núcleo',
+        label: 'Não Aprovado pelo Núcleo',
         icon: 'cancel',
         color: 'var(--error)',
         bg: 'var(--error-container)',
@@ -157,24 +157,6 @@ export default function SupervisionPage() {
     }
     if (phase === 'monograph') {
       return status === 'monograph_pending_supervisor' || status === 'monograph_submitted'
-    }
-    return false
-  }
-
-  // 🆕 Determina se é bloqueante (não permite nova submissão)
-  function isBlocking(phase: Phase, status?: string): boolean {
-    if (phase === 'none') return false
-    if (phase === 'topic') {
-      return status !== 'topic_rejected_supervisor' && status !== 'topic_rejected_nucleo' && status !== 'topic_rejected'
-    }
-    return false
-  }
-
-  // 🆕 Verifica se pode submeter novo (tema rejeitado)
-  function canResubmit(phase: Phase, status?: string): boolean {
-    if (phase === 'none') return true
-    if (phase === 'topic') {
-      return status === 'topic_rejected_supervisor' || status === 'topic_rejected_nucleo' || status === 'topic_rejected'
     }
     return false
   }

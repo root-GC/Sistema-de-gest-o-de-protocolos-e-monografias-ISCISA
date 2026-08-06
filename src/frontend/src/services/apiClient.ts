@@ -1,6 +1,6 @@
 // src/services/apiClient.ts
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // 🆕 Evento customizado para loading global
 const dispatchLoading = (active: boolean) => {
@@ -56,8 +56,20 @@ async function readError(response: Response, fallbackMessage: string): Promise<H
   return err;
 }
 
+const BACKEND_HOSTNAMES = ['localhost', '127.0.0.1', '0.0.0.0', 'host.docker.internal'];
+
 function toApiUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url);
+      if (BACKEND_HOSTNAMES.includes(parsed.hostname)) {
+        return `${parsed.pathname}${parsed.search}`;
+      }
+    } catch {
+      return url;
+    }
+    return url;
+  }
   return `${API_BASE_URL}${url}`;
 }
 
@@ -74,6 +86,18 @@ function filenameFromDisposition(value: string | null): string | null {
 
   const match = value.match(/filename="?([^"]+)"?/i);
   return match?.[1] || null;
+}
+
+// 🆕 Converte objeto em query string
+function toQueryString(params: Record<string, any>): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.append(key, String(value));
+    }
+  });
+  const qs = query.toString();
+  return qs ? `?${qs}` : '';
 }
 
 export interface ApiFile {
@@ -153,25 +177,45 @@ export async function downloadApiFile(url: string, fallbackFilename?: string): P
   setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
-// 🆕 Requisição JSON com loading global
+// ═══════════════════════════════════════════════
+// 🆕 Requisição JSON com loading global (CORRIGIDA)
+// ═══════════════════════════════════════════════
 export async function req<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
   dispatchLoading(true)
   
   try {
     const headers = getHeaders();
-    
-    if (!(body instanceof FormData)) {
-      headers['Content-Type'] = 'application/json';
+    let fetchUrl = `${API_BASE_URL}${url}`;
+    let fetchBody: BodyInit | undefined;
+
+    // 🆕 Para GET/HEAD, converte body em query string
+    if (method === 'GET' || method === 'HEAD') {
+      if (body && typeof body === 'object' && !(body instanceof FormData)) {
+        fetchUrl += toQueryString(body as Record<string, any>);
+      }
+    } else {
+      // Para POST, PUT, PATCH, DELETE — envia no body
+      if (body instanceof FormData) {
+        fetchBody = body;
+      } else if (body) {
+        headers['Content-Type'] = 'application/json';
+        fetchBody = JSON.stringify(body);
+      }
     }
 
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+    const response = await fetch(fetchUrl, {
       method,
       headers,
-      body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
+      body: fetchBody,
     });
 
     if (!response.ok) {
       throw await readError(response, 'Erro na requisição');
+    }
+
+    // Se a resposta for 204 No Content, retorna undefined
+    if (response.status === 204) {
+      return undefined as unknown as T;
     }
 
     return response.json() as Promise<T>;

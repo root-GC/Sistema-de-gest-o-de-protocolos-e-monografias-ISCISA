@@ -37,13 +37,13 @@ interface SubmissionData {
 function getStatusStyle(status: string) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
     topic_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente de Revisão' },
-    topic_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado' },
+    topic_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovado' },
     protocol_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente de Revisão' },
     protocol_submitted: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Submetido' },
-    protocol_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitado' },
+    protocol_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovado' },
     monograph_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente de Revisão' },
     monograph_submitted: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Submetida' },
-    monograph_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitada' },
+    monograph_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovada' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
 }
@@ -330,7 +330,7 @@ export default function SubmissionReviewPage() {
     
     const justification = window.prompt('Justificação da rejeição (obrigatório):')
     if (!justification || !justification.trim()) {
-      setError('A justificação é obrigatória para rejeitar.')
+      setError('A justificação é obrigatória para não aprovar.')
       return
     }
 
@@ -347,7 +347,7 @@ export default function SubmissionReviewPage() {
         // await monographService.rejectBySupervisor(Number(id), justification)
       }
       
-      setSuccessMessage('❌ Submissão rejeitada. O estudante foi notificado para fazer as correções.')
+      setSuccessMessage('❌ Submissão não aprovada. O estudante foi notificado para fazer as correções.')
       
       setTimeout(() => {
         navigate('/supervision')
@@ -733,7 +733,7 @@ export default function SubmissionReviewPage() {
           }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>cancel</span>
-          Rejeitar
+          Não Aprovar
         </button>
 
         <button
@@ -776,7 +776,7 @@ export default function SubmissionReviewPage() {
         <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>info</span>
         <span>
           <strong>Aprovar:</strong> Segue para a secretária / próxima etapa • 
-          <strong> Reprovar:</strong> Retorna ao estudante para correções
+          <strong> Não Aprovar:</strong> Retorna ao estudante para correções
         </span>
       </div>
 

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Events\TopicReviewersAssigned;
+use Modules\Protocol\app\Events\TopicStatusChanged;
 use Modules\Protocol\app\Models\EvaluationForm;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
@@ -99,6 +100,8 @@ class TopicService
             'supervisor.user:id,name,email',
         ]);
 
+        event(new TopicStatusChanged($topic, null, $topic->status, $user));
+
         return [
             'topic' => $topic,
             'similar_topics' => $similarTopics,
@@ -132,29 +135,43 @@ class TopicService
             ->latest('submitted_at')
             ->get();
 
-        $protocolTopicIds = Protocol::query()
+        $latestProtocols = Protocol::query()
             ->whereIn('topic_id', $topics->pluck('id'))
-            ->pluck('topic_id')
-            ->toArray();
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('topic_id')
+            ->keyBy('topic_id');
 
-        return $topics->map(fn(Topic $topic) => [
-            'id' => $topic->id,
-            'title' => $topic->title,
-            'justification' => $topic->justification,
-            'status' => $topic->status,
-            'status_label' => $topic->status_label,
-            'submitted_at' => $topic->submitted_at,
-            'has_protocol' => in_array($topic->id, $protocolTopicIds),
-            'scientific_area' => $topic->scientificArea ? [
-                'id' => (int) $topic->scientificArea->id,
-                'name' => $topic->scientificArea->name,
-            ] : null,
-            'course' => $topic->course ? [
-                'id' => (int) $topic->course->id,
-                'name' => $topic->course->name,
-                'code' => $topic->course->code,
-            ] : null,
-        ])->all();
+        return $topics->map(function (Topic $topic) use ($latestProtocols) {
+            $latestProtocol = $latestProtocols->get($topic->id);
+            $canResubmitProtocol = $latestProtocol
+                && in_array($latestProtocol->status, Protocol::resubmittableStatuses(), true);
+
+            return [
+                'id' => $topic->id,
+                'title' => $topic->title,
+                'justification' => $topic->justification,
+                'status' => $topic->status,
+                'status_label' => $topic->status_label,
+                'submitted_at' => $topic->submitted_at,
+                'has_protocol' => (bool) $latestProtocol && ! $canResubmitProtocol,
+                'has_any_protocol' => (bool) $latestProtocol,
+                'can_resubmit_protocol' => (bool) $canResubmitProtocol,
+                'latest_protocol_id' => $latestProtocol?->id,
+                'latest_protocol_status' => $latestProtocol?->status,
+                'latest_protocol_status_label' => $latestProtocol?->status_label,
+                'scientific_area' => $topic->scientificArea ? [
+                    'id' => (int) $topic->scientificArea->id,
+                    'name' => $topic->scientificArea->name,
+                ] : null,
+                'course' => $topic->course ? [
+                    'id' => (int) $topic->course->id,
+                    'name' => $topic->course->name,
+                    'code' => $topic->course->code,
+                ] : null,
+            ];
+        })->all();
     }
 
     public function listForSupervisor(User $supervisor)
@@ -248,7 +265,7 @@ class TopicService
                 'supervisor_decision_at' => now(),
             ]);
 
-            // Dispara evento para notificações, logs, integrações event(new TopicApprovedBySupervisor($topic));
+            event(new TopicStatusChanged($topic, Topic::STATUS_PENDING_SUPERVISOR, Topic::STATUS_PENDING_NUCLEO, $supervisor));
 
             return $topic->load([
                 'student:id,name,email',
@@ -286,6 +303,8 @@ class TopicService
                 'supervisor_comment' => $comment,
                 'supervisor_decision_at' => now(),
             ]);
+
+            event(new TopicStatusChanged($topic, Topic::STATUS_PENDING_SUPERVISOR, Topic::STATUS_REJECTED_SUPERVISOR, $supervisor));
 
             return $topic->load([
                 'student:id,name,email',
@@ -628,9 +647,14 @@ class TopicService
                     : Topic::STATUS_APPROVED_NUCLEO;
             }
 
+            $oldStatus = $topic->status;
             $topic->update([
                 'status' => $finalDecision ?: Topic::STATUS_IN_REVIEW,
             ]);
+
+            if ($finalDecision) {
+                event(new TopicStatusChanged($topic, $oldStatus, $finalDecision));
+            }
 
             return [
                 'topic' => $topic->load([

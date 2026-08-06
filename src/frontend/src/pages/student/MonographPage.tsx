@@ -1,6 +1,5 @@
 // src/pages/MonographPage.tsx
 import { useEffect, useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
 import { monographService, type Monograph, type MonographOpinion } from '../../services/monographService'
 import PdfPreviewModal from '../../components/PdfPreviewModal'
 import '../../styles/global.css'
@@ -13,12 +12,12 @@ function getStatusStyle(status: string) {
     monograph_submitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Submetida' },
     monograph_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
     monograph_approved_supervisor: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovada (Supervisor)' },
-    monograph_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitada (Supervisor)' },
+    monograph_rejected_supervisor: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovada (Supervisor)' },
     monograph_in_review: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Em Revisão' },
     monograph_approved_nucleo: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovada' },
-    monograph_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitada (Núcleo)' },
-    monograph_rejected_cc: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitada (CC)' },
-    monograph_rejected_bioetica: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Rejeitada (Bioética)' },
+    monograph_rejected_nucleo: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovada (Núcleo)' },
+    monograph_rejected_cc: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovada (CC)' },
+    monograph_rejected_bioetica: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Não Aprovada (Bioética)' },
     monograph_resubmitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Re-submetida' },
   }
   return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
@@ -34,8 +33,6 @@ function formatFileSize(bytes: number): string {
 // COMPONENTE
 // ============================================================
 export default function MonographPage() {
-  const { user } = useAuth()
-  
   const [monographs, setMonographs] = useState<Monograph[]>([])
   const [opinionsByMonograph, setOpinionsByMonograph] = useState<Record<number, MonographOpinion[]>>({})
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string; filename: string } | null>(null)
@@ -48,6 +45,25 @@ export default function MonographPage() {
   useEffect(() => {
     load()
   }, [])
+
+  // Poll backend periodically to detect monografia created by backend (e.g., after protocolo aprovado)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const { monographs: latest } = await monographService.list()
+        const currentFirstId = monographs[0]?.id
+        const latestFirstId = latest[0]?.id
+        if (currentFirstId !== latestFirstId || latest.length !== monographs.length) {
+          // full reload to fetch opinions and update UI
+          await load()
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 15000) // every 15s
+
+    return () => clearInterval(interval)
+  }, [monographs])
 
   async function load() {
     setLoading(true)
@@ -75,7 +91,7 @@ export default function MonographPage() {
   }
 
   const current = monographs[0]
-  const canSubmitNew = !current || [
+  const canSubmitNew = Boolean(current) && [
     'monograph_rejected_supervisor',
     'monograph_rejected_nucleo',
     'monograph_rejected_cc',
@@ -117,7 +133,11 @@ export default function MonographPage() {
     setError(null)
     setSuccess(null)
     try {
-      await monographService.submit(file)
+      if (!current) {
+        return
+      }
+
+      await monographService.submit(current.id, file)
       setFile(null)
       setSuccess('Monografia submetida com sucesso!')
       await load()
@@ -497,7 +517,7 @@ export default function MonographPage() {
                         >
                           <div>
                             <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>
-                              {opinion.organ} • {opinion.decision === 'approved' ? 'Aprovado' : 'Reprovado'}
+                              {opinion.organ} • {opinion.decision === 'approved' ? 'Aprovado' : 'Não Aprovado'}
                             </p>
                             <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
                               Versão {opinion.version}
@@ -541,29 +561,28 @@ export default function MonographPage() {
       )}
 
       {/* Estado vazio */}
-      {monographs.length === 0 && canSubmitNew && (
+      {monographs.length === 0 && (
         <div style={{
-          textAlign: 'center',
-          padding: 'var(--space-5) var(--space-3)',
-          color: 'var(--on-surface-variant)',
-          background: 'var(--surface-container-low)',
-          borderRadius: 'var(--radius-xl)',
-          border: '1px dashed var(--outline-variant)',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 'var(--space-2)',
+          padding: 'var(--space-3) var(--space-4)',
+          background: 'var(--surface-container)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--outline-variant)',
           marginBottom: 'var(--space-4)'
         }}>
-          <span className="material-symbols-outlined" style={{
-            fontSize: '48px',
-            marginBottom: 'var(--space-2)',
-            display: 'block'
-          }}>
-            book
+          <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--tertiary)', flexShrink: 0 }}>
+            info
           </span>
-          <p style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-medium)' }}>
-            Nenhuma monografia submetida
-          </p>
-          <p style={{ fontSize: 'var(--body-md)', marginTop: 'var(--space-1)' }}>
-            Submeta a sua monografia no formulário abaixo.
-          </p>
+          <div>
+            <p style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)' }}>
+              Ainda não existe registo de monografia
+            </p>
+            <p style={{ fontSize: 'var(--body-md)', marginTop: '4px', color: 'var(--on-surface-variant)' }}>
+              Aguarde a criação automática pelo backend após a aprovação do protocolo ou contacte o núcleo.
+            </p>
+          </div>
         </div>
       )}
 
@@ -779,7 +798,7 @@ export default function MonographPage() {
       )}
 
       {/* Mensagem de bloqueio */}
-      {!canSubmitNew && (
+      {!canSubmitNew && current && (
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',

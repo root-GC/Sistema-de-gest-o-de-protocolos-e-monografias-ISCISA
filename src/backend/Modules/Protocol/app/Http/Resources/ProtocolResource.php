@@ -17,6 +17,9 @@ class ProtocolResource extends JsonResource
             'current_organ_id' => $this->current_organ_id,
             'status' => $this->status,
             'status_label' => $this->status_label,
+            'organ_tracking' => $this->resource->getAttribute('organ_tracking'),
+            'read_only_for_organ' => $this->resource->getAttribute('read_only_for_organ'),
+            'is_historical_for_organ' => $this->resource->getAttribute('is_historical_for_organ'),
             'submitted_at' => $this->submitted_at,
             'approved_by_supervisor' => $this->approved_by_supervisor,
             'protocol_type' => $this->protocol_type,
@@ -63,9 +66,37 @@ class ProtocolResource extends JsonResource
                 'download_url' => url("api/v1/protocols/{$this->id}/download"),
                 'pages' => $doc->pages,
                 'version' => $doc->version,
+                'version_label' => $doc->version_label,
+                'rejected_by' => $doc->relationLoaded('rejectedBy') && $doc->rejectedBy ? [
+                    'id' => $doc->rejectedBy->id,
+                    'name' => $doc->rejectedBy->name,
+                    'email' => $doc->rejectedBy->email,
+                ] : null,
+                'rejected_at' => $doc->rejected_at,
                 'status' => $doc->status,
                 'submitted_at' => $doc->created_at,
             ])),
+            'protocol_document_requirements' => $this->whenLoaded('protocolDocumentRequirements', fn() => $this->protocolDocumentRequirements->values()),
+            'histories' => $this->whenLoaded('histories', fn() => $this->histories->map(fn($history) => [
+                'id' => $history->id,
+                'organ_id' => $history->organ_id,
+                'action' => $history->action,
+                'description' => $history->description,
+                'old_status' => $history->old_status,
+                'new_status' => $history->new_status,
+                'metadata' => $history->metadata,
+                'occurred_at' => $history->occurred_at,
+                'actor' => $history->actor ? [
+                    'id' => $history->actor->id,
+                    'name' => $history->actor->name,
+                    'email' => $history->actor->email,
+                ] : null,
+                'organ' => $history->organ ? [
+                    'id' => $history->organ->id,
+                    'name' => $history->organ->name,
+                    'type' => $history->organ->type,
+                ] : null,
+            ])->values()),
         ];
     }
 }

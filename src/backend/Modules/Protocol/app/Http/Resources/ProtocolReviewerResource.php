@@ -50,6 +50,7 @@ class ProtocolReviewerResource extends JsonResource
                 'file_path' => $this->latestDocument->file_path,
                 'download_url' => url("api/v1/protocols/{$this->id}/download"),
                 'version' => $this->latestDocument->version,
+                'version_label' => $this->latestDocument->version_label,
                 'status' => $this->latestDocument->status,
             ] : null),
         ];

@@ -1,6 +1,7 @@
 // src/pages/organ-president/ManageOrganMembersPage.tsx
 import { useEffect, useState } from 'react'
 import { organPresidentService, type OrganMember } from '../../services/organPresidentService'
+import { generalAdminService } from '../../services/generalAdminService'
 import { getOrganConfig } from './organPresidentConfig'
 import '../../styles/global.css'
 
@@ -9,7 +10,7 @@ const ROLE_LABELS: Record<string, string> = {
   vice_president: 'Vice-Presidente',
   reviewer: 'Revisor',
   member: 'Membro',
-  secretary: 'Secretário',
+  secretary: 'Secretário/a',
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -28,26 +29,25 @@ export default function ManageOrganMembersPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterRole, setFilterRole] = useState<string>('all')
 
-  // Form
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [userSearch, setUserSearch] = useState('')
-  const [searchResults, setSearchResults] = useState<{ id: number; name: string; email: string; status: string }[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
-  const [selectedRole, setSelectedRole] = useState('member')
+  // ── Convidar Secretário/a ──
+  const [showInviteSecretary, setShowInviteSecretary] = useState(false)
+  const [secretaryName, setSecretaryName] = useState('')
+  const [secretaryEmail, setSecretaryEmail] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // ── Editar função ──
   const [editingMemberId, setEditingMemberId] = useState<number | null>(null)
   const [editingRole, setEditingRole] = useState('')
 
-  const organType = 'scientific_committee' // Virá do contexto/rota
+  const organType = 'scientific_committee'
   const config = getOrganConfig(organType)
 
-  useEffect(() => {
-    loadMembers()
-  }, [])
+  useEffect(() => { loadMembers() }, [])
 
   async function loadMembers() {
     setLoading(true)
     try {
-      // Mock data
+      // ⚠️ Mock data - AINDA NÃO EXISTE ROTA PARA LISTAR MEMBROS DO ÓRGÃO
       setMembers([
         { id: 1, user_id: 1, organ_id: 2, role: 'president', user: { id: 1, name: 'Dr. João Santos', email: 'joao@iscisa.ac.mz', status: 'active' }, joined_at: '2024-01-15' },
         { id: 2, user_id: 2, organ_id: 2, role: 'vice_president', user: { id: 2, name: 'Dra. Maria Silva', email: 'maria@iscisa.ac.mz', status: 'active' }, joined_at: '2024-01-15' },
@@ -63,36 +63,45 @@ export default function ManageOrganMembersPage() {
     }
   }
 
-  async function handleSearchUsers() {
-    if (userSearch.length < 3) return
-    try {
-      // Mock
-      setSearchResults([
-        { id: 10, name: 'Dr. António Ribeiro', email: 'antonio@iscisa.ac.mz', status: 'active' },
-        { id: 11, name: 'Dra. Sofia Martins', email: 'sofia@iscisa.ac.mz', status: 'active' },
-      ])
-    } catch (e) {
-      setError((e as Error).message)
-    }
+  // ═══════════════════════════════════════════════
+  // CONVIDAR SECRETÁRIO/A
+  // ═══════════════════════════════════════════════
+  function openInviteSecretary() {
+    setShowInviteSecretary(true)
+    setSecretaryName('')
+    setSecretaryEmail('')
   }
 
-  async function handleAddMember() {
-    if (!selectedUserId) return
+  async function handleInviteSecretary(e: React.FormEvent) {
+    e.preventDefault()
+    if (!secretaryName || !secretaryEmail) return
+    setIsSubmitting(true)
+    setError(null)
     try {
-      await organPresidentService.addMember({ user_id: selectedUserId, role: selectedRole })
-      setSuccessMessage('Membro adicionado!')
-      setShowAddForm(false)
-      setSelectedUserId(null)
-      setUserSearch('')
+      // 🟢 CORRIGIDO: removido 'office' (não existe no createSecretary)
+      // 🟢 CORRIGIDO: removido 'organ_id' (backend impõe o órgão do executivo autenticado)
+      await generalAdminService.createSecretary({
+        name: secretaryName,
+        email: secretaryEmail,
+        scientific_area_id: null,
+      })
+      setSuccessMessage('Secretário/a convidado/a com sucesso! Email enviado.')
+      setShowInviteSecretary(false)
       loadMembers()
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (e) {
-      setError((e as Error).message)
+    } catch (e: any) {
+      setError(e?.message || 'Erro ao convidar secretário/a.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
+  // ═══════════════════════════════════════════════
+  // EDITAR / REMOVER
+  // ═══════════════════════════════════════════════
   async function handleUpdateRole(memberId: number) {
     try {
+      // 🟢 AINDA NÃO EXISTE NO BACKEND
       await organPresidentService.updateMemberRole(memberId, editingRole)
       setSuccessMessage('Função atualizada!')
       setEditingMemberId(null)
@@ -106,6 +115,7 @@ export default function ManageOrganMembersPage() {
   async function handleRemoveMember(memberId: number) {
     if (!window.confirm('Tem certeza que deseja remover este membro?')) return
     try {
+      // 🟢 AINDA NÃO EXISTE NO BACKEND
       await organPresidentService.removeMember(memberId)
       setSuccessMessage('Membro removido!')
       loadMembers()
@@ -143,66 +153,48 @@ export default function ManageOrganMembersPage() {
         </div>
         <select value={filterRole} onChange={e => setFilterRole(e.target.value)} style={{ padding: '10px 14px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', cursor: 'pointer' }}>
           <option value="all">Todas as funções</option>
-          {config.memberRoles.map(role => (
-            <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
-          ))}
+          {config.memberRoles.map(role => (<option key={role} value={role}>{ROLE_LABELS[role] || role}</option>))}
         </select>
-        <button onClick={() => setShowAddForm(true)} style={{
+        
+        {/* Convidar Secretário/a */}
+        <button onClick={openInviteSecretary} style={{
           display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '10px 16px',
           background: 'var(--primary)', color: 'var(--on-primary)', border: 'none',
           borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--body-md)',
           fontWeight: 'var(--font-semibold)', fontFamily: 'var(--font-family)', whiteSpace: 'nowrap'
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>person_add</span>
-          Adicionar Membro
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>mail</span>
+          Convidar Secretário/a
         </button>
       </div>
 
-      {/* Modal Adicionar Membro */}
-      {showAddForm && (
+      {/* ═══════════════ MODAL: CONVIDAR SECRETÁRIO/A ═══════════════ */}
+      {showInviteSecretary && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-3)' }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-4)', width: '100%', maxWidth: '500px' }}>
-            <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)' }}>Adicionar Membro</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              <div>
-                <label style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', display: 'block', marginBottom: 'var(--space-1)' }}>Pesquisar Utilizador</label>
-                <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
-                  <input type="text" value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Nome ou email..." style={{ flex: 1, padding: '10px 14px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', outline: 'none' }} />
-                  <button onClick={handleSearchUsers} style={{ padding: '10px 16px', background: 'var(--surface-container)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', cursor: 'pointer' }}>Buscar</button>
-                </div>
-              </div>
-              {searchResults.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', maxHeight: '200px', overflow: 'auto' }}>
-                  {searchResults.map(u => (
-                    <div key={u.id} onClick={() => setSelectedUserId(u.id)} style={{
-                      padding: 'var(--space-2)', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
-                      background: selectedUserId === u.id ? 'var(--primary-container)' : 'var(--surface-container-low)',
-                      border: selectedUserId === u.id ? '1px solid var(--primary)' : '1px solid transparent'
-                    }}>
-                      <p style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', margin: 0 }}>{u.name}</p>
-                      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 0 }}>{u.email}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div>
-                <label style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', display: 'block', marginBottom: 'var(--space-1)' }}>Função</label>
-                <select value={selectedRole} onChange={e => setSelectedRole(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', outline: 'none' }}>
-                  {config.memberRoles.filter(r => r !== 'president').map(role => (
-                    <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
-                  ))}
-                </select>
-              </div>
+            <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>mail</span>
+              Convidar Secretário/a
+            </h2>
+            <form onSubmit={handleInviteSecretary} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <FormField label="Nome *" value={secretaryName} onChange={setSecretaryName} required />
+              <FormField label="Email *" value={secretaryEmail} onChange={setSecretaryEmail} type="email" required />
+              {/* 🟢 CORRIGIDO: removido campo Gabinete (não existe no createSecretary) */}
+              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', background: 'var(--tertiary-container)', padding: 'var(--space-2)', borderRadius: 'var(--radius-lg)', margin: 0 }}>
+                📧 Um email será enviado com um link para definir a senha. O órgão será automaticamente atribuído.
+              </p>
               <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-                <button onClick={() => { setShowAddForm(false); setSelectedUserId(null); setUserSearch(''); setSearchResults([]) }} className="btn">Cancelar</button>
-                <button onClick={handleAddMember} className="btn btn-primary" disabled={!selectedUserId}>Adicionar</button>
+                <button type="button" onClick={() => setShowInviteSecretary(false)} className="btn">Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={isSubmitting} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', opacity: isSubmitting ? 0.7 : 1 }}>
+                  {isSubmitting ? 'A enviar...' : 'Enviar Convite'}
+                </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Lista de Membros */}
+      {/* ═══════════════ LISTA DE MEMBROS ═══════════════ */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
         {filteredMembers.length === 0 ? (
           <EmptyState message="Nenhum membro encontrado" />
@@ -216,42 +208,29 @@ export default function ManageOrganMembersPage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                     <h3 style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', margin: 0 }}>{member.user?.name}</h3>
-                    <span style={{ 
-                      fontSize: 'var(--label-sm)', padding: '2px 8px', borderRadius: 'var(--radius-full)',
-                      background: ROLE_COLORS[member.role] || 'var(--surface-container)',
-                      color: member.role === 'member' ? 'var(--on-surface-variant)' : 'white',
-                      fontWeight: 'var(--font-medium)'
-                    }}>
+                    <span style={{ fontSize: 'var(--label-sm)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: ROLE_COLORS[member.role] || 'var(--surface-container)', color: member.role === 'member' ? 'var(--on-surface-variant)' : 'white', fontWeight: 'var(--font-medium)' }}>
                       {ROLE_LABELS[member.role] || member.role}
                     </span>
                     {member.user?.status === 'inactive' && (
-                      <span style={{ fontSize: 'var(--label-sm)', background: 'var(--error-container)', color: 'var(--on-error-container)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>Inativo</span>
+                      <span style={{ fontSize: 'var(--label-sm)', background: 'var(--error-container)', color: 'var(--on-error-container)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>Inativo/a</span>
                     )}
                   </div>
                   <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>{member.user?.email}</p>
                 </div>
               </div>
-
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                {/* Editar função */}
                 {editingMemberId === member.id ? (
                   <div style={{ display: 'flex', gap: 'var(--space-1)', alignItems: 'center' }}>
                     <select value={editingRole} onChange={e => setEditingRole(e.target.value)} style={{ padding: '6px 10px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--outline-variant)', fontSize: 'var(--label-sm)' }}>
-                      {config.memberRoles.map(role => (
-                        <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
-                      ))}
+                      {config.memberRoles.map(role => (<option key={role} value={role}>{ROLE_LABELS[role] || role}</option>))}
                     </select>
                     <button onClick={() => handleUpdateRole(member.id)} style={{ padding: '6px 10px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--label-sm)' }}>Salvar</button>
                     <button onClick={() => setEditingMemberId(null)} style={{ padding: '6px 10px', background: 'var(--surface-container)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--label-sm)' }}>Cancelar</button>
                   </div>
                 ) : (
                   <>
-                    <button onClick={() => { setEditingMemberId(member.id); setEditingRole(member.role) }} style={{ padding: '6px 12px', background: 'var(--surface-container)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--label-sm)', fontFamily: 'var(--font-family)' }}>
-                      Alterar função
-                    </button>
-                    <button onClick={() => handleRemoveMember(member.id)} style={{ padding: '6px 12px', background: 'var(--error-container)', color: 'var(--on-error-container)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--label-sm)', fontFamily: 'var(--font-family)' }}>
-                      Remover
-                    </button>
+                    <button onClick={() => { setEditingMemberId(member.id); setEditingRole(member.role) }} style={{ padding: '6px 12px', background: 'var(--surface-container)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--label-sm)', fontFamily: 'var(--font-family)' }}>Alterar função</button>
+                    <button onClick={() => handleRemoveMember(member.id)} style={{ padding: '6px 12px', background: 'var(--error-container)', color: 'var(--on-error-container)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--label-sm)', fontFamily: 'var(--font-family)' }}>Remover</button>
                   </>
                 )}
               </div>
@@ -263,6 +242,9 @@ export default function ManageOrganMembersPage() {
   )
 }
 
+// ═══════════════════════════════════════════════
+// COMPONENTES AUXILIARES
+// ═══════════════════════════════════════════════
 function Loader() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -282,6 +264,17 @@ function EmptyState({ message }: { message: string }) {
     <div style={{ textAlign: 'center', padding: 'var(--space-5)', color: 'var(--on-surface-variant)', background: 'var(--surface-container-low)', borderRadius: 'var(--radius-xl)', border: '1px dashed var(--outline-variant)' }}>
       <span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>group_off</span>
       <p>{message}</p>
+    </div>
+  )
+}
+
+function FormField({ label, value, onChange, type = 'text', placeholder, required }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; required?: boolean
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+      <label style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface-variant)' }}>{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} required={required} style={{ padding: '10px 14px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none' }} />
     </div>
   )
 }

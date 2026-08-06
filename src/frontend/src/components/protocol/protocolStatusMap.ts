@@ -33,9 +33,13 @@ const IN_REVIEW_NUCLEO = 'protocol_in_review_nucleo';
 
 const PENDING_CC = 'protocol_pending_comite_cientifico';
 const IN_REVIEW_CC = 'protocol_in_review_comite_cientifico';
+const DOCS_PENDING_CC = 'protocol_documents_pending_cc';
+const CC_SIGNATURE = 'protocol_parecer_pending_cc_signature';
 
 const PENDING_CB = 'protocol_pending_comite_bioetica';
 const IN_REVIEW_CB = 'protocol_in_review_comite_bioetica';
+const DOCS_PENDING_CB = 'protocol_documents_pending_cibs';
+const CB_SIGNATURE = 'protocol_parecer_pending_cibs_signature';
 
 const APPROVED_FINAL = 'protocol_approved_final';
 const REJECTED_FINAL = 'protocol_rejected_final';
@@ -44,9 +48,9 @@ const PENDING_SUPERVISOR = 'protocol_pending_supervisor';
 const REJECTED_SUPERVISOR = 'protocol_rejected_supervisor';
 
 function formatVersion(prefix: string, value?: number | null): string | null {
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined || Number(value) <= 0) return null;
   const n = Math.max(1, Number(value));
-  return `${prefix}${String(n).padStart(2, '0')}`;
+  return `${prefix}${n}`;
 }
 
 export function buildPipeline(protocol: PipelineInput): OrganStage[] {
@@ -59,15 +63,15 @@ export function buildPipeline(protocol: PipelineInput): OrganStage[] {
   const atNucleoPending = status === PENDING_NUCLEO || status === PENDING_SUPERVISOR;
   const atNucleoReview = status === IN_REVIEW_NUCLEO;
 
-  const atCcPending = status === PENDING_CC;
+  const atCcPending = status === PENDING_CC || status === DOCS_PENDING_CC || status === CC_SIGNATURE;
   const atCcReview = status === IN_REVIEW_CC;
 
-  const atCbPending = status === PENDING_CB;
+  const atCbPending = status === PENDING_CB || status === DOCS_PENDING_CB || status === CB_SIGNATURE;
   const atCbReview = status === IN_REVIEW_CB;
 
   const nucleoVersion = formatVersion('NC_V', protocol.nc_version);
   const ccVersion = formatVersion('CC_V', protocol.cc_version);
-  const cbVersion = formatVersion('CB_V', protocol.cb_version);
+  const cbVersion = formatVersion('CIBS_V', protocol.cb_version);
 
   const rejectedHere = isRejectedFinal || isRejectedAtSupervisor;
 
@@ -167,7 +171,7 @@ export function buildPipeline(protocol: PipelineInput): OrganStage[] {
 
 function getNucleoDetail(status: string, state: StageState): string {
   if (state === 'approved') return 'Aprovado pelo Núcleo';
-  if (state === 'rejected') return 'Rejeitado';
+  if (state === 'rejected') return 'Não Aprovado';
   if (state === 'in_review' || status === IN_REVIEW_NUCLEO) return 'Em avaliação no Núcleo';
   if (state === 'pending' || status === PENDING_NUCLEO) return 'Aguardando atribuição de revisores';
   if (state === 'current' && status === PENDING_SUPERVISOR) return 'Aguardando aval do supervisor';
@@ -177,7 +181,9 @@ function getNucleoDetail(status: string, state: StageState): string {
 
 function getCcDetail(status: string, state: StageState): string {
   if (state === 'approved') return 'Aprovado pelo Comité Científico';
-  if (state === 'rejected') return 'Rejeitado';
+  if (state === 'rejected') return 'Não Aprovado';
+  if (status === DOCS_PENDING_CC) return 'Aguardando documentos do estudante';
+  if (status === CC_SIGNATURE) return 'Parecer a aguardar assinatura da secretaria';
   if (status === IN_REVIEW_CC) return 'Em avaliação no Comité Científico';
   if (state === 'pending' || status === PENDING_CC) return 'Aguardando atribuição de revisores';
   if (state === 'not_started') return 'Ainda não chegou ao Comité';
@@ -186,8 +192,10 @@ function getCcDetail(status: string, state: StageState): string {
 
 function getCbDetail(status: string, state: StageState): string {
   if (state === 'approved') return 'Aprovado pelo Comité de Bioética';
-  if (state === 'rejected') return 'Rejeitado';
+  if (state === 'rejected') return 'Não Aprovado';
   if (status === IN_REVIEW_CB) return 'Em avaliação no Comité de Bioética';
+  if (status === DOCS_PENDING_CB) return 'Aguardando documentos do estudante';
+  if (status === CB_SIGNATURE) return 'Parecer a aguardar assinatura da secretaria';
   if (state === 'pending' || status === PENDING_CB) return 'Aguardando atribuição de revisores';
   if (state === 'not_started') return 'Ainda não chegou ao Comité de Bioética';
   return '—';

@@ -27,8 +27,14 @@ class Course extends Model
         return $this->hasMany(StudentProfile::class);
     }
 
-    public function coordinatorProfiles(): HasMany
+    // public function coordinatorProfiles(): HasMany
+    // {
+    //     return $this->hasMany(CoordinatorProfile::class);
+    // }
+
+    public function coordinator()
     {
-        return $this->hasMany(CoordinatorProfile::class);
+        return $this->hasOne(CoordinatorProfile::class);
     }
+    
 }

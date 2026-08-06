@@ -4,8 +4,7 @@
 
 // pages/dashboard/widgets/SuaveWidgets.tsx
 
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import type { WidgetProps } from '../../../types/dashboard';
 
 // =========================================================
@@ -122,9 +121,7 @@ export function JointReturnWidget({ data }: WidgetProps) {
 // =========================================================
 // 💰 2. DEBT PAYOFF WIDGET
 // =========================================================
-export function DebtPayoffWidget({ data }: WidgetProps) {
-  const debts = data?.debts || [];
-  
+export function DebtPayoffWidget({ data: _data }: WidgetProps) {
   return (
     <div className="suave-card" style={{
       background: 'var(--surface-container-lowest)',

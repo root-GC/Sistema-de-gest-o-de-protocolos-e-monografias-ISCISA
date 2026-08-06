@@ -64,7 +64,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'document.view',      'description' => 'Ver documentos do próprio processo'],
             ['code' => 'document.view.all',  'description' => 'Ver todos os documentos de um processo (secretário/gestor)'],
             ['code' => 'document.validate',  'description' => 'Validar ou rejeitar documento administrativo'],
-            ['code' => 'document.resubmit',  'description' => 'Resubmeter documento rejeitado'],
+            ['code' => 'document.resubmit',  'description' => 'Resubmeter documento nao aprovado'],
 
             // ── EVALUATION (ficha de avaliação — revisão cega) ────────────
             // Tabelas: protocol_evaluations, topic_review_evaluations

@@ -38,4 +38,16 @@ class Organ extends Model
     {
         return $this->hasMany(SecretaryProfile::class);
     }
+    public function adminProfiles(): HasMany
+    {
+        return $this->hasMany(AdminProfile::class);
+    }
+     /**
+     * Único órgão que autoriza criar os outros 3 executivos + coordenadores.
+     * Centralizado aqui para não espalhar comparações de string pelos controllers.
+     */
+    public function isScientificDirection(): bool
+    {
+        return $this->type === 'scientific_direction';
+    }
 }

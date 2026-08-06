@@ -14,7 +14,7 @@ class DecideEvaluationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'decision' => 'required|string|in:approved,rejected',
+            'decision' => 'required|string|in:approved,not_approved',
             'conclusion_summary' => 'nullable|string|max:5000',
         ];
     }

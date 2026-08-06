@@ -30,6 +30,11 @@ export interface Protocol {
     email: string;
   };
   documents?: Document[];
+  protocol_document_requirements?: ProtocolDocumentRequirement[];
+  histories?: ProtocolHistory[];
+  organ_tracking?: ProtocolOrganTracking | null;
+  read_only_for_organ?: boolean | null;
+  is_historical_for_organ?: boolean | null;
   latest_document?: {
     id: number;
     file_name: string;
@@ -42,6 +47,58 @@ export interface Protocol {
   review_assignments?: ReviewAssignment[];
 }
 
+export interface ProtocolHistory {
+  id: number;
+  organ_id?: number | null;
+  action: string;
+  action_label?: string | null;
+  description?: string | null;
+  old_status?: string | null;
+  old_status_label?: string | null;
+  new_status?: string | null;
+  new_status_label?: string | null;
+  metadata?: Record<string, unknown> | null;
+  occurred_at: string;
+  actor?: {
+    id: number;
+    name: string;
+    email?: string;
+  } | null;
+  organ?: {
+    id: number;
+    name: string;
+    type: string;
+  } | null;
+}
+
+export interface ProtocolOrganTracking {
+  organ_id: number;
+  organ_name: string;
+  organ_type: string;
+  form_organ?: string | null;
+  is_current: boolean;
+  is_historical: boolean;
+  status_label?: string | null;
+  latest_action?: string | null;
+  latest_action_label?: string | null;
+  latest_action_at?: string | null;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  history?: ProtocolHistory[];
+  latest_opinion?: {
+    id: number;
+    decision: string;
+    issued_at: string;
+    version: string;
+    download_url?: string | null;
+    evaluation_form_download_url?: string | null;
+    is_signed?: boolean;
+    signed_at?: string | null;
+    signed_by?: string | null;
+    signed_download_url?: string | null;
+  } | null;
+}
+
 export interface Document {
   id: number;
   file_name: string;
@@ -50,13 +107,85 @@ export interface Document {
   download_url?: string;
   status: string;
   version: number;
+  version_label?: string | null;
+  rejected_by?: {
+    id: number;
+    name: string;
+    email?: string | null;
+  } | null;
+  rejected_at?: string | null;
   submitted_at?: string;
+}
+
+export const CC_REQUIRED_DOCUMENTS = [
+  { key: 'cover_letter', name: 'Carta de cobertura' },
+  { key: 'credentials', name: 'Credenciais' },
+  { key: 'originality_declaration', name: 'Declaração de originalidade' },
+  { key: 'academic_record_declaration', name: 'Declaração do registo académico' },
+  { key: 'financial_statement_declaration', name: 'Declaração do extracto financeiro' },
+  { key: 'authors_responsibility_list', name: 'Lista de autores e responsabilidade' },
+  { key: 'folha_info_instrucoes', name: 'Folha de informação ao participante – instruções de preenchimento' },
+  { key: 'folha_info_participante', name: 'Folha de informação ao participante' },
+  { key: 'consentimento_participante', name: 'Termo de consentimento livre e informado do participante' },
+  { key: 'carta_autorizacao_supervisor', name: 'Carta de autorização do supervisor para a submissão do protocolo (actualizada)' },
+  { key: 'cv_estudante', name: 'Curriculum Vitae do estudante ou pesquisador' },
+  { key: 'cv_supervisor', name: 'Curriculum Vitae do supervisor (e do co-supervisor, caso aplicável)' },
+] as const;
+
+export type CCRequiredDocumentKey = typeof CC_REQUIRED_DOCUMENTS[number]['key'];
+
+export type CCRequiredDocumentFiles = Record<CCRequiredDocumentKey, File | null>;
+
+export const CIBS_REQUIRED_DOCUMENTS = [
+  { key: 'carta_revisao_bioetica_cibs', name: 'Carta de solicitação de revisão bioética ao CIBS-ISCISA' },
+  { key: 'declaracao_compromisso_bioetica_cibs', name: 'Declaração de compromisso do estudante ou investigador, em cumprir os princípios de bioética e aceitação das normas e procedimentos do CIBS-ISCISA' },
+  { key: 'declaracao_conflito_interesses', name: 'Declaração de comunicação de conflito de interesse' },
+] as const;
+
+export type CIBSDocumentKey = typeof CIBS_REQUIRED_DOCUMENTS[number]['key'];
+
+export type CIBSDocumentFiles = Record<CIBSDocumentKey, File | null>;
+
+export const OPTIONAL_DOCUMENTS = [
+  { key: 'consentimento_tutor', name: 'Termo de consentimento livre e informado do pai/mãe ou tutor legal da criança menor de dezoito anos de idade (caso aplicável)' },
+  { key: 'assentimento_menor', name: 'Termo de assentimento do participante menor, de doze a dezassete anos de idade (caso aplicável)' },
+] as const;
+
+export interface OtherDocument {
+  name: string;
+  file: File | null;
+}
+
+export interface ProtocolDocumentRequirement {
+  id: number;
+  protocol_id: number;
+  document_key: CCRequiredDocumentKey | string;
+  nome: string;
+  required_for_organ: string;
+  is_optional?: boolean;
+  file_path?: string | null;
+  file_name?: string | null;
+  file_url?: string | null;
+  download_url?: string | null;
+  enviado: boolean;
+  aprovado: boolean | null;
+  rejection_reason?: string | null;
+  status_label?: string;
+  reviewed_at?: string | null;
+  reviewer?: {
+    id: number;
+    name: string;
+    email?: string;
+  } | null;
 }
 
 export interface ReviewAssignment {
   id: number;
+  is_primary?: boolean;
   reviewer_one?: {
     id: number;
+    name?: string | null;
+    email?: string | null;
     user?: {
       id: number;
       name: string;
@@ -65,6 +194,8 @@ export interface ReviewAssignment {
   };
   reviewer_two?: {
     id: number;
+    name?: string | null;
+    email?: string | null;
     user?: {
       id: number;
       name: string;
@@ -77,7 +208,10 @@ export interface EligibleReviewer {
   id: number;
   name: string;
   email: string;
-  scientific_area_name: string;
+  scientific_area_id?: number;
+  scientific_area_name?: string | null;
+  is_same_scientific_area?: boolean;
+  active_works?: number;
 }
 
 export interface AssignedProtocolReviewer {
@@ -94,6 +228,8 @@ export interface AssignedProtocolReviewer {
   } | null;
   status?: string;
   review_order?: boolean;
+  is_primary?: boolean;
+  role?: 'primary' | 'reviewer' | string;
   assigned_at?: string;
 }
 
@@ -111,6 +247,13 @@ export interface ProtocolOpinion {
   document_url?: string | null;
   download_url?: string | null;
   evaluation_form_download_url?: string | null;
+  is_signed?: boolean;
+  signed_at?: string | null;
+  signed_by?: {
+    id: number;
+    name: string;
+  } | null;
+  signed_download_url?: string | null;
 }
 
 // Tipo para o documento revisado enviado pelo revisor
@@ -127,11 +270,36 @@ export interface ReviewedDocument {
 
 export const protocolService = {
   // ── Submissão de protocolo ──────────────────────────
-  submit: (topicId: number, protocolType: string, file: File) => {
+  submit: (
+    topicId: number,
+    protocolType: string,
+    file: File,
+    requiredDocuments: CCRequiredDocumentFiles,
+    cibsDocuments?: CIBSDocumentFiles,
+    otherDocuments?: OtherDocument[],
+  ) => {
     const formData = new FormData();
     formData.append('topic_id', String(topicId));
     formData.append('protocol_type', protocolType);
     formData.append('document', file);
+    CC_REQUIRED_DOCUMENTS.forEach(doc => {
+      const attachment = requiredDocuments[doc.key];
+      if (attachment) {
+        formData.append(`required_documents[${doc.key}]`, attachment);
+      }
+    });
+    CIBS_REQUIRED_DOCUMENTS.forEach(doc => {
+      const attachment = cibsDocuments?.[doc.key];
+      if (attachment) {
+        formData.append(`cibs_documents[${doc.key}]`, attachment);
+      }
+    });
+    (otherDocuments ?? []).forEach((other, index) => {
+      if (other.file) {
+        formData.append(`other_documents[${index}]`, other.file);
+        formData.append(`other_document_names[${index}]`, other.name);
+      }
+    });
     return reqFormData('POST', '/api/v1/protocols', formData) as Promise<{
       message: string;
       protocol: Protocol;
@@ -143,8 +311,58 @@ export const protocolService = {
 
   getById: (id: number) => req('GET', `/api/v1/protocols/${id}`) as Promise<{ protocol: Protocol }>,
 
+  history: (protocolId: number) =>
+    req('GET', `/api/v1/protocols/${protocolId}/history`) as Promise<{ history: ProtocolHistory[] }>,
+
+  listRequiredDocuments: (protocolId: number) =>
+    req('GET', `/api/v1/protocols/${protocolId}/required-documents`) as Promise<{
+      documents: ProtocolDocumentRequirement[];
+    }>,
+
+  uploadRequiredDocument: (protocolId: number, requirementId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('document', file);
+    return reqFormData('POST', `/api/v1/protocols/${protocolId}/required-documents/${requirementId}/upload`, formData) as Promise<{
+      message: string;
+      document: ProtocolDocumentRequirement;
+    }>;
+  },
+
+  approveRequiredDocument: (protocolId: number, requirementId: number) =>
+    req('PATCH', `/api/v1/protocols/${protocolId}/required-documents/${requirementId}/approve`) as Promise<{
+      message: string;
+      protocol: Protocol;
+    }>,
+
+  rejectRequiredDocument: (protocolId: number, requirementId: number, rejectionReason: string) =>
+    req('PATCH', `/api/v1/protocols/${protocolId}/required-documents/${requirementId}/reject`, {
+      rejection_reason: rejectionReason,
+    }) as Promise<{
+      message: string;
+      protocol: Protocol;
+    }>,
+
   listOpinions: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/opinions`) as Promise<{ opinions: ProtocolOpinion[] }>,
+
+  submitSignedParecer: (protocolId: number, opinionId: number, signedFile: File) => {
+    const formData = new FormData();
+    formData.append('signed_document', signedFile);
+    return reqFormData('POST', `/api/v1/protocols/${protocolId}/opinions/${opinionId}/sign`, formData) as Promise<{
+      message: string;
+      protocol: {
+        id: number;
+        status: string;
+        status_label: string;
+      };
+    }>;
+  },
+
+  downloadSignedOpinion: (opinionId: number) =>
+    downloadApiFile(`/api/v1/opinions/${opinionId}/signed-download`, 'parecer-assinado.pdf'),
+
+  openSignedOpinion: (opinionId: number) =>
+    openApiFile(`/api/v1/opinions/${opinionId}/signed-download?inline=1`, 'parecer-assinado.pdf'),
 
   // ── Ficheiros ───────────────────────────────────────
   openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
@@ -152,40 +370,29 @@ export const protocolService = {
   downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
 
   // ── Upload de documento revisado pelo revisor ───────
-  /**
-   * Faz upload do documento revisado (.docx) que o revisor 
-   * editou localmente e quer anexar à sua avaliação.
-   */
   uploadReviewedDocument: (protocolId: number, file: File) => {
     const formData = new FormData();
     formData.append('document', file);
     formData.append('protocol_id', String(protocolId));
-    formData.append('type', 'reviewed'); // Para o backend saber que é documento revisado
-
+    formData.append('type', 'reviewed');
     return reqFormData('POST', `/api/v1/protocols/${protocolId}/upload-reviewed`, formData) as Promise<{
       message: string;
       document: ReviewedDocument;
     }>;
   },
 
-  /**
-   * Remove um documento revisado que foi enviado anteriormente.
-   */
   removeReviewedDocument: (protocolId: number, documentId: number) =>
     req('DELETE', `/api/v1/protocols/${protocolId}/reviewed-documents/${documentId}`) as Promise<{
       message: string;
     }>,
 
-  /**
-   * Lista documentos revisados anexados ao protocolo.
-   */
   listReviewedDocuments: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/reviewed-documents`) as Promise<{
       documents: ReviewedDocument[];
     }>,
 
   // ── Supervisor ──────────────────────────────────────
-  listForSupervisor: () => 
+  listForSupervisor: () =>
     req('GET', '/api/v1/supervisor/protocols') as Promise<{ protocols: Protocol[] }>,
 
   approveBySupervisor: (protocolId: number) =>
@@ -202,7 +409,7 @@ export const protocolService = {
 
   // ── Secretary ───────────────────────────────────────
   listForSecretary: () =>
-    req('GET', '/api/v1/secretary/protocols') as Promise<{ protocols: Protocol[] }>,
+    req('GET', '/api/v1/nucleo/secretary/protocols') as Promise<{ protocols: Protocol[] }>,
 
   getEligibleReviewers: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/eligible-reviewers`) as Promise<{
@@ -248,6 +455,9 @@ export const protocolService = {
     }>,
 
   // ── Comité Científico (CC) ──────────────────────────
+  listForSecretaryCC: () =>
+    req('GET', '/api/v1/comite-cientifico/secretary/protocols') as Promise<{ protocols: Protocol[] }>,
+
   getEligibleReviewersCC: (protocolId: number) =>
     req('GET', `/api/v1/comite-cientifico/protocols/${protocolId}/eligible-reviewers`) as Promise<{
       reviewers: EligibleReviewer[];
@@ -270,6 +480,9 @@ export const protocolService = {
     }>,
 
   // ── Comité de Bioética ──────────────────────────────
+  listForSecretaryBioetica: () =>
+    req('GET', '/api/v1/comite-bioetica/secretary/protocols') as Promise<{ protocols: Protocol[] }>,
+
   getEligibleReviewersBioetica: (protocolId: number) =>
     req('GET', `/api/v1/comite-bioetica/protocols/${protocolId}/eligible-reviewers`) as Promise<{
       reviewers: EligibleReviewer[];
@@ -282,10 +495,10 @@ export const protocolService = {
       total: number;
     }>,
 
-  assignReviewersBioetica: (protocolId: number, reviewerOneId: number, reviewerTwoId: number) =>
+  assignReviewersBioetica: (protocolId: number, primaryReviewerId: number, reviewerIds: number[]) =>
     req('POST', `/api/v1/comite-bioetica/protocols/${protocolId}/assign-reviewers`, {
-      reviewer_one_id: reviewerOneId,
-      reviewer_two_id: reviewerTwoId,
+      primary_reviewer_id: primaryReviewerId,
+      reviewer_ids: reviewerIds,
     }) as Promise<{
       message: string;
       protocol: Protocol;
@@ -293,5 +506,5 @@ export const protocolService = {
 
   // ── Reviewer ────────────────────────────────────────
   listForReviewer: () =>
-    req('GET', '/api/v1/reviewer/protocols') as Promise<{ protocols: Protocol[] }>,
+    req('GET', '/api/v1/nucleo/reviewer/protocols') as Promise<{ protocols: Protocol[] }>,
 };

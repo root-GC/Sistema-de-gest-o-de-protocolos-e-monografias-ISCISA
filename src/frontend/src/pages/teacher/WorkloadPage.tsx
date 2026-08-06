@@ -5,7 +5,7 @@ import { supervisorService, type Supervisee } from '../../services/supervisorSer
 import { topicService, type Topic } from '../../services/topicService'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { monographService, type Monograph } from '../../services/monographService'
-import { evaluationService, type EvaluationForm, type ReviewerEvaluation } from '../../services/evaluationService'
+import { evaluationService, type EvaluationForm } from '../../services/evaluationService'
 import '../../styles/global.css'
 
 // ============================================================

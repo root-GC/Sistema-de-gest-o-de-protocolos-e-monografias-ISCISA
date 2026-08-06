@@ -64,8 +64,8 @@ export const mockDashboardData = {
       {
         id: 4,
         title: "Análise da Cobertura Vacinal contra o Sarampo em Menores de 1 Ano nos Distritos da Província de Gaza, 2020-2023",
-        status: "rejeitado",
-        statusLabel: "Rejeitado",
+        status: "não aprovado",
+        statusLabel: "Não Aprovado",
         statusColor: "error",
         submissionDate: "2024-01-05",
         lastUpdate: "2024-01-12",
@@ -73,7 +73,7 @@ export const mockDashboardData = {
         supervisor: "Prof. Doutora Ana Mussa",
         progress: 100,
         documents: [
-          { type: "protocolo", status: "rejeitado", date: "2024-01-12" }
+          { type: "protocolo", status: "não aprovado", date: "2024-01-12" }
         ],
         rejectionReason: "Metodologia inadequada para o tipo de estudo proposto. Necessário rever o desenho do estudo.",
         reviewers: 2,
@@ -360,7 +360,7 @@ export const mockDashboardData = {
           { name: "Identificação do supervisor", status: "ok", comment: null },
           { name: "Data", status: "ok", comment: null }
         ],
-        overallStatus: "rejeitado",
+        overallStatus: "não aprovado",
         submissionDate: "2024-02-18"
       }
     ],
@@ -907,7 +907,7 @@ export const mockDashboardData = {
       { status: "Em Triagem", count: 23, color: "info", percentage: 14.7 },
       { status: "Em Revisão", count: 45, color: "warning", percentage: 28.8 },
       { status: "Aprovados", count: 67, color: "success", percentage: 42.9 },
-      { status: "Rejeitados", count: 21, color: "error", percentage: 13.5 }
+      { status: "Não Aprovados", count: 21, color: "error", percentage: 13.5 }
     ],
     byCourse: [
       { course: "Medicina Geral", count: 42, percentage: 26.9 },
@@ -944,7 +944,7 @@ export const mockDashboardData = {
       {
         id: "report-1",
         title: "Relatório Mensal de Protocolos",
-        description: "Resumo de todos os protocolos submetidos, aprovados e rejeitados no mês",
+        description: "Resumo de todos os protocolos submetidos, aprovados e não aprovados no mês",
         lastGenerated: "2024-02-01",
         format: "PDF",
         parameters: ["mês", "ano", "curso"]

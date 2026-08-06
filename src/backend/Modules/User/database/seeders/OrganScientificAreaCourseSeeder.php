@@ -19,7 +19,7 @@ class OrganScientificAreaCourseSeeder extends Seeder
         $organs = [
             ['name' => 'Núcleo Científico',    'type' => 'nucleus',               'description' => 'Primeira avaliação do protocolo; validação de temas'],
             ['name' => 'Comitê Científico',    'type' => 'scientific_committee',  'description' => 'Avaliação aprofundada; verificação documental completa'],
-            ['name' => 'Comitê de Bioética',   'type' => 'bioethics_committee',   'description' => 'Avaliação ética do protocolo'],
+            ['name' => 'Comite de Bioetica','type' => 'bioethics_committee',   'description' => 'Avaliação ética do protocolo'],
             ['name' => 'Direção Científica',   'type' => 'scientific_direction',  'description' => 'Verificação final; agendamento de defesas; alocação de júris'],
         ];
 

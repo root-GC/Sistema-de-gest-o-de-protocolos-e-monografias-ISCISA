@@ -1,110 +1,309 @@
-import { downloadApiFile, openApiFile, req } from './apiClient';
+// src/services/evaluationService.ts
+import { req } from './apiClient'
 
-export interface EvaluationForm {
-  id: number;
-  protocol_id: number;
-  version: string;
-  organ: string;
-  status: string;
-  final_decision?: string | null;
-  decided_by?: number | null;
-  decided_at?: string | null;
-  conclusion_summary?: string | null;
-  created_at: string;
-  protocol?: {
-    id: number;
-    code: string;
-    version: string;
-    status: string;
-    status_label: string;
-    submitted_at: string;
-    topic?: {
-      id: number;
-      title: string;
-      status: string;
-      scientific_area?: { id: number; name: string };
-      course?: { id: number; name: string; code: string };
-    };
-  };
-  form_criteria?: FormCriterion[];
-  reviewer_evaluations?: ReviewerEvaluation[];
+// ═══════════════════════════════════════════════
+// TIPOS
+// ═══════════════════════════════════════════════
+
+export type EvaluationOrgan = 'nucleo' | 'comite-cientifico' | 'comite-bioetica'
+
+function organBase(organ: EvaluationOrgan = 'nucleo'): string {
+  return `/api/v1/${organ}`
 }
 
 export interface FormCriterion {
-  id: number;
-  evaluation_form_id: number;
-  criterion_id: number;
-  group_name: string;
-  criterion_name: string;
-  order_column: number;
-}
-
-export interface ReviewerEvaluation {
-  id: number;
-  evaluation_form_id: number;
-  reviewer_id: number;
-  status: string;
-  recommendation?: string | null;
-  overall_comment?: string | null;
-  submitted_at?: string | null;
-  reviewer?: { user?: { id: number; name: string } };
-  criterion_reviews?: CriterionReview[];
+  id: number
+  evaluation_form_id: number
+  criterion_name: string
+  group_name: string | null
+  description: string | null
+  max_score: number
+  weight: number
+  sort_order: number
 }
 
 export interface CriterionReview {
-  id: number;
-  reviewer_evaluation_id: number;
-  evaluation_form_criterion_id: number;
-  comment?: string | null;
-  form_criterion?: FormCriterion;
+  id: number
+  reviewer_evaluation_id: number
+  evaluation_form_criterion_id: number
+  comment: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ReviewerEvaluation {
+  id: number
+  evaluation_form_id: number
+  reviewer: {
+    id: number
+    user: {
+      id: number
+      name: string
+      email: string
+    }
+  }
+  status: string
+  is_evaluated?: boolean
+  is_primary?: boolean
+  role?: 'primary' | 'reviewer' | string
+  decision: string | null
+  preliminary_decision?: string | null
+  overall_comment?: string | null
+  deliberation_submitted?: boolean
+  submitted_at: string | null
+  evaluated_at?: string | null
+  criterion_reviews?: CriterionReview[]
+}
+
+export interface CriteriaComment {
+  form_criterion_id?: number
+  criterion_id: number
+  criterion_name: string
+  group_name: string | null
+  order_column: number
+  reviews: Array<{
+    reviewer_id: number | null
+    reviewer_name: string
+    comment: string | null
+    is_shared?: boolean
+  }>
+}
+
+export interface EvaluationForm {
+  id: number
+  protocol_id: number
+  topic_id?: number
+  version: number
+  form_type: 'evaluation' | 'deliberation'
+  parent_form_id: number | null
+  organ: string
+  is_shared_form?: boolean
+  is_primary_reviewer?: boolean
+  can_access_form?: boolean
+  status: string
+  final_decision: string | null
+  harmonized_decision?: string | null
+  harmonized_at?: string | null
+  decided_by: number | null
+  decided_at: string | null
+  conclusion_summary: string | null
+  deliberation_date: string | null
+  deliberation_location: string | null
+  deliberation_scheduled_by: number | null
+  created_at: string
+  updated_at: string
+  protocol?: {
+    id: number
+    code: string
+    version: string
+    topic?: {
+      id: number
+      title: string
+    }
+    student?: {
+      id: number
+      name: string
+    }
+    latest_document?: {
+      id: number
+      file_name: string
+      download_url: string
+      view_url?: string
+    }
+  }
+  topic?: {
+    id: number
+    title: string
+  }
+  form_criteria?: FormCriterion[]
+  reviewer_evaluations?: ReviewerEvaluation[]
+  criteria_comments?: CriteriaComment[]
+  child_forms?: EvaluationForm[]
 }
 
 export interface EvaluationOpinionResult {
-  id: number;
-  decision: string;
-  issued_at: string;
-  document_url?: string;
-  download_url?: string;
-  evaluation_form_download_url?: string;
+  id: number
+  decision: string
+  issued_at: string
+  document_url?: string
+  download_url?: string
+  evaluation_form_download_url?: string
 }
 
+// ═══════════════════════════════════════════════
+// SERVICE
+// ═══════════════════════════════════════════════
+
 export const evaluationService = {
-  getForm: (formId: number) =>
-    req('GET', `/api/v1/evaluation-forms/${formId}`) as Promise<{
-      evaluation_form: EvaluationForm;
+  // ── Listagens ──────────────────────────────────────
+
+  listForReviewer: (organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/reviewer/evaluations`) as Promise<{
+      evaluation_forms: EvaluationForm[]
     }>,
 
-  saveCriterionReview: (formId: number, formCriterionId: number, comment: string | null) =>
-    req('POST', `/api/v1/evaluation-forms/${formId}/criteria/${formCriterionId}/review`, { comment }) as Promise<{
-      message: string;
-      criterion_review: CriterionReview;
+  listForSecretary: (organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/secretary/evaluations`) as Promise<{
+      evaluation_forms: EvaluationForm[]
     }>,
 
-  submit: (formId: number, recommendation: string, overallComment?: string | null) =>
-    req('POST', `/api/v1/evaluation-forms/${formId}/submit`, {
-      recommendation,
+  /**
+   * Lista fichas com status 'deliberated' — aguardando decisão final.
+   */
+  listPendingFinalDecision: (organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/final-decisions`) as Promise<{
+      evaluation_forms: EvaluationForm[]
+    }>,
+
+  // ── Detalhe ────────────────────────────────────────
+
+  getForm: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
+    req('GET', `${organBase(organ)}/evaluation-forms/${formId}`) as Promise<{
+      evaluation_form: EvaluationForm
+    }>,
+
+  // ── Critérios ──────────────────────────────────────
+
+  saveCriterionReview: (
+    formId: number,
+    formCriterionId: number,
+    comment: string | null,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/criteria/${formCriterionId}/review`, {
+      comment,
+    }) as Promise<{ message: string }>,
+
+  // ── Submissão da Avaliação Individual ──────────────
+
+  submit: (
+    formId: number,
+    decision: 'approved' | 'not_approved',
+    overallComment?: string | null,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/submit`, {
+      decision,
       overall_comment: overallComment || null,
     }) as Promise<{
-      message: string;
-      reviewer_evaluation: ReviewerEvaluation;
+      message: string
+      evaluation_form: EvaluationForm
     }>,
 
-  decide: (formId: number, decision: string, conclusionSummary?: string | null) =>
-    req('POST', `/api/v1/evaluation-forms/${formId}/decide`, {
+  markEvaluated: (
+    formId: number,
+    decision: 'approved' | 'not_approved',
+    overallComment?: string | null,
+    organ: EvaluationOrgan = 'comite-cientifico'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/mark-evaluated`, {
+      decision,
+      overall_comment: overallComment || null,
+    }) as Promise<{
+      message: string
+      reviewer_evaluation: ReviewerEvaluation
+      deliberation_pending: boolean
+      evaluation_form: EvaluationForm
+    }>,
+
+  // ── Deliberação ────────────────────────────────────
+
+  scheduleDeliberation: (
+    formId: number,
+    date: string,
+    location: string,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/schedule-deliberation`, {
+      deliberation_date: date,
+      deliberation_location: location,
+    }) as Promise<{
+      message: string
+      evaluation_form: EvaluationForm
+    }>,
+
+  startDeliberation: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/start-deliberation`) as Promise<{
+      message: string
+      evaluation_form: EvaluationForm
+    }>,
+
+  submitDeliberation: (
+    formId: number,
+    decision: 'approved' | 'not_approved',
+    conclusionSummary?: string | null,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/submit-deliberation`, {
       decision,
       conclusion_summary: conclusionSummary || null,
     }) as Promise<{
-      message: string;
-      evaluation_form: EvaluationForm;
-      opinion: EvaluationOpinionResult;
+      message: string
+      evaluation_form: EvaluationForm
+      opinion?: EvaluationOpinionResult
     }>,
 
-  listForReviewer: () =>
-    req('GET', '/api/v1/reviewer/evaluations') as Promise<{
-      evaluation_forms: EvaluationForm[];
+  /**
+   * Encerra a reunião de deliberação.
+   * O backend decide automaticamente:
+   * - 'deliberated' se ambos os revisores submeteram a mesma decisão
+   * - 'not_deliberated' se as decisões divergem
+   * O resultado vem diretamente no evaluation_form.status.
+   */
+  closeMeeting: (formId: number, result: 'deliberated' | 'not_deliberated', organ: EvaluationOrgan = 'nucleo') =>
+  req('POST', `${organBase(organ)}/evaluation-forms/${formId}/close-meeting`, {
+    result,
+  }) as Promise<{
+    message: string
+    evaluation_form: EvaluationForm
+  }>,
+
+  decide: (
+    formId: number,
+    decision: 'approved' | 'not_approved',
+    conclusionSummary?: string | null,
+    organ: EvaluationOrgan = 'nucleo'
+  ) =>
+    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/decide`, {
+      decision,
+      conclusion_summary: conclusionSummary || null,
+    }) as Promise<{
+      message: string
+      evaluation_form: EvaluationForm
+      opinion?: EvaluationOpinionResult
     }>,
 
-  openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
+  // ── Ficheiros ──────────────────────────────────────
 
-  downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
-};
+  openFile: async (url: string, filename?: string) => {
+    void filename
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, '_blank')
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+    } catch (error) {
+      console.error('Erro ao abrir ficheiro:', error)
+      window.open(url, '_blank')
+    }
+  },
+
+  downloadFile: async (url: string, filename?: string) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename || 'documento'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+    } catch (error) {
+      console.error('Erro ao descarregar ficheiro:', error)
+      window.open(url, '_blank')
+    }
+  },
+}

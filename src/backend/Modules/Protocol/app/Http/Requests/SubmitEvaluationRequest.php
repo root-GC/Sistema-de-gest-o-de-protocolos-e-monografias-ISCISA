@@ -14,7 +14,7 @@ class SubmitEvaluationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'recommendation' => 'required|string|in:approved,rejected',
+            'decision' => 'required|string|in:approved,not_approved',
             'overall_comment' => 'nullable|string|max:5000',
         ];
     }

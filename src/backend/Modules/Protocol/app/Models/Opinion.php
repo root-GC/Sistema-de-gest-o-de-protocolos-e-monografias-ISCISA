@@ -20,10 +20,15 @@ class Opinion extends Model
         'issued_by',
         'issued_at',
         'document_path',
+        'signed_document_path',
+        'signed_file_name',
+        'signed_by',
+        'signed_at',
     ];
 
     protected $casts = [
         'issued_at' => 'datetime',
+        'signed_at' => 'datetime',
     ];
 
     public function protocol()
@@ -39,5 +44,24 @@ class Opinion extends Model
     public function issuedBy()
     {
         return $this->belongsTo(User::class, 'issued_by');
+    }
+
+    public function signedBy()
+    {
+        return $this->belongsTo(User::class, 'signed_by');
+    }
+
+    public function isSigned(): bool
+    {
+        return (bool) $this->signed_document_path;
+    }
+
+    public function effectiveVersion(): string
+    {
+        if ($this->relationLoaded('evaluationForm') && $this->evaluationForm?->version) {
+            return $this->evaluationForm->version;
+        }
+
+        return $this->version;
     }
 }

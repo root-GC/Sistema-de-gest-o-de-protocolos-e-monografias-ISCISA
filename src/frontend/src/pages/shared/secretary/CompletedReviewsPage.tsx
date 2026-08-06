@@ -50,7 +50,7 @@ export default function CompletedReviewsPage() {
         id: 2, type: 'topic', code: '', 
         title: 'Estudo sobre desnutrição infantil em zonas rurais', 
         studentName: 'Carlos Mavie', status: 'topic_in_review', statusLabel: 'Em Revisão', 
-        reviews: [{ reviewer: 'Dra. Carla Mondlane', decision: 'Rejeitado', comment: 'O tema precisa de maior delimitação e foco. Rever objetivos.', date: '2024-03-18' }], 
+        reviews: [{ reviewer: 'Dra. Carla Mondlane', decision: 'Não Aprovado', comment: 'O tema precisa de maior delimitação e foco. Rever objetivos.', date: '2024-03-18' }], 
         submittedAt: '2024-03-12' 
       },
       { 
@@ -59,7 +59,7 @@ export default function CompletedReviewsPage() {
         studentName: 'Sofia Estudante', status: 'protocol_in_review_nucleo', statusLabel: 'Em Revisão', 
         reviews: [
           { reviewer: 'Dr. Armando Macuácua', decision: 'Aprovado', comment: 'Protocolo bem estruturado e metodologia rigorosa.', date: '2024-03-20' }, 
-          { reviewer: 'Dra. Carla Mondlane', decision: 'Rejeitado', comment: 'Necessita de ajustes na secção ética e consentimento informado.', date: '2024-03-21' }
+          { reviewer: 'Dra. Carla Mondlane', decision: 'Não Aprovado', comment: 'Necessita de ajustes na secção ética e consentimento informado.', date: '2024-03-21' }
         ], 
         submittedAt: '2024-03-15' 
       },
@@ -145,7 +145,7 @@ export default function CompletedReviewsPage() {
           const itemKey = `${item.type}-${item.id}`
           const isExpanded = expandedId === itemKey
           const allApproved = item.reviews.every(r => r.decision === 'Aprovado')
-          const hasDivergence = item.reviews.length === 2 && !allApproved && !item.reviews.every(r => r.decision === 'Rejeitado')
+          const hasDivergence = item.reviews.length === 2 && !allApproved && !item.reviews.every(r => r.decision === 'Não Aprovado')
 
           return (
             <div key={itemKey} className="card" style={{ padding: 'var(--space-3) var(--space-4)' }}>
@@ -157,7 +157,7 @@ export default function CompletedReviewsPage() {
                     <span style={{ fontSize: 'var(--label-sm)', padding: '2px 8px', borderRadius: 'var(--radius-full)', 
                       background: hasDivergence ? 'var(--tertiary-container)' : allApproved ? 'var(--primary-container)' : 'var(--error-container)', 
                       color: hasDivergence ? 'var(--on-tertiary-container)' : allApproved ? 'var(--on-primary-container)' : 'var(--on-error-container)' }}>
-                      {hasDivergence ? 'Divergência' : allApproved ? 'Consenso' : 'Rejeitado'}
+                      {hasDivergence ? 'Divergência' : allApproved ? 'Consenso' : 'Não Aprovado'}
                     </span>
                     {/* Badge do tipo */}
                     <span style={{ fontSize: 'var(--label-sm)', padding: '2px 6px', borderRadius: 'var(--radius-full)', background: 'var(--surface-container)', color: 'var(--on-surface-variant)' }}>

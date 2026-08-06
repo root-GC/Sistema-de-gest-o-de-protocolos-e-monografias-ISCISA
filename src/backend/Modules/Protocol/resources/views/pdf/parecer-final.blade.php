@@ -1,110 +1,198 @@
+@php
+$organ = $opinion->organ ?? 'nucleo';
+$area = data_get($protocol, 'topic.scientificArea.name', '________________');
+$student = data_get($protocol, 'topic.student.name', '________________');
+$supervisor = data_get($protocol, 'topic.supervisor.user.name', '________________');
+$title = data_get($protocol, 'topic.title', '________________');
+$version = $opinionVersion ?? $opinion->evaluationForm?->version ?? $opinion->version ?? $protocol->version ?? '____';
+$issuedAt = $opinion->issued_at ?? now();
+$deliberationAt = $opinion->evaluationForm?->deliberation_date ?? $issuedAt;
+$decisionLabel = $opinion->decision === 'approved' ? 'APROVAÇÃO' : 'NÃO APROVAÇÃO';
+
+$months = [
+1 => 'Janeiro',
+2 => 'Fevereiro',
+3 => 'Março',
+4 => 'Abril',
+5 => 'Maio',
+6 => 'Junho',
+7 => 'Julho',
+8 => 'Agosto',
+9 => 'Setembro',
+10 => 'Outubro',
+11 => 'Novembro',
+12 => 'Dezembro',
+];
+
+$organHeader = match ($organ) {
+'nucleo' => "NÚCLEO CIENTÍFICO DA ÁREA DE {$area}",
+'comite_cientifico' => 'COMITÉ CIENTÍFICO',
+default => 'COMITÉ CIENTÍFICO',
+};
+
+$organSentence = match ($organ) {
+'nucleo' => "O Núcleo Científico da área de {$area}",
+'comite_cientifico' => 'O Comité Científico',
+default => 'O Comité Científico',
+};
+
+$presidentTitle = match ($organ) {
+'nucleo' => "O Presidente do Núcleo de {$area}",
+'comite_cientifico' => 'O Presidente do Comité Científico',
+default => 'O Presidente do Comité',
+};
+@endphp
+
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="utf-8">
     <style>
-        body { font-family: 'DejaVu Sans', sans-serif; font-size: 12px; line-height: 1.5; }
-        .header { text-align: center; margin-bottom: 25px; }
-        .header h3 { margin: 5px 0; }
-        .info-table { width: 100%; margin-bottom: 20px; }
-        .info-table td { padding: 3px 0; vertical-align: top; }
-        .info-table td:first-child { width: 180px; font-weight: bold; }
-        .decision-text { margin: 25px 0; text-align: justify; font-size: 13px; }
-        .decision-box { border: 1px solid #000; padding: 15px; margin: 20px 0; text-align: center; }
-        .decision-box .approved { color: #006600; font-weight: bold; font-size: 16px; }
-        .decision-box .rejected { color: #cc0000; font-weight: bold; font-size: 16px; }
-        .observations { margin: 20px 0; }
-        .signature-table { width: 100%; border-collapse: collapse; margin-top: 35px; }
-        .signature-table th, .signature-table td { border: 1px solid #000; padding: 8px; text-align: center; }
-        .signature-table th { background-color: #f0f0f0; }
-        .footer { margin-top: 40px; text-align: right; font-style: italic; }
-        .page-break { page-break-after: always; }
+        @page {
+            margin: 40px 58px 48px;
+        }
+
+        body {
+            font-family: "DejaVu Serif", serif;
+            font-size: 12px;
+            color: #000;
+            line-height: 1.45;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 26px;
+        }
+
+        .logo {
+            width: 74px;
+            margin-bottom: 8px;
+        }
+
+        .institution {
+            font-weight: bold;
+            text-transform: uppercase;
+            line-height: 1.25;
+        }
+
+        .organ {
+            margin-top: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .address-block {
+            margin-top: 54px;
+            margin-bottom: 42px;
+        }
+
+        .address-line {
+            margin: 5px 0;
+        }
+
+        .city {
+            margin-top: 46px;
+        }
+
+        .subject {
+            margin: 28px 0 32px;
+            text-align: justify;
+        }
+
+        .body-text {
+            text-align: justify;
+            margin: 0 0 30px;
+        }
+
+        .decision {
+            font-weight: bold;
+        }
+
+        .observations {
+            margin: 24px 0 32px;
+            text-align: justify;
+        }
+
+        .closing {
+            margin-top: 28px;
+        }
+
+        .date {
+            margin-top: 72px;
+            text-align: right;
+        }
+
+        .signature {
+            margin-top: 68px;
+            text-align: center;
+        }
+
+        .signature-title {
+            margin-bottom: 46px;
+        }
+
+        .signature-line {
+            display: inline-block;
+            min-width: 260px;
+            border-top: 1px solid #000;
+            padding-top: 5px;
+        }
     </style>
 </head>
+
 <body>
     <div class="header">
-        <strong>INSTITUTO SUPERIOR DE CIÊNCIAS DE SAÚDE (ISCISA)</strong><br>
-        @if(($opinion->organ ?? '') === 'nucleo')
-            Núcleo Científico
-        @elseif(($opinion->organ ?? '') === 'comite_cientifico')
-            Comissão Científica
-        @elseif(($opinion->organ ?? '') === 'comite_bioetica')
-            Comité de Bioética
-        @else
-            Comissão Científica
+        @if(!empty($logoDataUri))
+        <img src="{{ $logoDataUri }}" class="logo" alt="ISCISA">
         @endif
-        <br>
-        <h3>PARECER FINAL</h3>
-        <hr>
+
+        <div class="institution">
+            INSTITUTO SUPERIOR DE CIÊNCIAS DE SAÚDE<br>
+            (ISCISA)
+        </div>
+
+        <div class="organ">{{ $organHeader }}</div>
     </div>
 
-    <table class="info-table">
-        <tr><td>N.º do Protocolo:</td><td>{{ $protocol->code ?? $protocol->id }}</td></tr>
-        <tr><td>Título:</td><td>{{ $protocol->topic->title ?? '---' }}</td></tr>
-        <tr><td>Estudante(s):</td><td>{{ $protocol->topic->student->name ?? '---' }}</td></tr>
-        <tr><td>Orientador(a):</td><td>{{ $protocol->topic->supervisor->user->name ?? '---' }}</td></tr>
-        <tr><td>Curso:</td><td>{{ $protocol->topic->course->name ?? '---' }}</td></tr>
-        <tr><td>Versão do Protocolo:</td><td>{{ $opinion->version ?? $protocol->version }}</td></tr>
-        <tr><td>Data de Emissão:</td><td>{{ $opinion->issued_at->format('d/m/Y') }}</td></tr>
-    </table>
-
-    <div class="decision-text">
-        <p>
-            Após a revisão e deliberação
-            @if(($opinion->organ ?? '') === 'nucleo')
-                do Núcleo Científico,
-            @else
-                da Comissão Científica,
-            @endif
-            tendo em conta os critérios científicos, metodológicos e éticos estabelecidos,
-            o protocolo em referência foi
-            <strong>{{ strtoupper($opinion->decision === 'approved' ? 'APROVADO' : 'REPROVADO') }}</strong>,
-            @if($opinion->decision === 'approved')
-                encontrando-se o proponente autorizado a prosseguir para a fase seguinte,
-                nos termos regulamentares em vigor.
-            @else
-                não reunindo, no seu estado actual, os requisitos exigidos, devendo o
-                proponente proceder à sua revisão, caso pretenda ressubmetê-lo.
-            @endif
-        </p>
+    <div class="address-block">
+        <div class="address-line"><strong>ATT:</strong> {{ $student }}</div>
+        <div class="address-line"><strong>CC:</strong> {{ $supervisor }}</div>
+        <div class="city">Maputo</div>
     </div>
+
+    <div class="subject">
+        <strong>Assunto:</strong>
+        Deliberação do Protocolo intitulado:
+        <strong>“{{ $title }}”</strong> - Versão {{ $version }}.
+    </div>
+
+    <p class="body-text">
+        {{ $organSentence }}, reunido em sessão ordinária, no dia
+        {{ $deliberationAt->format('d') }} de {{ $months[(int) $deliberationAt->format('n')] }}
+        de {{ $deliberationAt->format('Y') }}, analisou o protocolo em referência,
+        tendo deliberado a sua <span class="decision">“{{ $decisionLabel }}”</span>,
+        e arrolado as recomendações que seguem em anexo.
+    </p>
 
     @if($opinion->observations)
-        <div class="observations">
-            <strong>Observações:</strong>
-            <p>{{ $opinion->observations }}</p>
-        </div>
+    <div class="observations">
+        <strong>Recomendações/Observações:</strong><br>
+        {{ $opinion->observations }}
+    </div>
     @endif
 
-    <table class="signature-table">
-        <thead>
-            <tr>
-                <th style="width:40%">Nome</th>
-                <th style="width:30%">Função</th>
-                <th style="width:30%">Assinatura</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>{{ $presidente->name ?? '____________________' }}</td>
-                <td>Presidente</td>
-                <td></td>
-            </tr>
-            <tr>
-                <td>{{ isset($membro1) ? $membro1->name : '____________________' }}</td>
-                <td>Membro</td>
-                <td></td>
-            </tr>
-            <tr>
-                <td>{{ isset($membro2) ? $membro2->name : '____________________' }}</td>
-                <td>Membro</td>
-                <td></td>
-            </tr>
-        </tbody>
-    </table>
+    <p class="closing">Queira receber os nossos melhores cumprimentos.</p>
 
-    <div class="footer">
-        Maputo, {{ $opinion->issued_at->format('d \\d\\e F \\d\\e Y') }}
+    <div class="date">
+        Maputo, aos {{ $issuedAt->format('d') }} de {{ $months[(int) $issuedAt->format('n')] }}
+        de {{ $issuedAt->format('Y') }}
+    </div>
+
+    <div class="signature">
+        <div class="signature-title">{{ $presidentTitle }}</div>
+        <div class="signature-line">{{ $presidente->name ?? '' }}</div>
     </div>
 </body>
+
 </html>

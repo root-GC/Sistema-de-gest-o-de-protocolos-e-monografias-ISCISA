@@ -1,6 +1,6 @@
 // src/pages/LoginPage.tsx
 import { useState } from 'react'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import '../styles/global.css'
@@ -8,7 +8,6 @@ import '../styles/global.css'
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -17,15 +16,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
 
-  const from = location.state?.from?.pathname ?? '/dashboard'
-
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
     setLoading(true)
     try {
       await login(email, password)
-      navigate(from, { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

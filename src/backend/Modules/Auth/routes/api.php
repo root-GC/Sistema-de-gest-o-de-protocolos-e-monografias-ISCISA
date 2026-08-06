@@ -16,6 +16,8 @@ use Modules\Auth\app\Http\Controllers\SetPasswordController;
 // 🆕 Admin controllers
 use Modules\Auth\app\Http\Controllers\Admin\AdminUserController;
 use Modules\Auth\app\Http\Controllers\Admin\AdminOrganController;
+use Modules\Auth\app\Http\Controllers\Admin\AdminCoordinatorController;
+use Modules\Auth\app\Http\Controllers\Admin\AdminSecretaryController;
 use Modules\Auth\app\Http\Controllers\Admin\RoleController;
 use Modules\Auth\app\Http\Controllers\Admin\PermissionController;
 
@@ -42,6 +44,14 @@ Route::prefix('api')->group(function () {
         Route::post('/dashboard', [DashboardController::class, 'index']);
         Route::post('/logout', LogoutController::class);
     });
+
+     // ── Reset password ───────────────────────────────────────────────
+    //Timer reset password
+    Route::get('/reset-password/validate', [ForgotPasswordController::class, 'validateToken']);
+
+    // routes/api.php (módulo Auth)
+    // Rota para verificar o status do OTP (tempo restante e cooldown)
+    Route::get('/otp/status', [VerifyOtpController::class, 'status']);
 });
 
 Route::prefix('auth')->name('auth.')->group(function () {
@@ -60,35 +70,54 @@ Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('logout', LogoutController::class)->name('logout');
         Route::get('me', MeController::class)->name('me');
     });
+
+   
 });
 
-// ── Admin Técnico ────────────────────────────────────────────
-Route::prefix('api/v1/admin')->middleware(['auth:sanctum'])->group(function () {
-    
+// ── Admin Técnico / Executivo ────────────────────────────────────────────
+Route::prefix('api/v1')->middleware(['auth:sanctum'])->group(function () {
+
     // 🆕 Rotas específicas PRIMEIRO
-    Route::post('users/admins', [AdminUserController::class, 'invite']);
-    
-    // Users — CRUD
+    // ⚠️ AdminUserController::invite() já não existe — foi absorvido pelo
+    // store() com o duplo portão (Técnico → Direção Científica → outros 3).
+    // Deixei comentado em vez de apagar, como pediste. Descomenta só depois
+    // de repormos um método invite() (ex: alias de store()) no controller.
+    // Route::post('users/admins', [AdminUserController::class, 'invite']);
+
+    // Users (executivos) — CRUD
     Route::get('users', [AdminUserController::class, 'index']);
     Route::post('users', [AdminUserController::class, 'store']);
     Route::get('users/{id}', [AdminUserController::class, 'show']);
     Route::put('users/{id}', [AdminUserController::class, 'update']);
     Route::delete('users/{id}', [AdminUserController::class, 'destroy']);
-    
+
     // 🆕 Organs — Listar e ver
     Route::get('organs', [AdminOrganController::class, 'index']);
     Route::get('organs/{id}', [AdminOrganController::class, 'show']);
-    
+
+    // 🆕 Coordenadores — só o executivo da Direção Científica (gate no controller)
+    Route::get('coordinators', [AdminCoordinatorController::class, 'index']);
+    Route::post('coordinators', [AdminCoordinatorController::class, 'store']);
+    Route::put('coordinators/{id}', [AdminCoordinatorController::class, 'update']);
+
+    // 🆕 Secretárias — cada executivo gere as do seu próprio órgão (gate no controller)
+    Route::get('secretaries', [AdminSecretaryController::class, 'index']);
+    Route::post('secretaries', [AdminSecretaryController::class, 'store']);
+    Route::post('secretaries/{id}/permissions', [AdminSecretaryController::class, 'grantPermission']);
+    Route::delete('secretaries/{id}/permissions/{code}', [AdminSecretaryController::class, 'revokePermission']);
+
     // Roles
     Route::get('roles', [RoleController::class, 'index']);
     Route::get('roles/{id}', [RoleController::class, 'show']);
     Route::post('roles', [RoleController::class, 'store']);
     Route::put('roles/{id}', [RoleController::class, 'update']);
     Route::delete('roles/{id}', [RoleController::class, 'destroy']);
-    
+
     // Permissions
     Route::get('permissions', [PermissionController::class, 'index']);
     Route::post('permissions', [PermissionController::class, 'store']);
     Route::put('permissions/{id}', [PermissionController::class, 'update']);
     Route::delete('permissions/{id}', [PermissionController::class, 'destroy']);
+
+   
 });

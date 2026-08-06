@@ -16,6 +16,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/secretary/protocols': 'Gestão de submissões',
   '/admin/users': 'Utilizadores',
   '/admin/organs': 'Órgãos e áreas',
+  '/agenda': 'Agenda',
 }
 
 interface TopbarProps {
