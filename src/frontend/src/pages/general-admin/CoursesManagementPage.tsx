@@ -39,48 +39,40 @@ export default function CoursesManagementPage() {
     setLoading(true)
     setError(null)
     try {
-      const [coursesData, areasData, organsData] = await Promise.all([
+      const [coursesResponse, areasResponse, organsResponse] = await Promise.all([
         generalAdminService.listAllCourses(),
         generalAdminService.listAllAreas(),
         generalAdminService.listOrgans(),
       ])
       
-      // Garantir que os dados sejam arrays
-      const coursesArray = Array.isArray(coursesData?.data) ? coursesData.data : 
-                           Array.isArray(coursesData) ? coursesData : []
-      const areasArray = Array.isArray(areasData?.data) ? areasData.data : 
-                         Array.isArray(areasData) ? areasData : []
-      const organsArray = Array.isArray(organsData?.data) ? organsData.data : 
-                          Array.isArray(organsData) ? organsData : []
+      // Extrair cursos (lidar com paginação)
+      const coursesRaw = (coursesResponse as any)?.data ?? coursesResponse
+      const coursesArray = Array.isArray(coursesRaw) 
+        ? coursesRaw 
+        : (Array.isArray(coursesRaw?.data) ? coursesRaw.data : [])
       
-      setCourses(coursesArray)
-      setAreas(areasArray)
-      setOrgans(organsArray)
+      // Extrair áreas (lidar com paginação)
+      const areasRaw = (areasResponse as any)?.data ?? areasResponse
+      const areasArray = Array.isArray(areasRaw) 
+        ? areasRaw 
+        : (Array.isArray(areasRaw?.data) ? areasRaw.data : [])
+      
+      // Extrair órgãos
+      const organsRaw = (organsResponse as any)?.data ?? organsResponse
+      const organsArray = Array.isArray(organsRaw) 
+        ? organsRaw 
+        : (Array.isArray(organsRaw?.data) ? organsRaw.data : [])
+      
+      setCourses(Array.isArray(coursesArray) ? coursesArray : [])
+      setAreas(Array.isArray(areasArray) ? areasArray : [])
+      setOrgans(Array.isArray(organsArray) ? organsArray : [])
+      
+      console.log('Cursos carregados:', coursesArray)
+      console.log('Áreas carregadas:', areasArray)
+      console.log('Órgãos carregados:', organsArray)
     } catch (e) {
       console.error('Erro ao carregar dados:', e)
-      // Mock data
-      setOrgans([
-        { id: 1, name: 'Núcleo Científico', type: 'nucleus', description: 'Ponto de entrada dos protocolos' },
-        { id: 2, name: 'Comité Científico', type: 'scientific_committee', description: 'Avalia mérito científico' },
-        { id: 3, name: 'Comité de Bioética', type: 'bioethics_committee', description: 'Avalia conformidade ética' },
-        { id: 4, name: 'Direção Científica', type: 'scientific_direction', description: 'Órgão máximo' },
-      ])
-      setAreas([
-        { id: 1, organ_id: 1, name: 'Saúde Pública', description: 'Área de Saúde Pública e Epidemiologia', organ: { id: 1, name: 'Núcleo Científico', type: 'nucleus' } },
-        { id: 2, organ_id: 1, name: 'Enfermagem', description: 'Área de Enfermagem Geral e Especializada', organ: { id: 1, name: 'Núcleo Científico', type: 'nucleus' } },
-        { id: 3, organ_id: 1, name: 'Reabilitação', description: 'Fisioterapia e Terapia Ocupacional', organ: { id: 1, name: 'Núcleo Científico', type: 'nucleus' } },
-        { id: 4, organ_id: 1, name: 'Farmácia e Ciências Laboratoriais', description: 'Farmácia e Análises Clínicas', organ: { id: 1, name: 'Núcleo Científico', type: 'nucleus' } },
-      ])
-      setCourses([
-        { id: 1, scientific_area_id: 1, name: 'Medicina', code: 'MED', description: 'Curso de Medicina Geral', scientific_area: { id: 1, name: 'Saúde Pública' } },
-        { id: 2, scientific_area_id: 1, name: 'Saúde Pública', code: 'SP', description: 'Curso de Saúde Pública', scientific_area: { id: 1, name: 'Saúde Pública' } },
-        { id: 3, scientific_area_id: 2, name: 'Enfermagem', code: 'ENF', description: 'Curso de Enfermagem Geral', scientific_area: { id: 2, name: 'Enfermagem' } },
-        { id: 4, scientific_area_id: 2, name: 'Enfermagem de Saúde Mental', code: 'ESM', description: 'Curso de Enfermagem de Saúde Mental', scientific_area: { id: 2, name: 'Enfermagem' } },
-        { id: 5, scientific_area_id: 3, name: 'Fisioterapia', code: 'FIS', description: 'Curso de Fisioterapia', scientific_area: { id: 3, name: 'Reabilitação' } },
-        { id: 6, scientific_area_id: 3, name: 'Terapia Ocupacional', code: 'TO', description: 'Curso de Terapia Ocupacional', scientific_area: { id: 3, name: 'Reabilitação' } },
-        { id: 7, scientific_area_id: 4, name: 'Farmácia', code: 'FARM', description: 'Curso de Farmácia', scientific_area: { id: 4, name: 'Farmácia e Ciências Laboratoriais' } },
-        { id: 8, scientific_area_id: 4, name: 'Análises Clínicas', code: 'AC', description: 'Curso de Análises Clínicas', scientific_area: { id: 4, name: 'Farmácia e Ciências Laboratoriais' } },
-      ])
+      setError((e as Error).message)
     } finally {
       setLoading(false)
     }
@@ -153,7 +145,7 @@ export default function CoursesManagementPage() {
         }
       }
       setShowForm(false)
-      loadData()
+      await loadData()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (e) {
       setError((e as Error).message)
@@ -169,35 +161,30 @@ export default function CoursesManagementPage() {
         await generalAdminService.deleteArea(id)
       }
       setSuccessMessage('Eliminado com sucesso!')
-      loadData()
+      await loadData()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (e) {
       setError((e as Error).message)
     }
   }
 
-  // Função auxiliar para garantir que estamos trabalhando com um array
-  const safeArray = <T,>(data: T[]): T[] => {
-    return Array.isArray(data) ? data : []
-  }
-
-  // Filtros (com proteção adicional)
-  const filteredCourses = safeArray(courses).filter(c => {
+  // Filtros
+  const filteredCourses = courses.filter(c => {
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
       c.name.toLowerCase().includes(term) ||
       c.code.toLowerCase().includes(term) ||
-      c.scientific_area?.name.toLowerCase().includes(term)
+      c.scientific_area?.name?.toLowerCase().includes(term)
     )
   })
 
-  const filteredAreas = safeArray(areas).filter(a => {
+  const filteredAreas = areas.filter(a => {
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
       a.name.toLowerCase().includes(term) ||
-      a.organ?.name.toLowerCase().includes(term)
+      a.organ?.name?.toLowerCase().includes(term)
     )
   })
 
@@ -273,7 +260,7 @@ export default function CoursesManagementPage() {
                   <FormSelect 
                     label="Área Científica" 
                     value={String(formAreaId || '')} 
-                    onChange={v => setFormAreaId(Number(v))} 
+                    onChange={v => setFormAreaId(v ? Number(v) : null)} 
                     options={areas.map(a => ({ value: String(a.id), label: a.name }))} 
                     required 
                   />
@@ -288,7 +275,7 @@ export default function CoursesManagementPage() {
                   <FormSelect 
                     label="Órgão" 
                     value={String(formOrganId || '')} 
-                    onChange={v => setFormOrganId(Number(v))} 
+                    onChange={v => setFormOrganId(v ? Number(v) : null)} 
                     options={organs.map(o => ({ value: String(o.id), label: `${o.name} (${ORGAN_TYPE_LABELS[o.type] || o.type})` }))} 
                     required 
                   />
@@ -369,9 +356,8 @@ export default function CoursesManagementPage() {
                   {area.description && (
                     <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '4px 0 0' }}>{area.description}</p>
                   )}
-                  {/* Contagem de cursos (com proteção) */}
                   <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
-                    {safeArray(courses).filter(c => c.scientific_area_id === area.id).length} curso{safeArray(courses).filter(c => c.scientific_area_id === area.id).length !== 1 ? 's' : ''} associado{safeArray(courses).filter(c => c.scientific_area_id === area.id).length !== 1 ? 's' : ''}
+                    {courses.filter(c => c.scientific_area_id === area.id).length} curso{courses.filter(c => c.scientific_area_id === area.id).length !== 1 ? 's' : ''} associado{courses.filter(c => c.scientific_area_id === area.id).length !== 1 ? 's' : ''}
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-1)' }}>

@@ -13,24 +13,36 @@ class ScientificArea extends Model
 
     protected $fillable = [
         'organ_id',
-        'name',
+        'name'
     ];
 
+    /**
+     * Órgão (núcleo) ao qual esta área científica pertence
+     */
     public function organ(): BelongsTo
     {
-        return $this->belongsTo(Organ::class);
+        return $this->belongsTo(Organ::class, 'organ_id');
     }
 
+    /**
+     * Cursos desta área científica
+     */
     public function courses(): HasMany
     {
         return $this->hasMany(Course::class);
     }
 
+    /**
+     * Perfis de professores desta área
+     */
     public function teacherProfiles(): HasMany
     {
         return $this->hasMany(TeacherProfile::class);
     }
 
+    /**
+     * Perfis de coordenadores desta área
+     */
     public function coordinatorProfiles(): HasMany
     {
         return $this->hasMany(CoordinatorProfile::class);

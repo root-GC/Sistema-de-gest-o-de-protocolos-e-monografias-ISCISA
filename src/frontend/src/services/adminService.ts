@@ -32,18 +32,25 @@ export interface Permission {
 }
 
 export interface Organ {
-  id: number
-  name: string
-  type: string
-  description?: string
+  id: number;
+  name: string;
+  type: string;
+  description?: string;
+  scientific_areas?: ScientificArea[];
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
 }
 
 export interface ScientificArea {
   id: number
   name: string
   description?: string
-  organ_id: number
+  organ_id: number | null
   organ?: Organ
+  created_at?: string
+  updated_at?: string
+  deleted_at?: string | null
 }
 
 export interface Course {
@@ -55,14 +62,24 @@ export interface Course {
   scientific_area?: ScientificArea
 }
 
+export interface PaginatedResponse<T> {
+  current_page: number
+  data: T[]
+  first_page_url: string
+  from: number
+  last_page: number
+  last_page_url: string
+  links: { url: string | null; label: string; active: boolean }[]
+  next_page_url: string | null
+  path: string
+  per_page: number
+  prev_page_url: string | null
+  to: number
+  total: number
+}
+
 export const adminService = {
   // ── Users ──────────────────────────────────────────
-  // ⚠️ /api/v1/users está registado DUAS VEZES (AdminUserController
-  // com o duplo portão, e UserController com gate 'permission:admin.users').
-  // Estes métodos assumem que o AdminUserController é o que fica.
-  // Se decidires manter o UserController em vez disso, o payload de
-  // createUser muda (aceita 'roles' array, não 'organ_id' obrigatório) —
-  // avisa-me para eu reajustar.
   listUsers: (params?: { role?: string; search?: string; per_page?: number }) =>
     req('GET', '/api/v1/users', params) as Promise<{
       data: User[]
@@ -107,16 +124,38 @@ export const adminService = {
   listPermissions: () =>
     req('GET', '/api/v1/permissions') as Promise<{ data: Permission[] }>,
 
-  // ── Organs (só leitura — sem store/update/destroy no backend hoje) ──
+  // ── Organs ─────────────────────────────────────────
   listOrgans: () =>
     req('GET', '/api/v1/organs') as Promise<{ data: Organ[] }>,
 
   getOrgan: (id: number) =>
     req('GET', `/api/v1/organs/${id}`) as Promise<{ data: Organ }>,
 
+  createOrgan: (data: { 
+    name: string; 
+    type: string; 
+    description?: string;
+    scientific_area_id?: number | null;
+  }) =>
+    req('POST', '/api/v1/organs', data) as Promise<{ message: string; organ: Organ }>,
+
+  updateOrgan: (id: number, data: { 
+    name?: string; 
+    type?: string; 
+    description?: string;
+    scientific_area_id?: number | null;
+  }) =>
+    req('PUT', `/api/v1/organs/${id}`, data) as Promise<{ message: string; organ: Organ }>,
+
+  deleteOrgan: (id: number) =>
+    req('DELETE', `/api/v1/organs/${id}`) as Promise<{ message: string }>,
+
   // ── Scientific Areas (módulo Organization) ──────────
   listScientificAreas: () =>
-    req('GET', '/api/v1/scientific-areas') as Promise<{ data: ScientificArea[] }>,
+    req('GET', '/api/v1/scientific-areas') as Promise<PaginatedResponse<ScientificArea>>,
+
+  getScientificArea: (id: number) =>
+    req('GET', `/api/v1/scientific-areas/${id}`) as Promise<{ data: ScientificArea }>,
 
   createScientificArea: (data: { name: string; organ_id: number; description?: string }) =>
     req('POST', '/api/v1/scientific-areas', data) as Promise<{ message: string; scientific_area: ScientificArea }>,
@@ -131,6 +170,9 @@ export const adminService = {
   listCourses: () =>
     req('GET', '/api/v1/courses') as Promise<{ data: Course[] }>,
 
+  getCourse: (id: number) =>
+    req('GET', `/api/v1/courses/${id}`) as Promise<{ data: Course }>,
+
   createCourse: (data: { name: string; code: string; scientific_area_id: number; description?: string }) =>
     req('POST', '/api/v1/courses', data) as Promise<{ message: string; course: Course }>,
 
@@ -139,17 +181,4 @@ export const adminService = {
 
   deleteCourse: (id: number) =>
     req('DELETE', `/api/v1/courses/${id}`) as Promise<{ message: string }>,
-
-
-  //
-  //Ainda não existem
-  
-createOrgan: (data: { name: string; type: string; description?: string }) =>
-  req('POST', '/api/v1/organs', data) as Promise<{ message: string; organ: Organ }>,
-
-updateOrgan: (id: number, data: { name?: string; type?: string; description?: string }) =>
-  req('PUT', `/api/v1/organs/${id}`, data) as Promise<{ message: string; organ: Organ }>,
-
-deleteOrgan: (id: number) =>
-  req('DELETE', `/api/v1/organs/${id}`) as Promise<{ message: string }>,
 }

@@ -8,6 +8,7 @@ import { lazy } from 'react'
 
 // Páginas públicas
 import LoginPage from './pages/LoginPage.tsx'
+import LoginPage2 from './pages/LoginPage2.tsx'
 
 
 // Páginas protegidas — lazy load
@@ -80,6 +81,7 @@ export default function App() {
         <Routes>
           {/* ── Públicas ─────────────────────────────────────── */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/login2" element={<LoginPage2 />} />
           <Route path="/403" element={<Page403 />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/verify-otp" element={<VerifyOtpPage />} />
