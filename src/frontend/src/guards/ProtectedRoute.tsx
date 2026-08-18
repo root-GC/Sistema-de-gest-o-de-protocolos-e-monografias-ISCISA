@@ -1,3 +1,4 @@
+// src/guards/ProtectedRoute.tsx
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import type { Role } from '../context/AuthContext';
@@ -8,10 +9,10 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ permission, roles: allowedRoles }: ProtectedRouteProps) {
-  const { user, roles, permissions, loading } = useAuth();
+  const { user, roles, permissions, loading, isProfileIncomplete } = useAuth();
   const location = useLocation();
 
-  // 🐛 DEBUG
+  // DEBUG
   console.log('🛡️ ProtectedRoute:', {
     user: user?.name,
     userRoles: roles,
@@ -19,10 +20,11 @@ export function ProtectedRoute({ permission, roles: allowedRoles }: ProtectedRou
     requiredPermission: permission,
     requiredRoles: allowedRoles,
     loading,
+    isProfileIncomplete,
     path: location.pathname
   });
 
-  // ✅ Mostra loading enquanto carrega
+  // Mostra loading enquanto carrega
   if (loading) {
     return (
       <div style={{
@@ -48,10 +50,23 @@ export function ProtectedRoute({ permission, roles: allowedRoles }: ProtectedRou
     );
   }
 
-  // ✅ Só verifica após ter certeza que não está carregando
+  // Só verifica após ter certeza que não está carregando
   if (!user) {
     console.log('🔒 Não autenticado, redirecionando para /login');
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Verificar perfil incompleto
+  // Permitir acesso apenas à rota de completar perfil
+  if (isProfileIncomplete && location.pathname !== '/complete-profile') {
+    console.log('📋 Perfil incompleto, redirecionando para /complete-profile');
+    return <Navigate to="/complete-profile" replace />;
+  }
+
+  // Se o perfil estiver completo, não permitir voltar à página de completar
+  if (!isProfileIncomplete && location.pathname === '/complete-profile') {
+    console.log('✅ Perfil completo, redirecionando para /dashboard');
+    return <Navigate to="/dashboard" replace />;
   }
 
   // Verifica se tem roles (apenas se requiredRoles foi especificado)

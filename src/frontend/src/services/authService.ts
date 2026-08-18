@@ -50,7 +50,7 @@ interface OtpStatusResponse {
   resend_cooldown: number
 }
 
-// 🆕 Erro customizado para cooldown de reenvio
+// Erro customizado para cooldown de reenvio
 export class ResendCooldownError extends Error {
   retryAfter: number
 
@@ -75,7 +75,7 @@ async function req<T>(method: string, path: string, body: unknown = null): Promi
     body: body ? JSON.stringify(body) : null,
   })
 
-  const data = await res.json()
+  const data = await res.json().catch(() => ({})) as any
 
   if (!res.ok) {
     const msg =
@@ -102,14 +102,14 @@ export const authService = {
   verifyOtp: (email: string, code: string) =>
     req<LoginResponse>('POST', '/api/verify-otp', { email, code }),
 
-  // 🆕 Resend OTP com tratamento de cooldown
+  // Resend OTP com tratamento de cooldown
   resendOtp: async (email: string): Promise<MessageResponse> => {
     const res = await fetch(`${BASE}/api/resend-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ email }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({})) as any
 
     if (res.status === 429) {
       throw new ResendCooldownError(
@@ -136,7 +136,7 @@ export const authService = {
       })
       
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
+        const errorData = await res.json().catch(() => ({})) as any
         throw new Error(errorData.message || 'Link inválido ou expirado')
       }
       

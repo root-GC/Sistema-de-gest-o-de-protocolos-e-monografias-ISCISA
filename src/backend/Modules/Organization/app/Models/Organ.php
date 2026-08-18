@@ -5,6 +5,7 @@ namespace Modules\Organization\app\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Organ extends Model
 {
@@ -27,10 +28,10 @@ class Organ extends Model
     /**
      * Áreas científicas associadas a este órgão (apenas núcleos)
      */
-    public function scientificAreas(): HasMany
-    {
-        return $this->hasMany(ScientificArea::class, 'organ_id');
-    }
+   public function scientificArea(): HasOne
+{
+    return $this->hasOne(ScientificArea::class, 'organ_id');
+}
 
     /**
      * Membros do órgão

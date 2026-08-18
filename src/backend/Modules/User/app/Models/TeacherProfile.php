@@ -20,6 +20,8 @@ use Modules\User\app\Models\User;
  * academic_degree: licenciatura | mestrado | doutoramento
  * (usado em RF-061 para filtrar revisores por grau mínimo)
  */
+
+
 class TeacherProfile extends Model
 {
     use SoftDeletes;

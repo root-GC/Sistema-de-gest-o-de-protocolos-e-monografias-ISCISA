@@ -1,4 +1,4 @@
-// context/AuthContext.tsx
+// src/context/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 // @ts-ignore
@@ -41,8 +41,8 @@ export interface StudentProfile {
 
 export interface TeacherProfile {
   id: number;
-  department?: string;
-  academic_degree?: string;
+  department?: string | null;
+  academic_degree?: string | null;
   is_internal?: boolean;
   scientific_area: ScientificAreaInfo | null;
 }
@@ -63,7 +63,7 @@ export interface SecretaryProfile {
 export interface AdminProfile {
   id: number;
   access_scope?: string;
-  organ_id?: number;  // 🆕 ADICIONADO
+  organ_id?: number;
   organ: OrganInfo | null;
 }
 
@@ -108,11 +108,13 @@ interface AuthContextType {
   activeRole: Role | null;
   activeProfile: Profile;
   loading: boolean;
+  isProfileIncomplete: boolean;
   login: (email: string, password: string) => Promise<UserPayload>;
   completeAuth: (token: string, userData: UserPayload) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: (role: Role) => void;
   refresh: () => Promise<void>;
+  updateUser: (userData: UserPayload) => void;
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
   hasAllPermissions: (permissions: string[]) => boolean;
@@ -130,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeRole, setActiveRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [isProfileIncomplete, setIsProfileIncomplete] = useState(false);
 
   // Hidratar sessão ao carregar
   useEffect(() => {
@@ -171,6 +174,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissions(data.permissions ?? []);
     setProfiles(data.profiles ?? {});
 
+    // Verificar perfil incompleto
+    checkProfileCompleteness(data);
+
     const savedRole = localStorage.getItem('sgpmc_active_role') as Role | null;
     const firstRole = data.roles?.[0] ?? null;
     
@@ -182,6 +188,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     console.log('✅ Active role:', roleToSet);
     console.log('👤 Admin profile:', data.profiles?.admin);
+    console.log('📋 Profile incomplete:', isProfileIncomplete);
+  }
+
+  // Verificar se o perfil do docente está completo
+  function checkProfileCompleteness(data: UserPayload) {
+    // Verificar se tem role "teacher"
+    const hasTeacherRole = data.roles?.includes('teacher');
+    
+    if (!hasTeacherRole) {
+      setIsProfileIncomplete(false);
+      return;
+    }
+    
+    // Verificar TeacherProfile
+    const teacherProfile = data.profiles?.teacher;
+    
+    if (!teacherProfile) {
+      setIsProfileIncomplete(true);
+      return;
+    }
+    
+    // Verificar campos obrigatórios (academic_degree e department)
+    const isIncomplete = !teacherProfile.academic_degree || 
+                         !teacherProfile.department ||
+                         teacherProfile.academic_degree === null ||
+                         teacherProfile.academic_degree === '' ||
+                         teacherProfile.department === null ||
+                         teacherProfile.department === '';
+    
+    setIsProfileIncomplete(isIncomplete);
+    
+    console.log('📋 Perfil docente:', {
+      hasTeacherRole,
+      hasProfile: !!teacherProfile,
+      academic_degree: teacherProfile.academic_degree,
+      department: teacherProfile.department,
+      isIncomplete
+    });
   }
 
   const login = useCallback(async (email: string, password: string): Promise<UserPayload> => {
@@ -253,6 +297,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Atualizar dados do utilizador (após completar perfil)
+  const updateUser = useCallback((userData: UserPayload) => {
+    console.log('🔄 Atualizando utilizador:', userData);
+    
+    localStorage.setItem('sgpmc_user', JSON.stringify(userData));
+    
+    setUser({ 
+      id: userData.id, 
+      name: userData.name, 
+      email: userData.email, 
+      status: userData.status 
+    });
+    setRoles(userData.roles ?? []);
+    setPermissions(userData.permissions ?? []);
+    setProfiles(userData.profiles ?? {});
+    
+    // Re-verificar perfil incompleto
+    checkProfileCompleteness(userData);
+  }, []);
+
   function clear() {
     console.log('🧹 Limpando sessão');
     localStorage.removeItem('sgpmc_token');
@@ -263,6 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissions([]);
     setProfiles({});
     setActiveRole(null);
+    setIsProfileIncomplete(false);
   }
 
   const hasPermission = useCallback((permission: string): boolean => {
@@ -296,9 +361,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({
     user, roles, permissions, profiles, activeRole, activeProfile,
-    loading: isLoading, login, completeAuth, logout, switchRole,
-    refresh, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget,
-  }), [user, roles, permissions, profiles, activeRole, activeProfile, isLoading, login, completeAuth, logout, switchRole, refresh, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget]);
+    loading: isLoading, isProfileIncomplete,
+    login, completeAuth, logout, switchRole,
+    refresh, updateUser,
+    hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget,
+  }), [user, roles, permissions, profiles, activeRole, activeProfile, isLoading, isProfileIncomplete, login, completeAuth, logout, switchRole, refresh, updateUser, hasPermission, hasAnyPermission, hasAllPermissions, canAccessWidget]);
 
   return (
     <AuthContext.Provider value={value}>

@@ -2,7 +2,7 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
-// 🆕 Evento customizado para loading global
+// Evento customizado para loading global
 const dispatchLoading = (active: boolean) => {
   window.dispatchEvent(new CustomEvent('global-loading', { detail: { active } }))
 }
@@ -88,7 +88,7 @@ function filenameFromDisposition(value: string | null): string | null {
   return match?.[1] || null;
 }
 
-// 🆕 Converte objeto em query string
+// Converte objeto em query string
 function toQueryString(params: Record<string, any>): string {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -177,9 +177,7 @@ export async function downloadApiFile(url: string, fallbackFilename?: string): P
   setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
-// ═══════════════════════════════════════════════
-// 🆕 Requisição JSON com loading global (CORRIGIDA)
-// ═══════════════════════════════════════════════
+// Requisição JSON com loading global
 export async function req<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
   dispatchLoading(true)
   
@@ -188,7 +186,7 @@ export async function req<T = unknown>(method: string, url: string, body?: unkno
     let fetchUrl = `${API_BASE_URL}${url}`;
     let fetchBody: BodyInit | undefined;
 
-    // 🆕 Para GET/HEAD, converte body em query string
+    // Para GET/HEAD, converte body em query string
     if (method === 'GET' || method === 'HEAD') {
       if (body && typeof body === 'object' && !(body instanceof FormData)) {
         fetchUrl += toQueryString(body as Record<string, any>);
@@ -224,7 +222,7 @@ export async function req<T = unknown>(method: string, url: string, body?: unkno
   }
 }
 
-// 🆕 Requisição FormData com loading global
+// Requisição FormData com loading global
 export async function reqFormData<T = unknown>(method: string, url: string, formData: FormData): Promise<T> {
   dispatchLoading(true)
   
@@ -253,3 +251,23 @@ export async function reqFormData<T = unknown>(method: string, url: string, form
     dispatchLoading(false)
   }
 }
+
+// Export default para compatibilidade
+export const apiClient = {
+  get: <T = unknown>(url: string, params?: Record<string, any>) => 
+    req<T>('GET', url, params),
+  
+  post: <T = unknown>(url: string, data?: unknown) => 
+    req<T>('POST', url, data),
+  
+  put: <T = unknown>(url: string, data?: unknown) => 
+    req<T>('PUT', url, data),
+  
+  patch: <T = unknown>(url: string, data?: unknown) => 
+    req<T>('PATCH', url, data),
+  
+  delete: <T = unknown>(url: string) => 
+    req<T>('DELETE', url),
+};
+
+export default apiClient;

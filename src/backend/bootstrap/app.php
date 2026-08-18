@@ -17,16 +17,17 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // Registar alias do middleware de permissão
+        // Registar alias dos middlewares
         $middleware->alias([
             'permission' => \Shared\Core\Http\Middleware\PermissionMiddleware::class,
             'technical.admin' => \Modules\Auth\app\Http\Middleware\EnsureTechnicalAdmin::class,
+            'teacher.profile.complete' => \Modules\Organization\app\Http\Middleware\EnsureTeacherProfileComplete::class, // 🆕 ADICIONADO
         ]);
 
         // APIs sem token devem responder 401, nao redirecionar para uma rota web.
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/login');
 
-        // Sanctum stateful domains para SPA (React)
+        // Sanctum stateful domains para SPA (React) 
         $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions) {
@@ -42,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json($e->toArray(), 422);
             }
         });
+        
 
         // PermissionDeniedException → 403
         $exceptions->render(function (PermissionDeniedException $e, Request $request) {

@@ -10,6 +10,8 @@ import { lazy } from 'react'
 import LoginPage from './pages/LoginPage.tsx'
 import LoginPage2 from './pages/LoginPage2.tsx'
 
+// 🆕 Página de completar perfil (fora do AppLayout)
+const CompleteProfilePage = lazy(() => import('./pages/teacher/CompleteProfilePage'))
 
 // Páginas protegidas — lazy load
 const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage'))
@@ -64,7 +66,8 @@ const CoursesManagementPage = lazy(() => import('./pages/general-admin/CoursesMa
 // Organ President
 const OrganPresidentDashboard = lazy(() => import('./pages/organ-president/OrganPresidentDashboard'))
 const ManageOrganMembersPage = lazy(() => import('./pages/organ-president/ManageOrganMembersPage'))
-const InviteReviewersPage = lazy(() => import('./pages/organ-president/InviteReviewersPage')) // 🆕 NOVA IMPORTAÇÃO
+const InviteReviewersPage = lazy(() => import('./pages/organ-president/InviteReviewersPage'))
+const RegisterTeachersPage = lazy(() => import('./pages/organ-president/RegisterTeachersPage'))
 
 // Páginas públicas
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
@@ -88,7 +91,13 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          {/* ── Protegidas — qualquer utilizador autenticado ── */}
+          {/* 🆕 Complete Profile - FORA do AppLayout */}
+          {/* Acessível para qualquer utilizador autenticado com perfil incompleto */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/complete-profile" element={<CompleteProfilePage />} />
+          </Route>
+
+          {/* ── Protegidas — com AppLayout ──────────────────── */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
 
@@ -189,7 +198,8 @@ export default function App() {
               <Route element={<ProtectedRoute permission="admin.organs" />}>
                 <Route path="/organ-president" element={<OrganPresidentDashboard />} />
                 <Route path="/organ-president/members" element={<ManageOrganMembersPage />} />
-                <Route path="/organ-president/reviewers" element={<InviteReviewersPage />} /> {/* 🆕 NOVA ROTA */}
+                <Route path="/organ-president/reviewers" element={<InviteReviewersPage />} />
+                <Route path="/organ-president/teachers" element={<RegisterTeachersPage />} />
               </Route>
 
             </Route>

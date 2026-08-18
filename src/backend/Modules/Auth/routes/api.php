@@ -18,6 +18,7 @@ use Modules\Auth\app\Http\Controllers\Admin\AdminUserController;
 use Modules\Auth\app\Http\Controllers\Admin\AdminOrganController;
 use Modules\Auth\app\Http\Controllers\Admin\AdminCoordinatorController;
 use Modules\Auth\app\Http\Controllers\Admin\AdminSecretaryController;
+use Modules\Auth\app\Http\Controllers\Admin\AdminTeacherController;
 use Modules\Auth\app\Http\Controllers\Admin\RoleController;
 use Modules\Auth\app\Http\Controllers\Admin\PermissionController;
 
@@ -121,6 +122,16 @@ Route::prefix('api/v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('permissions', [PermissionController::class, 'store']);
     Route::put('permissions/{id}', [PermissionController::class, 'update']);
     Route::delete('permissions/{id}', [PermissionController::class, 'destroy']);
+
+
+    // routes/api.php (grupo admin, middleware auth:sanctum + role:admin ou equivalente que já usas)
+    Route::prefix('admin/teachers')->group(function () {
+        Route::get('/',            [AdminTeacherController::class, 'index']);
+        Route::post('/',           [AdminTeacherController::class, 'store']);
+        Route::post('/import',     [AdminTeacherController::class, 'import']);
+        Route::put('/{id}',        [AdminTeacherController::class, 'update']);
+        Route::delete('/{id}',     [AdminTeacherController::class, 'destroy']);
+    });
 
    
 });

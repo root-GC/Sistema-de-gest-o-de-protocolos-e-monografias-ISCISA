@@ -51,6 +51,24 @@ export interface OrganMember {
   created_at: string
 }
 
+export interface TeacherRow {
+  id: number
+  name: string
+  email: string
+  status: 'pending' | 'active' | 'inactive'
+  teacher_profile?: {
+    department: string | null
+    academic_degree: string | null
+    scientific_area?: { id: number; name: string }
+  }
+}
+
+export interface ImportReport {
+  message: string
+  created: { line: number; id: number; name: string; email: string }[]
+  failed: { line: number; row: Record<string, string>; errors: string[] }[]
+}
+
 const BASE = '/api/v1'
 
 export const organPresidentService = {
@@ -126,6 +144,40 @@ export const organPresidentService = {
   getOrganMember: (id: number) =>
     req('GET', `${BASE}/organ-members/${id}`) as Promise<{ data: OrganMember }>,
 
+  // ── Docentes (Teachers) ────────────────────────────────────
+  // GET /api/v1/admin/teachers - EXISTE (AdminTeacherController@index)
+  listTeachers: (params?: { search?: string; page?: number }) =>
+    req('GET', `${BASE}/admin/teachers`, params) as Promise<{ 
+      data: TeacherRow[]
+      total: number
+      current_page: number
+    }>,
+
+  // POST /api/v1/admin/teachers - EXISTE (AdminTeacherController@store)
+  createTeacher: (data: { name: string; email: string }) =>
+    req('POST', `${BASE}/admin/teachers`, data) as Promise<{ 
+      message: string
+      user: TeacherRow 
+    }>,
+
+  // POST /api/v1/admin/teachers/import - EXISTE (AdminTeacherController@import)
+  importTeachers: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return req('POST', `${BASE}/admin/teachers/import`, form) as Promise<ImportReport>
+  },
+
+  // PUT /api/v1/admin/teachers/{id} - EXISTE (AdminTeacherController@update)
+  updateTeacher: (id: number, data: Partial<{ name: string; email: string; status: string }>) =>
+    req('PUT', `${BASE}/admin/teachers/${id}`, data) as Promise<{ 
+      message: string
+      user: TeacherRow 
+    }>,
+
+  // DELETE /api/v1/admin/teachers/{id} - EXISTE (AdminTeacherController@destroy)
+  removeTeacher: (id: number) =>
+    req('DELETE', `${BASE}/admin/teachers/${id}`) as Promise<{ message: string }>,
+
   // ── Dashboard / Stats ──────────────────────────────────────
   // NOTA: Não existe endpoint de stats específico para o órgão.
   // O frontend calcula as estatísticas a partir dos dados dos endpoints acima.
@@ -150,6 +202,11 @@ export const organPresidentService = {
  * - POST   /api/v1/secretaries/{id}/permissions         → grantPermission()
  * - DELETE /api/v1/secretaries/{id}/permissions/{code}  → revokePermission()
  * - DELETE /api/v1/secretaries/{id}                     → removeSecretary()
+ * - GET    /api/v1/admin/teachers                       → listTeachers()
+ * - POST   /api/v1/admin/teachers                       → createTeacher()
+ * - POST   /api/v1/admin/teachers/import                → importTeachers()
+ * - PUT    /api/v1/admin/teachers/{id}                  → updateTeacher()
+ * - DELETE /api/v1/admin/teachers/{id}                  → removeTeacher()
  * 
  * 🆕 NOVOS (precisam do OrganMemberController):
  * - GET    /api/v1/organ-members                        → listOrganMembers()

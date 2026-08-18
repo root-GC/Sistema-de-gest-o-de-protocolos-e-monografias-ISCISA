@@ -179,7 +179,7 @@ export const menuRegistry = [
 
   // ── Organ President ───────────────────────────────────────────────
   
-  // ── Organ President ───────────────────────────────────────────────
+ // ── Organ President ───────────────────────────────────────────────
   {
     id: 'organ_president',
     label: 'O meu Órgão',
@@ -190,7 +190,8 @@ export const menuRegistry = [
     children: [
       { id: 'organ_president_dashboard', label: 'Painel', route: '/organ-president', permission: null },
       { id: 'organ_president_members',   label: 'Membros', route: '/organ-president/members', permission: null },
-      { id: 'organ_president_reviewers', label: 'Convidar Revisores', route: '/organ-president/reviewers', permission: null }, // 🆕 NOVA ROTA
+      { id: 'organ_president_reviewers', label: 'Convidar Revisores', route: '/organ-president/reviewers', permission: null },
+      { id: 'organ_president_teachers',  label: 'Registar Docentes', route: '/organ-president/teachers', permission: null }, // 🆕 NOVA ROTA
     ],
   },
 

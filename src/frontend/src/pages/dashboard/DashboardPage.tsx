@@ -1,3 +1,6 @@
+// pages/dashboard/DashboardPage.tsx
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { StudentDashboard } from './roles/StudentDashboard';
 import { SecretaryDashboard } from './roles/SecretaryDashboard';
@@ -8,7 +11,16 @@ import { LoadingSpinner } from '../../components/LoadingSpinner';
 import '../../styles/dashboard.css';
 
 export default function DashboardPage() {
-  const { user, activeRole, loading } = useAuth();
+  const { user, activeRole, loading, isProfileIncomplete } = useAuth();
+  const navigate = useNavigate();
+
+  // 🆕 Verificar perfil incompleto e redirecionar
+  useEffect(() => {
+    if (!loading && isProfileIncomplete) {
+      console.log('📋 Perfil incompleto, redirecionando para /complete-profile');
+      navigate('/complete-profile', { replace: true });
+    }
+  }, [loading, isProfileIncomplete, navigate]);
 
   if (loading) {
     return (
@@ -23,6 +35,15 @@ export default function DashboardPage() {
       <div className="session-not-found">
         <h3>Sessão não encontrada</h3>
         <p>Faça login para acessar o dashboard.</p>
+      </div>
+    );
+  }
+
+  // 🆕 Se o perfil estiver incompleto, não renderizar o dashboard
+  if (isProfileIncomplete) {
+    return (
+      <div className="dashboard-container">
+        <LoadingSpinner variant="page" text="A verificar perfil..." />
       </div>
     );
   }

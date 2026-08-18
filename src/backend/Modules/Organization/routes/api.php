@@ -6,6 +6,7 @@ use Modules\Organization\app\Http\Controllers\ScientificAreaController;
 use Modules\Organization\app\Http\Controllers\CourseController;
 use Modules\Organization\app\Http\Controllers\OrganController;
 use Modules\Organization\app\Http\Controllers\OrganMemberController;
+use Modules\Organization\app\Http\Controllers\TeacherProfileController;
 
 Route::middleware(['auth:sanctum'])->prefix('api/v1')->group(function () {
     // Organs Routes
@@ -33,4 +34,17 @@ Route::middleware(['auth:sanctum'])->prefix('api/v1')->group(function () {
         Route::delete('/{id}', [OrganMemberController::class, 'destroy']);
     });
 
+    Route::prefix('teacher')->group(function () {
+        Route::get('/profile', [TeacherProfileController::class, 'show']);
+        Route::put('/profile', [TeacherProfileController::class, 'update']);
+    });
+    
+
+});
+
+//No futuro implementar em todas as rotas que docentes fazem algo....
+    // Rotas protegidas - exigem perfil completo para teachers
+Route::middleware(['auth:sanctum', 'teacher.profile.complete'])->prefix('api/v1')->group(function () {
+    // grupo teacher (middleware auth:sanctum + role:teacher)
+    
 });
