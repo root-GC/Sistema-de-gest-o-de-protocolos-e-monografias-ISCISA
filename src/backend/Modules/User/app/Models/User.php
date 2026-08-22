@@ -16,13 +16,11 @@ use Modules\User\Database\Factories\UserFactory;
 use Modules\Organization\app\Models\AdminProfile;
 use Modules\Organization\app\Models\CoordinatorProfile;
 use Modules\Organization\app\Models\SecretaryProfile;
-use Spatie\Permission\Traits\HasRoles; // ✅ Importante
-
 
 class User extends Authenticatable
 {
     use HasApiTokens, SoftDeletes, HasFactory;
-    use HasRoles; // ✅ HasRoles trait
+
     protected static function newFactory()
     {
         return new UserFactory();

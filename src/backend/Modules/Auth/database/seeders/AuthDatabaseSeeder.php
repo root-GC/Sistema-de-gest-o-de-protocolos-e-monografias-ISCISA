@@ -17,7 +17,7 @@ class AuthDatabaseSeeder extends Seeder
         $this->call([
             PermissionSeeder::class,
             RoleSeeder::class,
-            //TestUserSeeder::class,
+            TestUserSeeder::class,
         ]);
     }
 }
