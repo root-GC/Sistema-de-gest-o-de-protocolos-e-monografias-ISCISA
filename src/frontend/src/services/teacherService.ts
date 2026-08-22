@@ -5,20 +5,21 @@ import type { UserPayload, TeacherProfile } from '../context/AuthContext';
 
 // ==================== Tipos ====================
 
-// Interface para a resposta do backend (usuário com teacher_profile)
+// Interface para o usuário retornado pelo backend
 export interface TeacherUserResponse {
   id: number;
   name: string;
   email: string;
   status?: string;
   teacher_profile?: TeacherProfile | null;
-  roles?: string[];
-  permissions?: string[];
+  roles?: any[]; // Pode vir como array de objetos Role ou strings
 }
 
+// Interface para a resposta COMPLETA do backend
 export interface TeacherProfileResponse {
   message?: string;
-  data: TeacherUserResponse;  // ✅ Tipo correto do backend
+  data: TeacherUserResponse;
+  permissions?: string[]; // 🔑 Permissions vem no TOPO da resposta, não dentro de "data"
   profile_complete: boolean;
 }
 
@@ -110,22 +111,71 @@ export const teacherService = {
 // ==================== Helpers ====================
 
 /**
+ * Normalizar roles para array de strings
+ * Aceita tanto array de strings quanto array de objetos Role
+ */
+function normalizeRoles(roles: any): string[] {
+  if (!Array.isArray(roles)) {
+    return [];
+  }
+  
+  return roles.map((role: any) => {
+    // Se já é string, retorna direto
+    if (typeof role === 'string') {
+      return role;
+    }
+    
+    // Se é objeto, tenta extrair o nome
+    if (role && typeof role === 'object') {
+      // Verifica várias propriedades possíveis
+      if (role.name && typeof role.name === 'string') {
+        return role.name;
+      }
+      if (role.slug && typeof role.slug === 'string') {
+        return role.slug;
+      }
+      if (role.role && typeof role.role === 'string') {
+        return role.role;
+      }
+      if (role.id && typeof role.id === 'string') {
+        return role.id;
+      }
+    }
+    
+    // Fallback: converte para string
+    return String(role);
+  }).filter(Boolean); // Remove valores vazios/undefined/null
+}
+
+/**
  * Converter resposta do backend para UserPayload
+ * Recebe a resposta COMPLETA (não só response.data), porque
+ * "permissions" vem ao nível do topo, não dentro de "data".
  */
 export function teacherResponseToUserPayload(
-  response: TeacherUserResponse,
+  response: TeacherProfileResponse,
   currentUser?: UserPayload | null
 ): UserPayload {
+  const user = response.data;
+
+  // 🔑 CORREÇÃO: Normalizar roles garantindo que sejam strings
+  const normalizedRoles = normalizeRoles(user.roles);
+  
+  // 🔑 CORREÇÃO: Se não houver roles normalizadas, usar as do currentUser
+  const finalRoles = normalizedRoles.length > 0 
+    ? normalizedRoles 
+    : (currentUser?.roles || []);
+
   return {
-    id: String(response.id),
-    name: response.name,
-    email: response.email,
-    status: (response.status as 'active' | 'inactive') || 'active',
-    roles: (response.roles as UserPayload['roles']) || currentUser?.roles || [],
+    id: String(user.id),
+    name: user.name,
+    email: user.email,
+    status: (user.status as 'active' | 'inactive') || 'active',
+    roles: finalRoles as UserPayload['roles'],
     permissions: response.permissions || currentUser?.permissions || [],
     profiles: {
       ...(currentUser?.profiles || {}),
-      teacher: response.teacher_profile || currentUser?.profiles?.teacher || null,
+      teacher: user.teacher_profile || currentUser?.profiles?.teacher || null,
     },
   };
 }

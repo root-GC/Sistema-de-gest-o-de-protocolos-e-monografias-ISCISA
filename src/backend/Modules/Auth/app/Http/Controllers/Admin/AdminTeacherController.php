@@ -12,6 +12,13 @@ use Modules\User\app\Models\User;
 
 class AdminTeacherController extends Controller
 {
+    /**
+     * Roles atribuídas por defeito a qualquer docente criado por este fluxo.
+     * Todo docente gerido pelo núcleo é sempre teacher + supervisor.
+     * 'reviewer' fica de fora por agora — será atribuída via update() no futuro.
+     */
+    private const DEFAULT_ROLES = ['teacher', 'supervisor'];
+
     public function __construct(
         private TeacherInviteService $inviteService,
         private TeacherImportService $importService,
@@ -58,6 +65,7 @@ class AdminTeacherController extends Controller
     }
 
     // POST /api/v1/admin/teachers — criação manual (um docente de cada vez)
+    // Cria sempre com teacher + supervisor.
     public function store(Request $request)
     {
         $organ = $this->actorNucleus($request);
@@ -68,11 +76,14 @@ class AdminTeacherController extends Controller
         ]);
 
         $data['scientific_area_id'] = $this->resolveScientificAreaId($organ);
+        $data['roles'] = self::DEFAULT_ROLES;
 
         try {
             $user = $this->inviteService->invite($data);
 
-            Log::info('[AdminTeacherController] store — docente criado', ['user_id' => $user->id, 'organ_id' => $organ->id]);
+            Log::info('[AdminTeacherController] store — docente criado', [
+                'user_id' => $user->id, 'organ_id' => $organ->id, 'roles' => self::DEFAULT_ROLES,
+            ]);
 
             return response()->json([
                 'message' => 'Convite enviado com sucesso.',
@@ -86,6 +97,7 @@ class AdminTeacherController extends Controller
     }
 
     // POST /api/v1/admin/teachers/import — importação em massa via Excel/CSV
+    // Todos os docentes importados saem sempre com teacher + supervisor.
     public function import(Request $request)
     {
         $organ = $this->actorNucleus($request);
@@ -116,6 +128,7 @@ class AdminTeacherController extends Controller
     }
 
     // PUT /api/v1/admin/teachers/{id} — admin pode editar nome/email/status
+    // (Aqui é que, no futuro, entrará a atribuição da role reviewer.)
     public function update(Request $request, int $id)
     {
         $organ   = $this->actorNucleus($request);

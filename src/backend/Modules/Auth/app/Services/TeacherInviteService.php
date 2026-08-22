@@ -19,12 +19,19 @@ class TeacherInviteService
      * Cria um docente + convite por email.
      *
      * $data espera: name, email, scientific_area_id (imposto pelo controller,
-     * nunca vindo do request), department/academic_degree opcionais (o docente
-     * preenche isto ao actualizar o próprio perfil).
+     * nunca vindo do request), roles (array — imposto pelo controller/import
+     * service, atualmente sempre ['teacher','supervisor']),
+     * department/academic_degree opcionais (o docente preenche isto ao
+     * actualizar o próprio perfil).
      */
     public function invite(array $data): User
     {
-        $user = DB::transaction(function () use ($data) {
+        $roles = $data['roles'] ?? ['teacher', 'supervisor'];
+        if (! in_array('teacher', $roles, true)) {
+            $roles[] = 'teacher'; // garantia extra — nunca criar docente sem a role base
+        }
+
+        $user = DB::transaction(function () use ($data, $roles) {
             $user = User::create([
                 'name'                => $data['name'],
                 'email'               => $data['email'],
@@ -33,13 +40,7 @@ class TeacherInviteService
                 'must_reset_password' => true,
             ]);
 
-            $roleId = DB::table('roles')->where('name', 'teacher')->value('id');
-            if (! $roleId) throw new \RuntimeException("Role 'teacher' não encontrada — corre o RoleSeeder.");
-
-            DB::table('user_roles')->insert([
-                'user_id' => $user->id, 'role_id' => $roleId,
-                'created_at' => now(), 'updated_at' => now(),
-            ]);
+            $this->attachRoles($user, $roles);
 
             $user->teacherProfile()->create([
                 'scientific_area_id' => $data['scientific_area_id'], // herdado do órgão do admin, nunca do request
@@ -69,6 +70,29 @@ class TeacherInviteService
         }
 
         return $user;
+    }
+
+    /**
+     * Insere uma linha em user_roles por cada role da lista.
+     * Lança erro se alguma role não existir na tabela roles (evita
+     * criar utilizador "meio configurado" silenciosamente).
+     */
+    private function attachRoles(User $user, array $roleNames): void
+    {
+        $now = now();
+
+        foreach (array_unique($roleNames) as $roleName) {
+            $roleId = DB::table('roles')->where('name', $roleName)->value('id');
+
+            if (! $roleId) {
+                throw new \RuntimeException("Role '{$roleName}' não encontrada — corre o RoleSeeder.");
+            }
+
+            DB::table('user_roles')->updateOrInsert(
+                ['user_id' => $user->id, 'role_id' => $roleId],
+                ['created_at' => $now, 'updated_at' => $now]
+            );
+        }
     }
 
     private function rollbackUser(User $user): void

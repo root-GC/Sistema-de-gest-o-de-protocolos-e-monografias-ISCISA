@@ -93,8 +93,9 @@ export default function CompleteProfilePage() {
           profiles: profiles || {}
         } : null;
         
+        // 🔑 CORREÇÃO: Passar a resposta COMPLETA, não só response.data
         const userPayload = teacherResponseToUserPayload(
-          response.data,
+          response,  // Antes era response.data — agora é a resposta inteira
           currentUserPayload
         );
         

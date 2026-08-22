@@ -1,7 +1,5 @@
 <?php
 
-// Modules/Organization/App/Http/Controllers/TeacherProfileController.php
-
 namespace Modules\Organization\App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -14,11 +12,12 @@ class TeacherProfileController extends Controller
     public function show(Request $request)
     {
         $user = $request->user()
-            ->loadMissing('teacherProfile.scientificArea');
-        
+            ->loadMissing('roles.permissions', 'teacherProfile.scientificArea');
+
         return response()->json([
-            'data' => $user,
-            'profile_complete' => $this->isProfileComplete($user),
+            'data'              => $user,
+            'permissions'       => $this->flattenPermissions($user),
+            'profile_complete'  => $this->isProfileComplete($user),
         ]);
     }
 
@@ -27,63 +26,71 @@ class TeacherProfileController extends Controller
     {
         $user = $request->user();
         $profile = $user->teacherProfile;
-        
+
         if (!$profile) {
-            // Criar perfil se não existir
             $profile = TeacherProfile::create([
                 'user_id' => $user->id,
             ]);
         }
 
-        // Validação apenas dos campos do perfil
         $data = $request->validate([
             'department'      => ['sometimes', 'nullable', 'string', 'max:150'],
             'academic_degree' => ['sometimes', 'nullable', 'string', 'in:' . implode(',', TeacherProfile::DEGREES)],
         ]);
 
-        // Atualizar apenas department e academic_degree
         if (isset($data['department'])) {
             $profile->department = $data['department'];
         }
-        
+
         if (isset($data['academic_degree'])) {
             $profile->academic_degree = $data['academic_degree'];
         }
-        
+
         $profile->save();
 
-        // Atualizar nome se fornecido (opcional)
         if ($request->filled('name')) {
             $validatedName = $request->validate([
                 'name' => ['required', 'string', 'max:255']
             ]);
-            
+
             $user->update([
                 'name' => $validatedName['name']
             ]);
         }
 
-        // Recarregar APENAS o perfil do professor
-        $user = $user->fresh()->load('teacherProfile.scientificArea');
+        // 🔑 Agora carrega também roles + permissions, senão o frontend
+        // recebe roles/permissions vazios e o UserPayload fica incompleto.
+        $user = $user->fresh()->load('roles.permissions', 'teacherProfile.scientificArea');
 
         return response()->json([
-            'message' => 'Perfil atualizado com sucesso.',
-            'data' => $user,
-            'profile_complete' => $this->isProfileComplete($user),
+            'message'           => 'Perfil atualizado com sucesso.',
+            'data'              => $user,
+            'permissions'       => $this->flattenPermissions($user),
+            'profile_complete'  => $this->isProfileComplete($user),
         ]);
     }
 
     /**
-     * Verificar se o perfil do docente está completo
+     * Achata as permissions de todas as roles do user numa lista única
+     * de códigos (ex: ['document.view', 'workload.view', ...]).
      */
+    private function flattenPermissions($user): array
+    {
+        return $user->roles
+            ->flatMap(fn ($role) => $role->permissions->pluck('code'))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     private function isProfileComplete($user): bool
     {
         $teacherProfile = $user->teacherProfile;
-        
+
         if (!$teacherProfile) {
             return false;
         }
-        
+
         return $teacherProfile->isComplete();
     }
 }

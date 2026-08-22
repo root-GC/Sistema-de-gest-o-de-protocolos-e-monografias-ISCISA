@@ -8,6 +8,11 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class TeacherImportService
 {
+    /**
+     * Roles atribuídas a todos os docentes importados. Igual ao store() manual.
+     */
+    private const DEFAULT_ROLES = ['teacher', 'supervisor'];
+
     public function __construct(private TeacherInviteService $inviteService) {}
 
     /**
@@ -43,9 +48,13 @@ class TeacherImportService
                     'name'                => $name,
                     'email'               => $email,
                     'scientific_area_id'  => $scientificAreaId,
+                    'roles'               => self::DEFAULT_ROLES,
                 ]);
 
-                $created[] = ['line' => $lineNumber, 'id' => $user->id, 'name' => $name, 'email' => $email];
+                $created[] = [
+                    'line' => $lineNumber, 'id' => $user->id, 'name' => $name, 'email' => $email,
+                    'roles' => self::DEFAULT_ROLES,
+                ];
             } catch (\Throwable $e) {
                 $failed[] = ['line' => $lineNumber, 'row' => $row, 'errors' => [$e->getMessage()]];
             }
