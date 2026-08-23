@@ -13,6 +13,7 @@ interface Teacher {
   academic_degree: string | null
   scientific_area: string | null
   scientific_area_id: number | null
+  organ_name?: string // Nome do núcleo ao qual pertence
 }
 
 interface OrganMember {
@@ -33,6 +34,16 @@ interface PaginationInfo {
   total: number
   current_page: number
   last_page: number
+}
+
+// Tipos de órgãos conforme o modelo Organ
+type OrganType = 'nucleus' | 'scientific_committee' | 'bioethics_committee' | 'scientific_direction'
+
+const ORGAN_TYPE_LABELS: Record<OrganType, string> = {
+  nucleus: 'Núcleo',
+  scientific_committee: 'Comité Científico',
+  bioethics_committee: 'Comité de Bioética',
+  scientific_direction: 'Direção Científica',
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -88,48 +99,42 @@ export default function InviteReviewersPage() {
   const [isUpdating, setIsUpdating] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
 
-  const organType = profiles?.admin?.organ?.type || 'scientific_committee'
+  const organType = (profiles?.admin?.organ?.type as OrganType) || 'scientific_committee'
   const config = getOrganConfig(organType)
+  
+  // Verificar se é um núcleo (gestão automática)
+  const isNucleus = organType === 'nucleus'
+  
+  // Órgãos que podem gerir revisores manualmente
+  const canManageReviewers = !isNucleus
 
   useEffect(() => {
     loadData()
   }, [])
 
   useEffect(() => {
-    loadAvailableTeachers(currentPage, searchTerm)
-  }, [currentPage])
+    if (canManageReviewers) {
+      loadAvailableTeachers(currentPage, searchTerm)
+    }
+  }, [currentPage, canManageReviewers])
 
   async function loadData() {
     setLoading(true)
     setError(null)
     try {
-      const [membersRes, teachersRes] = await Promise.all([
-        organPresidentService.listOrganMembers(),
-        organPresidentService.listAvailableTeachers(),
-      ])
+      const membersRes = await organPresidentService.listOrganMembers()
       
       const membersData = Array.isArray(membersRes?.data) 
         ? membersRes.data 
         : Array.isArray(membersRes) 
           ? membersRes 
           : []
-      
-      const teachersData = Array.isArray(teachersRes?.data) 
-        ? teachersRes.data as Teacher[] 
-        : Array.isArray(teachersRes) 
-          ? teachersRes as Teacher[]
-          : []
 
       setMembers(membersData)
-      setAvailableTeachers(teachersData)
-      
-      // Atualizar informações de paginação
-      if (teachersRes && typeof teachersRes === 'object' && !Array.isArray(teachersRes)) {
-        setPagination({
-          total: teachersRes.total || teachersData.length,
-          current_page: teachersRes.current_page || 1,
-          last_page: teachersRes.last_page || 1,
-        })
+
+      // Só carregar docentes disponíveis se puder gerir revisores
+      if (canManageReviewers) {
+        await loadAvailableTeachers(1, searchTerm)
       }
     } catch (e) {
       setError((e as Error).message)
@@ -230,7 +235,8 @@ export default function InviteReviewersPage() {
         t.name?.toLowerCase().includes(term) ||
         t.email?.toLowerCase().includes(term) ||
         t.scientific_area?.toLowerCase().includes(term) ||
-        t.academic_degree?.toLowerCase().includes(term)
+        t.academic_degree?.toLowerCase().includes(term) ||
+        t.organ_name?.toLowerCase().includes(term)
       )
     }
     
@@ -243,10 +249,13 @@ export default function InviteReviewersPage() {
     <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <h1 style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-1)' }}>
-          Convidar Revisores
+          {isNucleus ? 'Membros do Núcleo' : 'Gestão de Revisores'}
         </h1>
         <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
-          Convide docentes do Núcleo Científico para serem revisores no {config.label}
+          {isNucleus 
+            ? 'Os revisores são geridos automaticamente pelo sistema'
+            : `Convide docentes de todos os Núcleos para serem revisores no ${ORGAN_TYPE_LABELS[organType]}`
+          }
         </p>
       </div>
 
@@ -271,7 +280,7 @@ export default function InviteReviewersPage() {
             gap: 'var(--space-2)'
           }}>
             <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>group</span>
-            Membros do {config.label}
+            Membros do {ORGAN_TYPE_LABELS[organType]}
             <span style={{
               background: 'var(--surface-container)',
               padding: '2px 10px',
@@ -347,65 +356,85 @@ export default function InviteReviewersPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <select
-                    value={member.role}
-                    onChange={e => handleUpdateRole(member.id, e.target.value)}
-                    disabled={member.role === 'president' || isUpdating === member.id}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 'var(--radius-full)',
-                      border: `1px solid ${ROLE_COLORS[member.role] || 'var(--outline-variant)'}`,
-                      fontSize: 'var(--label-sm)',
-                      fontFamily: 'var(--font-family)',
-                      background: 'var(--surface)',
-                      color: 'var(--on-surface)',
-                      cursor: member.role === 'president' ? 'not-allowed' : 'pointer',
-                      opacity: member.role === 'president' ? 0.5 : 1,
-                      minWidth: '130px'
-                    }}
-                  >
-                    {ROLE_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  {member.role !== 'president' && (
-                    <button
-                      onClick={() => handleRemoveMember(member.id, member.user?.name)}
-                      disabled={isRemoving === member.id}
-                      style={{
-                        padding: '6px 12px',
-                        background: 'var(--error-container)',
-                        color: 'var(--on-error-container)',
-                        border: 'none',
-                        borderRadius: 'var(--radius-lg)',
-                        cursor: isRemoving === member.id ? 'not-allowed' : 'pointer',
-                        fontSize: 'var(--label-sm)',
-                        fontFamily: 'var(--font-family)',
-                        opacity: isRemoving === member.id ? 0.7 : 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      {isRemoving === member.id ? (
-                        <>
-                          <span style={{
-                            width: '12px',
-                            height: '12px',
-                            border: '2px solid var(--on-error-container)',
-                            borderTopColor: 'transparent',
-                            borderRadius: '50%',
-                            animation: 'spin 0.8s linear infinite'
-                          }} />
-                          A remover...
-                        </>
-                      ) : (
-                        'Remover'
+                  {canManageReviewers && (
+                    <>
+                      <select
+                        value={member.role}
+                        onChange={e => handleUpdateRole(member.id, e.target.value)}
+                        disabled={member.role === 'president' || isUpdating === member.id}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: 'var(--radius-full)',
+                          border: `1px solid ${ROLE_COLORS[member.role] || 'var(--outline-variant)'}`,
+                          fontSize: 'var(--label-sm)',
+                          fontFamily: 'var(--font-family)',
+                          background: 'var(--surface)',
+                          color: 'var(--on-surface)',
+                          cursor: member.role === 'president' ? 'not-allowed' : 'pointer',
+                          opacity: member.role === 'president' ? 0.5 : 1,
+                          minWidth: '130px'
+                        }}
+                      >
+                        {ROLE_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      
+                      {member.role !== 'president' && (
+                        <button
+                          onClick={() => handleRemoveMember(member.id, member.user?.name)}
+                          disabled={isRemoving === member.id}
+                          style={{
+                            padding: '6px 12px',
+                            background: 'var(--error-container)',
+                            color: 'var(--on-error-container)',
+                            border: 'none',
+                            borderRadius: 'var(--radius-lg)',
+                            cursor: isRemoving === member.id ? 'not-allowed' : 'pointer',
+                            fontSize: 'var(--label-sm)',
+                            fontFamily: 'var(--font-family)',
+                            opacity: isRemoving === member.id ? 0.7 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          {isRemoving === member.id ? (
+                            <>
+                              <span style={{
+                                width: '12px',
+                                height: '12px',
+                                border: '2px solid var(--on-error-container)',
+                                borderTopColor: 'transparent',
+                                borderRadius: '50%',
+                                animation: 'spin 0.8s linear infinite'
+                              }} />
+                              A remover...
+                            </>
+                          ) : (
+                            'Remover'
+                          )}
+                        </button>
                       )}
-                    </button>
+                    </>
+                  )}
+                  
+                  {isNucleus && member.role !== 'president' && (
+                    <span style={{
+                      fontSize: 'var(--label-sm)',
+                      color: 'var(--on-surface-variant)',
+                      fontStyle: 'italic',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                        auto_awesome
+                      </span>
+                      Gestão automática
+                    </span>
                   )}
                 </div>
               </div>
@@ -414,246 +443,321 @@ export default function InviteReviewersPage() {
         )}
       </section>
 
-      {/* Docentes disponíveis para convidar */}
-      <section>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 'var(--space-2)',
-          marginBottom: 'var(--space-3)'
-        }}>
-          <h2 style={{
-            fontSize: 'var(--title-md)',
-            fontWeight: 'var(--font-semibold)',
+      {/* Secção de convite - apenas para comités e direção científica */}
+      {canManageReviewers ? (
+        <section>
+          <div style={{
             display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            gap: 'var(--space-2)'
+            flexWrap: 'wrap',
+            gap: 'var(--space-2)',
+            marginBottom: 'var(--space-3)'
           }}>
-            <span className="material-symbols-outlined" style={{ color: 'var(--tertiary)' }}>person_add</span>
-            Docentes do Núcleo Científico
-            <span style={{
-              background: 'var(--tertiary-container)',
-              padding: '2px 10px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: 'var(--label-sm)',
-              color: 'var(--on-tertiary-container)'
+            <h2 style={{
+              fontSize: 'var(--title-md)',
+              fontWeight: 'var(--font-semibold)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)'
             }}>
-              {pagination.total} disponíveis
-            </span>
-          </h2>
+              <span className="material-symbols-outlined" style={{ color: 'var(--tertiary)' }}>person_add</span>
+              Docentes de Todos os Núcleos
+              <span style={{
+                background: 'var(--tertiary-container)',
+                padding: '2px 10px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: 'var(--label-sm)',
+                color: 'var(--on-tertiary-container)'
+              }}>
+                {pagination.total} disponíveis
+              </span>
+            </h2>
 
-          <div style={{ position: 'relative', minWidth: '250px' }}>
-            <span className="material-symbols-outlined" style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--outline)',
-              fontSize: '20px'
-            }}>
-              search
-            </span>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={e => {
-                setSearchTerm(e.target.value)
-                // Debounce para pesquisa
-                setTimeout(() => {
-                  loadAvailableTeachers(1, e.target.value)
-                }, 500)
-              }}
-              placeholder="Pesquisar docentes..."
-              style={{
-                width: '100%',
-                padding: '10px 14px 10px 40px',
-                background: 'var(--surface-container-lowest)',
-                border: '1px solid var(--outline-variant)',
-                borderRadius: 'var(--radius-lg)',
-                fontSize: 'var(--body-md)',
-                fontFamily: 'var(--font-family)',
-                color: 'var(--on-surface)',
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
-            />
+            <div style={{ position: 'relative', minWidth: '250px' }}>
+              <span className="material-symbols-outlined" style={{
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--outline)',
+                fontSize: '20px'
+              }}>
+                search
+              </span>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => {
+                  setSearchTerm(e.target.value)
+                  // Debounce para pesquisa
+                  if ((window as any).searchTimeout) {
+                    clearTimeout((window as any).searchTimeout)
+                  }
+                  ;(window as any).searchTimeout = setTimeout(() => {
+                    loadAvailableTeachers(1, e.target.value)
+                  }, 500)
+                }}
+                placeholder="Pesquisar docentes..."
+                style={{
+                  width: '100%',
+                  padding: '10px 14px 10px 40px',
+                  background: 'var(--surface-container-lowest)',
+                  border: '1px solid var(--outline-variant)',
+                  borderRadius: 'var(--radius-lg)',
+                  fontSize: 'var(--body-md)',
+                  fontFamily: 'var(--font-family)',
+                  color: 'var(--on-surface)',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
           </div>
-        </div>
 
-        {filteredTeachers.length === 0 ? (
-          <EmptyState message={searchTerm ? 'Nenhum docente encontrado' : 'Todos os docentes já são membros'} />
-        ) : (
-          <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              {filteredTeachers.map(teacher => (
-                <div key={teacher.id} className="card" style={{
-                  padding: 'var(--space-3) var(--space-4)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 'var(--space-3)',
-                  flexWrap: 'wrap'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      background: 'var(--tertiary-container)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 'var(--font-bold)',
-                      color: 'var(--on-tertiary-container)',
-                      flexShrink: 0
-                    }}>
-                      {teacher.name?.charAt(0)?.toUpperCase() || '?'}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                        <h3 style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', margin: 0 }}>
-                          {teacher.name}
-                        </h3>
-                        {teacher.status && (
-                          <span style={{
-                            fontSize: 'var(--label-xs)',
-                            padding: '2px 8px',
-                            borderRadius: 'var(--radius-full)',
-                            background: STATUS_COLORS[teacher.status] || 'var(--surface-container)',
-                            color: 'var(--on-surface)',
-                            fontWeight: 'var(--font-medium)'
-                          }}>
-                            {STATUS_LABELS[teacher.status] || teacher.status}
-                          </span>
-                        )}
+          {filteredTeachers.length === 0 ? (
+            <EmptyState message={searchTerm ? 'Nenhum docente encontrado' : 'Todos os docentes já são membros'} />
+          ) : (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                {filteredTeachers.map(teacher => (
+                  <div key={teacher.id} className="card" style={{
+                    padding: 'var(--space-3) var(--space-4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 'var(--space-3)',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        background: 'var(--tertiary-container)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 'var(--font-bold)',
+                        color: 'var(--on-tertiary-container)',
+                        flexShrink: 0
+                      }}>
+                        {teacher.name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
-                      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
-                        {teacher.email}
-                      </p>
-                      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: '2px' }}>
-                        {teacher.academic_degree && (
-                          <span style={{
-                            fontSize: 'var(--label-xs)',
-                            padding: '1px 6px',
-                            borderRadius: 'var(--radius-full)',
-                            background: 'var(--primary-container)',
-                            color: 'var(--on-primary-container)',
-                            fontWeight: 'var(--font-medium)'
-                          }}>
-                            {teacher.academic_degree}
-                          </span>
-                        )}
-                        {teacher.scientific_area && (
-                          <span style={{
-                            fontSize: 'var(--label-xs)',
-                            padding: '1px 6px',
-                            borderRadius: 'var(--radius-full)',
-                            background: 'var(--secondary-container)',
-                            color: 'var(--on-secondary-container)',
-                            fontWeight: 'var(--font-medium)'
-                          }}>
-                            {teacher.scientific_area}
-                          </span>
-                        )}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                          <h3 style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', margin: 0 }}>
+                            {teacher.name}
+                          </h3>
+                          {teacher.organ_name && (
+                            <span style={{
+                              fontSize: 'var(--label-xs)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-full)',
+                              background: 'var(--primary-container)',
+                              color: 'var(--on-primary-container)',
+                              fontWeight: 'var(--font-medium)'
+                            }}>
+                              {teacher.organ_name}
+                            </span>
+                          )}
+                          {teacher.status && (
+                            <span style={{
+                              fontSize: 'var(--label-xs)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-full)',
+                              background: STATUS_COLORS[teacher.status] || 'var(--surface-container)',
+                              color: 'var(--on-surface)',
+                              fontWeight: 'var(--font-medium)'
+                            }}>
+                              {STATUS_LABELS[teacher.status] || teacher.status}
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
+                          {teacher.email}
+                        </p>
+                        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: '2px' }}>
+                          {teacher.academic_degree && (
+                            <span style={{
+                              fontSize: 'var(--label-xs)',
+                              padding: '1px 6px',
+                              borderRadius: 'var(--radius-full)',
+                              background: 'var(--primary-container)',
+                              color: 'var(--on-primary-container)',
+                              fontWeight: 'var(--font-medium)'
+                            }}>
+                              {teacher.academic_degree}
+                            </span>
+                          )}
+                          {teacher.scientific_area && (
+                            <span style={{
+                              fontSize: 'var(--label-xs)',
+                              padding: '1px 6px',
+                              borderRadius: 'var(--radius-full)',
+                              background: 'var(--secondary-container)',
+                              color: 'var(--on-secondary-container)',
+                              fontWeight: 'var(--font-medium)'
+                            }}>
+                              {teacher.scientific_area}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    <button
+                      onClick={() => handleInvite(teacher.id)}
+                      disabled={isInviting === teacher.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-1)',
+                        padding: '8px 16px',
+                        background: 'var(--secondary)',
+                        color: 'var(--on-secondary)',
+                        border: 'none',
+                        borderRadius: 'var(--radius-lg)',
+                        cursor: isInviting === teacher.id ? 'not-allowed' : 'pointer',
+                        fontSize: 'var(--body-md)',
+                        fontWeight: 'var(--font-semibold)',
+                        fontFamily: 'var(--font-family)',
+                        opacity: isInviting === teacher.id ? 0.7 : 1,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {isInviting === teacher.id ? (
+                        <>
+                          <span style={{
+                            width: '14px',
+                            height: '14px',
+                            border: '2px solid var(--on-secondary)',
+                            borderTopColor: 'transparent',
+                            borderRadius: '50%',
+                            animation: 'spin 0.8s linear infinite'
+                          }} />
+                          A convidar...
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person_add</span>
+                          Convidar como Revisor
+                        </>
+                      )}
+                    </button>
                   </div>
+                ))}
+              </div>
+
+              {/* Paginação */}
+              {pagination.last_page > 1 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 'var(--space-2)',
+                  marginTop: 'var(--space-3)'
+                }}>
                   <button
-                    onClick={() => handleInvite(teacher.id)}
-                    disabled={isInviting === teacher.id}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 'var(--space-1)',
-                      padding: '8px 16px',
-                      background: 'var(--secondary)',
-                      color: 'var(--on-secondary)',
+                      padding: '6px 12px',
+                      background: 'var(--surface-container)',
+                      color: 'var(--on-surface)',
                       border: 'none',
                       borderRadius: 'var(--radius-lg)',
-                      cursor: isInviting === teacher.id ? 'not-allowed' : 'pointer',
-                      fontSize: 'var(--body-md)',
-                      fontWeight: 'var(--font-semibold)',
-                      fontFamily: 'var(--font-family)',
-                      opacity: isInviting === teacher.id ? 0.7 : 1,
-                      whiteSpace: 'nowrap'
+                      cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                      opacity: currentPage === 1 ? 0.5 : 1,
+                      fontFamily: 'var(--font-family)'
                     }}
                   >
-                    {isInviting === teacher.id ? (
-                      <>
-                        <span style={{
-                          width: '14px',
-                          height: '14px',
-                          border: '2px solid var(--on-secondary)',
-                          borderTopColor: 'transparent',
-                          borderRadius: '50%',
-                          animation: 'spin 0.8s linear infinite'
-                        }} />
-                        A convidar...
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person_add</span>
-                        Convidar como Revisor
-                      </>
-                    )}
+                    Anterior
+                  </button>
+                  
+                  <span style={{ fontSize: 'var(--label-md)', color: 'var(--on-surface-variant)' }}>
+                    Página {pagination.current_page} de {pagination.last_page}
+                  </span>
+                  
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(pagination.last_page, prev + 1))}
+                    disabled={currentPage === pagination.last_page}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'var(--surface-container)',
+                      color: 'var(--on-surface)',
+                      border: 'none',
+                      borderRadius: 'var(--radius-lg)',
+                      cursor: currentPage === pagination.last_page ? 'not-allowed' : 'pointer',
+                      opacity: currentPage === pagination.last_page ? 0.5 : 1,
+                      fontFamily: 'var(--font-family)'
+                    }}
+                  >
+                    Próxima
                   </button>
                 </div>
-              ))}
-            </div>
-
-            {/* Paginação */}
-            {pagination.last_page > 1 && (
-              <div style={{
+              )}
+            </>
+          )}
+        </section>
+      ) : (
+        /* Secção informativa para núcleos */
+        <section>
+          <div style={{
+            background: 'var(--surface-container-low)',
+            padding: 'var(--space-4)',
+            borderRadius: 'var(--radius-xl)',
+            border: '1px solid var(--outline-variant)',
+            textAlign: 'center'
+          }}>
+            <span className="material-symbols-outlined" style={{ 
+              fontSize: '48px', 
+              marginBottom: 'var(--space-2)', 
+              display: 'block',
+              color: 'var(--tertiary)'
+            }}>
+              auto_awesome
+            </span>
+            <h3 style={{ 
+              fontSize: 'var(--title-md)', 
+              fontWeight: 'var(--font-semibold)',
+              marginBottom: 'var(--space-2)',
+              color: 'var(--on-surface)'
+            }}>
+              Gestão Automática de Revisores
+            </h3>
+            <p style={{ 
+              fontSize: 'var(--body-md)', 
+              color: 'var(--on-surface-variant)',
+              maxWidth: '600px',
+              margin: '0 auto'
+            }}>
+              No Núcleo, os revisores são adicionados automaticamente quando são 
+              atribuídos a revisões de protocolos. Não é necessário convidar 
+              manualmente os docentes.
+            </p>
+            <div style={{
+              marginTop: 'var(--space-3)',
+              padding: 'var(--space-3)',
+              background: 'var(--surface)',
+              borderRadius: 'var(--radius-lg)',
+              display: 'inline-block'
+            }}>
+              <span style={{
+                fontSize: 'var(--label-sm)',
+                color: 'var(--on-surface-variant)',
                 display: 'flex',
-                justifyContent: 'center',
                 alignItems: 'center',
-                gap: 'var(--space-2)',
-                marginTop: 'var(--space-3)'
+                gap: 'var(--space-2)'
               }}>
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  style={{
-                    padding: '6px 12px',
-                    background: 'var(--surface-container)',
-                    color: 'var(--on-surface)',
-                    border: 'none',
-                    borderRadius: 'var(--radius-lg)',
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === 1 ? 0.5 : 1,
-                    fontFamily: 'var(--font-family)'
-                  }}
-                >
-                  Anterior
-                </button>
-                
-                <span style={{ fontSize: 'var(--label-md)', color: 'var(--on-surface-variant)' }}>
-                  Página {pagination.current_page} de {pagination.last_page}
+                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--tertiary)' }}>
+                  info
                 </span>
-                
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(pagination.last_page, prev + 1))}
-                  disabled={currentPage === pagination.last_page}
-                  style={{
-                    padding: '6px 12px',
-                    background: 'var(--surface-container)',
-                    color: 'var(--on-surface)',
-                    border: 'none',
-                    borderRadius: 'var(--radius-lg)',
-                    cursor: currentPage === pagination.last_page ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === pagination.last_page ? 0.5 : 1,
-                    fontFamily: 'var(--font-family)'
-                  }}
-                >
-                  Próxima
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+                Os membros acima são geridos automaticamente pelo sistema
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
 
       <style>{`
         @keyframes spin {

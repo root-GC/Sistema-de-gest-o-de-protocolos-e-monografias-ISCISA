@@ -1,7 +1,7 @@
 // src/services/topicService.ts
-import { req, reqFormData } from './apiClient';  // 🆕 Importe reqFormData
+import { req, reqFormData } from './apiClient';
 
-// ============ INTERFACES (mantenha todas iguais) ============
+// ============ INTERFACES ============
 
 export interface Topic {
   id: number;
@@ -74,6 +74,16 @@ export interface ApprovedTopic {
 export interface SimilarTopicsWarning {
   has_similar: boolean;
   items: { id: number; title: string }[];
+}
+
+// 🆕 Interface para revisores elegíveis com contagem de pendências
+export interface EligibleReviewer {
+  id: number;
+  name: string;
+  email?: string | null;
+  pending_reviews_count?: number;
+  pending_topic_reviews_count?: number;
+  pending_protocol_reviews_count?: number;
 }
 
 // ============ TOPIC SERVICE ============
@@ -176,7 +186,7 @@ export const topicService = {
   // ---------------------------------------------------------------------------
   eligibleReviewers: (topicId: number) =>
     req('GET', `/api/v1/topics/${topicId}/eligible-reviewers`) as Promise<{
-      reviewers: { id: number; name: string }[];
+      reviewers: EligibleReviewer[];
       total: number;
     }>,
 

@@ -4,6 +4,17 @@ import { TopicJustificationToggle } from '../../../components/TopicJustification
 import '../../../styles/global.css'
 
 // ============================================================
+// TIPOS
+// ============================================================
+interface EligibleReviewer {
+  id: number
+  name: string
+  pending_reviews_count?: number
+  pending_topic_reviews_count?: number
+  pending_protocol_reviews_count?: number
+}
+
+// ============================================================
 // HELPERS
 // ============================================================
 function getStatusStyle(status: string) {
@@ -23,14 +34,16 @@ export function TopicsTab() {
   const [topics, setTopics] = useState<Topic[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [reviewersByTopic, setReviewersByTopic] = useState<Record<number, { id: number; name: string }[]>>({})
+  const [reviewersByTopic, setReviewersByTopic] = useState<Record<number, EligibleReviewer[]>>({})
   const [selected, setSelected] = useState<Record<number, number[]>>({})
   const [assigningId, setAssigningId] = useState<number | null>(null)
+  const [loadingReviewersId, setLoadingReviewersId] = useState<number | null>(null)
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
+    setError(null) // 👈 Limpar erro antes de tentar
     try {
       const { topics } = await topicService.listForSecretary()
       setTopics(topics)
@@ -42,11 +55,15 @@ export function TopicsTab() {
   }
 
   async function loadReviewers(topicId: number) {
+    setLoadingReviewersId(topicId)
+    setError(null) // 👈 Limpar erro antes de tentar
     try {
       const { reviewers } = await topicService.eligibleReviewers(topicId)
       setReviewersByTopic(prev => ({ ...prev, [topicId]: reviewers }))
     } catch (e) {
       setError((e as Error).message)
+    } finally {
+      setLoadingReviewersId(null)
     }
   }
 
@@ -64,6 +81,7 @@ export function TopicsTab() {
     const reviewerIds = selected[topicId] ?? []
     if (reviewerIds.length === 0) return
     setAssigningId(topicId)
+    setError(null) // 👈 Limpar erro antes de tentar
     try {
       await topicService.assignReviewers(topicId, reviewerIds)
       setSelected(prev => { const n = { ...prev }; delete n[topicId]; return n })
@@ -156,6 +174,21 @@ export function TopicsTab() {
         }}>
           <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
           {error}
+          <button
+            onClick={() => setError(null)}
+            style={{
+              marginLeft: 'auto',
+              background: 'none',
+              border: 'none',
+              color: 'inherit',
+              cursor: 'pointer',
+              padding: '0 4px',
+              fontSize: '18px',
+              lineHeight: 1
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -197,6 +230,7 @@ export function TopicsTab() {
           const selectedReviewers = selected[t.id] ?? []
           const isPending = t.status === 'topic_pending_nucleo'
           const isAssigning = assigningId === t.id
+          const isLoadingReviewers = loadingReviewersId === t.id
 
           return (
             <div key={t.id} className="card" style={{
@@ -270,6 +304,7 @@ export function TopicsTab() {
                   {!topicReviewers ? (
                     <button
                       onClick={() => loadReviewers(t.id)}
+                      disabled={isLoadingReviewers}
                       className="btn"
                       style={{
                         display: 'flex',
@@ -279,31 +314,54 @@ export function TopicsTab() {
                         fontSize: 'var(--body-md)',
                         fontWeight: 'var(--font-medium)',
                         borderRadius: 'var(--radius-lg)',
-                        cursor: 'pointer',
+                        cursor: isLoadingReviewers ? 'not-allowed' : 'pointer',
                         width: 'fit-content',
                         border: '1px solid var(--outline-variant)',
                         background: 'var(--surface-container-lowest)',
                         color: 'var(--primary)',
-                        transition: 'all 0.2s'
+                        transition: 'all 0.2s',
+                        opacity: isLoadingReviewers ? 0.6 : 1
                       }}
                       onMouseEnter={e => {
-                        e.currentTarget.style.background = 'var(--surface-container)'
-                        e.currentTarget.style.borderColor = 'var(--primary)'
+                        if (!isLoadingReviewers) {
+                          e.currentTarget.style.background = 'var(--surface-container)'
+                          e.currentTarget.style.borderColor = 'var(--primary)'
+                        }
                       }}
                       onMouseLeave={e => {
-                        e.currentTarget.style.background = 'var(--surface-container-lowest)'
-                        e.currentTarget.style.borderColor = 'var(--outline-variant)'
+                        if (!isLoadingReviewers) {
+                          e.currentTarget.style.background = 'var(--surface-container-lowest)'
+                          e.currentTarget.style.borderColor = 'var(--outline-variant)'
+                        }
                       }}
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span>
-                      Ver avaliadores elegíveis
+                      {isLoadingReviewers ? (
+                        <>
+                          <span style={{
+                            width: '16px',
+                            height: '16px',
+                            border: '2px solid var(--primary)',
+                            borderTopColor: 'transparent',
+                            borderRadius: 'var(--radius-full)',
+                            animation: 'spin 0.8s linear infinite'
+                          }} />
+                          A carregar...
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span>
+                          Ver avaliadores elegíveis
+                        </>
+                      )}
                     </button>
                   ) : (
                     <>
                       <div style={{
                         display: 'flex',
                         justifyContent: 'space-between',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 'var(--space-2)'
                       }}>
                         <p style={{
                           fontSize: 'var(--label-md)',
@@ -341,11 +399,13 @@ export function TopicsTab() {
                       ) : (
                         <div style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                           gap: 'var(--space-1)'
                         }}>
                           {topicReviewers.map(reviewer => {
                             const isChecked = selectedReviewers.includes(reviewer.id)
+                            const hasPendingCount = typeof reviewer.pending_reviews_count === 'number'
+                            
                             return (
                               <label
                                 key={reviewer.id}
@@ -388,11 +448,24 @@ export function TopicsTab() {
                                 />
                                 <span className="material-symbols-outlined" style={{
                                   fontSize: '18px',
-                                  color: isChecked ? 'var(--primary)' : 'var(--on-surface-variant)'
+                                  color: isChecked ? 'var(--primary)' : 'var(--on-surface-variant)',
+                                  flexShrink: 0
                                 }}>
                                   person
                                 </span>
-                                {reviewer.name}
+                                <span style={{ flex: 1, minWidth: 0 }}>
+                                  {reviewer.name}
+                                  {hasPendingCount && (
+                                    <span style={{
+                                      marginLeft: '6px',
+                                      fontSize: 'var(--label-sm)',
+                                      color: 'var(--on-surface-variant)',
+                                      fontWeight: 'var(--font-regular)'
+                                    }}>
+                                      ({reviewer.pending_reviews_count} pendente{reviewer.pending_reviews_count !== 1 ? 's' : ''})
+                                    </span>
+                                  )}
+                                </span>
                               </label>
                             )
                           })}

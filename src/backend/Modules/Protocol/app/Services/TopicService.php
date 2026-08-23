@@ -793,29 +793,63 @@ class TopicService
      *   - Mesma área científica e órgão (núcleo) do tema
      *   - Exclui o supervisor do tema
      */
-    private function eligibleReviewersQuery(Topic $topic): ?\Illuminate\Database\Query\Builder
-    {
-        $topic->loadMissing('scientificArea:id,organ_id');
+    // private function eligibleReviewersQuery(Topic $topic): ?\Illuminate\Database\Query\Builder
+    // {
+    //     $topic->loadMissing('scientificArea:id,organ_id');
 
-        $topicOrganId = $topic->scientificArea?->organ_id;
+    //     $topicOrganId = $topic->scientificArea?->organ_id;
 
-        if (! $topicOrganId || ! $topic->scientific_area_id) {
-            return null;
-        }
+    //     if (! $topicOrganId || ! $topic->scientific_area_id) {
+    //         return null;
+    //     }
 
+    //     return DB::table('teacher_profiles')
+    //         ->distinct()
+    //         ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+    //         ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
+    //         ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
+    //         ->where('organ_members.organ_id', $topicOrganId)
+    //         ->whereNull('organ_members.deleted_at')
+    //         ->where('scientific_areas.organ_id', $topicOrganId)
+    //         ->where('teacher_profiles.scientific_area_id', $topic->scientific_area_id)
+    //         ->whereNull('teacher_profiles.deleted_at')
+    //         ->whereNull('users.deleted_at')
+    //         ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
+    // }
+private function eligibleReviewersQuery(Topic $topic): ?\Illuminate\Database\Query\Builder
+{
+    $topic->loadMissing('scientificArea.organ');
+
+    $organ = $topic->scientificArea?->organ;
+
+    if (! $organ) {
+        return null;
+    }
+
+    // NÚCLEO CIENTÍFICO: elegibilidade por organ_id via scientific_areas
+    if ($organ->isNucleus()) {
         return DB::table('teacher_profiles')
-            ->distinct()
-            ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
             ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
-            ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
-            ->where('organ_members.organ_id', $topicOrganId)
-            ->whereNull('organ_members.deleted_at')
-            ->where('scientific_areas.organ_id', $topicOrganId)
-            ->where('teacher_profiles.scientific_area_id', $topic->scientific_area_id)
+            ->join('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+            ->where('scientific_areas.organ_id', $organ->id)
             ->whereNull('teacher_profiles.deleted_at')
             ->whereNull('users.deleted_at')
             ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
     }
+
+    // COMITÉ CIENTÍFICO / BIOÉTICA: elegibilidade por organ_id via organ_members
+    return DB::table('teacher_profiles')
+        ->distinct()
+        ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
+        ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
+        ->leftJoin('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+        ->where('organ_members.organ_id', $organ->id)
+        ->whereNull('organ_members.deleted_at')
+        ->whereNull('teacher_profiles.deleted_at')
+        ->whereNull('users.deleted_at')
+        ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
+}
+
 
     private function pendingTopicReviewsCountQuery(): \Illuminate\Database\Query\Builder
     {

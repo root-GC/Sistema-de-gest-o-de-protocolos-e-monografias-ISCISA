@@ -133,19 +133,20 @@ public function availableTeachers(Request $request)
      */
     } else {
 
-        $nucleoOrgan = Organ::where('type', 'nucleus')->first();
+        $nucleoIds = Organ::where('type', 'nucleus')
+        ->pluck('id');
 
-        if (!$nucleoOrgan) {
+        if (!$nucleoIds) {
             return response()->json([
                 'message' => 'Núcleo Científico não encontrado.',
             ], 404);
         }
 
-        $query->whereHas('teacherProfile', function ($q) use ($nucleoOrgan) {
+        $query->whereHas('teacherProfile', function ($q) use ($nucleoIds) {
 
-            $q->whereHas('scientificArea', function ($q) use ($nucleoOrgan) {
+            $q->whereHas('scientificArea', function ($q) use ($nucleoIds) {
 
-                $q->where('organ_id', $nucleoOrgan->id);
+                $q->whereIn('organ_id', $nucleoIds);
 
             });
 
@@ -237,18 +238,21 @@ public function availableTeachers(Request $request)
 }
 
 
-    /**
+  /**
  * POST /api/v1/organ-members/invite
  *
- * Convidar/promover um docente para ser revisor do órgão.
+ * Promover um docente a revisor do órgão.
  *
  * Regras:
  *
  * - Se o órgão for um Núcleo:
- *   o docente precisa pertencer a esse próprio Núcleo.
+ *   o docente precisa pertencer ao próprio Núcleo.
  *
- * - Se o órgão for um Comité/outro órgão:
- *   o docente precisa pertencer ao Núcleo Científico.
+ * - Se o órgão for um Comité:
+ *   qualquer docente pode ser promovido.
+ *
+ * A ScientificArea NÃO é critério de elegibilidade
+ * para os Comitês.
  *
  * Em ambos os casos, o resultado é:
  *
@@ -269,12 +273,16 @@ public function invite(Request $request)
     }
 
     /*
-     * Órgão do presidente autenticado.
+     * ============================================================
+     * ÓRGÃO DO PRESIDENTE AUTENTICADO
+     * ============================================================
      */
     $organ = Organ::findOrFail($actorProfile->organ_id);
 
     /*
-     * Validar utilizador recebido.
+     * ============================================================
+     * VALIDAR UTILIZADOR
+     * ============================================================
      */
     $data = $request->validate([
         'user_id' => [
@@ -285,69 +293,20 @@ public function invite(Request $request)
     ]);
 
     /*
-     * Buscar docente.
+     * Buscar o utilizador.
      */
     $teacher = User::findOrFail($data['user_id']);
 
     /*
      * ============================================================
-     * VALIDAR SE O DOCENTE PODE SER CONVIDADO
+     * GARANTIR QUE É DOCENTE
      * ============================================================
-     */
-
-    if ($organ->type === 'nucleus') {
-
-        /*
-         * O próprio órgão é um Núcleo.
-         *
-         * Portanto, o professor precisa pertencer
-         * EXATAMENTE a este Núcleo.
-         */
-        $allowed = $teacher->teacherProfile()
-            ->whereHas('scientificArea', function ($q) use ($organ) {
-
-                $q->where('organ_id', $organ->id);
-
-            })
-            ->exists();
-
-    } else {
-
-        /*
-         * O órgão é um Comité/outro órgão.
-         *
-         * O professor precisa pertencer ao Núcleo Científico.
-         */
-        $nucleoOrgan = Organ::where('type', 'nucleus')->first();
-
-        if (!$nucleoOrgan) {
-            return response()->json([
-                'message' => 'Núcleo Científico não encontrado.',
-            ], 404);
-        }
-
-        $allowed = $teacher->teacherProfile()
-            ->whereHas('scientificArea', function ($q) use ($nucleoOrgan) {
-
-                $q->where('organ_id', $nucleoOrgan->id);
-
-            })
-            ->exists();
-    }
-
-    /*
-     * Docente não pertence ao Núcleo permitido.
-     */
-    if (!$allowed) {
-
-        return response()->json([
-            'message' =>
-                'Este docente não pertence ao Núcleo Científico permitido para este órgão.',
-        ], 422);
-    }
-
-    /*
-     * Garantir que o utilizador é realmente docente.
+     *
+     * Esta é a regra geral:
+     *
+     * Para ser revisor, o utilizador precisa ser teacher.
+     *
+     * Não verificamos ScientificArea aqui.
      */
     if (!$teacher->hasRole('teacher')) {
 
@@ -358,11 +317,38 @@ public function invite(Request $request)
 
     /*
      * ============================================================
+     * REGRA ESPECÍFICA DOS NÚCLEOS
+     * ============================================================
+     *
+     * Se o presidente pertence a um Núcleo,
+     * só pode promover docentes desse próprio Núcleo.
+     *
+     * Para Comitês NÃO fazemos esta verificação.
+     */
+    if ($organ->type === 'nucleus') {
+
+        $belongsToOrgan = $teacher->teacherProfile()
+            ->whereHas('scientificArea', function ($q) use ($organ) {
+                $q->where('organ_id', $organ->id);
+            })
+            ->exists();
+
+        if (!$belongsToOrgan) {
+
+            return response()->json([
+                'message' =>
+                    'Este docente não pertence a este Núcleo.',
+            ], 422);
+        }
+    }
+
+    /*
+     * ============================================================
      * VERIFICAR MEMBRO ATIVO
      * ============================================================
      *
-     * Se já existe OrganMember ativo neste órgão,
-     * não podemos criar outro.
+     * Um utilizador não pode ter dois OrganMember ativos
+     * para o mesmo órgão.
      */
     $existingActiveMember = OrganMember::where('organ_id', $organ->id)
         ->where('user_id', $teacher->id)
@@ -379,16 +365,16 @@ public function invite(Request $request)
 
     /*
      * ============================================================
-     * CONVIDAR / PROMOVER
+     * PROMOVER / ADICIONAR COMO REVISOR
      * ============================================================
      *
-     * O service é responsável por:
+     * O ReviewerInviteService é responsável por:
      *
      * - criar o OrganMember;
-     * - ou restaurar um soft-deleted;
+     * - restaurar um membro soft-deleted, se existir;
      * - definir role = reviewer;
-     * - enviar o email;
-     * - executar eventual rollback.
+     * - enviar a notificação/email;
+     * - executar rollback em caso de erro.
      */
     try {
 
@@ -398,8 +384,8 @@ public function invite(Request $request)
         );
 
         /*
-         * O service pode ter restaurado um membro soft-deleted
-         * em vez de criar um novo.
+         * Verificar se o service restaurou um membro
+         * anteriormente removido.
          */
         $wasRestored = $member->wasRecentlyCreated === false;
 
