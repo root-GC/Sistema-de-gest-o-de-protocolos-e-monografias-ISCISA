@@ -24,7 +24,21 @@ class DefensePolicy
 
     public function schedule(User $user, Defense $d): bool
     {
-        return $user->hasPermission('defense.schedule') && $this->isCoordinatorOfArea($user, $d);
+        // The scheduling responsibility was moved to secretaries (external negotiation).
+        // Coordinators no longer propose the final date via the system.
+        return false;
+    }
+
+    public function scheduleBySecretary(User $user, Defense $d): bool
+    {
+        // Allow secretary of the scientific_direction organ to set the date
+        $secretary = $user->secretaryProfile;
+        if (!$secretary) {
+            return false;
+        }
+
+        $organ = DB::table('organs')->where('id', $secretary->organ_id)->value('type');
+        return $organ === 'scientific_direction';
     }
 
     public function recordGrade(User $user, Defense $d): bool

@@ -5,10 +5,10 @@ namespace Modules\Defense\app\Providers;
 
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 use Modules\Monograph\app\Events\MonographVerified;
-use Modules\Defense\app\Events\{DefenseDateProposed, DefenseDateRejected, DefenseScheduled};
+use Modules\Defense\app\Events\{DefenseDateProposed, DefenseDateRejected, DefenseScheduled, DefenseAssignedToJury};
 use Modules\Defense\app\Listeners\{
     OnMonographVerified, NotifyJuryOnDateProposed,
-    NotifyCoordinatorOnDateRejected, NotifyCoordinatorOnSchedule
+    NotifyCoordinatorOnDateRejected, NotifyCoordinatorOnSchedule, NotifyJuryOnAssignment
 };
 
 class EventServiceProvider extends ServiceProvider
@@ -25,6 +25,9 @@ class EventServiceProvider extends ServiceProvider
         ],
         DefenseScheduled::class => [
             NotifyCoordinatorOnSchedule::class,
+        ],
+        DefenseAssignedToJury::class => [
+            NotifyJuryOnAssignment::class,
         ],
     ];
 }

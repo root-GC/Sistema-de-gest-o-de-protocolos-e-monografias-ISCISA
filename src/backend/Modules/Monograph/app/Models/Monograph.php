@@ -52,4 +52,13 @@ class Monograph extends Model
     {
         return $this->hasOne(\Modules\Defense\app\Models\Defense::class);
     }
+
+    /**
+     * Use `code` for route model binding so routes can accept the monograph code
+     * (e.g. ISCISA-M001-2026) instead of numeric id when desired.
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'code';
+    }
 }

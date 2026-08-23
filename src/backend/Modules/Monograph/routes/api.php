@@ -7,6 +7,7 @@ use Modules\Monograph\app\Http\Controllers\MonographController;
 Route::prefix('monographs')->middleware(['auth:sanctum'])->group(function () {
 
     Route::get('/{monograph}', [MonographController::class, 'show']);
+    Route::get('/{monograph}/download', [MonographController::class, 'download']);
     Route::get('/{monograph}/history', [MonographController::class, 'history']);
 
     Route::post('/{monograph}/submit', [MonographController::class, 'submit'])

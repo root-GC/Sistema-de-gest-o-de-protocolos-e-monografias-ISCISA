@@ -23,9 +23,9 @@ class DefenseController extends Controller
         $this->authorize('assignJury', $defense);
 
         $request->validate([
-            'members'              => ['required', 'array', 'min:3'],
+            'members'              => ['required', 'array', 'size:2'],
             'members.*.teacher_id' => ['required', 'exists:teacher_profiles,id', 'distinct'],
-            'members.*.jury_role'  => ['required', 'in:presidente,arguente,orientador'],
+            'members.*.jury_role'  => ['required', 'in:presidente,arguente'],
         ]);
 
         $d = $this->service->assignJury($defense, $request->input('members'));
@@ -83,6 +83,25 @@ class DefenseController extends Controller
     {
         $this->authorize('schedule', $defense);
         return response()->json($this->service->scheduleResponses($defense));
+    }
+
+    public function secretarySetDate(Request $request, Defense $defense)
+    {
+        $this->authorize('scheduleBySecretary', $defense);
+
+        $request->validate([
+            'scheduled_at' => ['required', 'date', 'after:now'],
+            'location'     => ['required', 'string', 'max:255'],
+        ]);
+
+        $d = $this->service->secretarySetSchedule(
+            $defense,
+            $request->user()->id,
+            $request->input('scheduled_at'),
+            $request->input('location')
+        );
+
+        return response()->json($d);
     }
 
     public function recordGrade(Request $request, Defense $defense)

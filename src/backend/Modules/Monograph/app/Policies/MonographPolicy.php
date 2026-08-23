@@ -14,6 +14,12 @@ class MonographPolicy
         if ($user->id === $m->student_id) return true;
         if ($user->teacherProfile?->id === $m->supervisor_id) return true;
 
+        // Allow jury members (presidente/arguente) of the associated defense to view
+        if ($m->defense && $user->teacherProfile) {
+            $isJury = $m->defense->jury()->where('teacher_id', $user->teacherProfile->id)->exists();
+            if ($isJury) return true;
+        }
+
         return $user->hasPermission('monograph.validate');
     }
 

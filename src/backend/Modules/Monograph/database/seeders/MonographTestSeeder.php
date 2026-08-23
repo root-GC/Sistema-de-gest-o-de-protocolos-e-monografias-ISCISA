@@ -1,9 +1,10 @@
-<!-- <?php
+<?php
 
-/*namespace Modules\Monograph\Database\Seeders;
+namespace Modules\Monograph\database\seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\{DB, Schema};
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class MonographTestSeeder extends Seeder
@@ -12,48 +13,25 @@ class MonographTestSeeder extends Seeder
     {
         $now = now();
 
-        $studentId        = DB::table('users')->where('email', 'estudante@iscisa.ac.mz')->value('id');
-        $supervisorUserId = DB::table('users')->where('email', 'docente@iscisa.ac.mz')->value('id');
-        $secretaryUserId  = DB::table('users')->where('email', 'secretario@iscisa.ac.mz')->value('id');
+        $studentId         = DB::table('users')->where('email', 'estudante@iscisa.ac.mz')->value('id');
+        $supervisorUserId  = DB::table('users')->where('email', 'docente@iscisa.ac.mz')->value('id');
+        $secretaryUserId   = DB::table('users')->where('email', 'secretario@iscisa.ac.mz')->value('id');
         $coordinatorUserId = DB::table('users')->where('email', 'coord@iscisa.ac.mz')->value('id');
 
         if (!$studentId || !$supervisorUserId || !$secretaryUserId || !$coordinatorUserId) {
-            $this->command->error(
-                'Corre primeiro o TestUserSeeder (Auth).'
-            );
+            $this->command->error('Execute primeiro o TestUserSeeder (Auth).');
             return;
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | Usa a área e o curso do estudante para o cenário de teste
-        |--------------------------------------------------------------------------
-        |
-        | A DefensePolicy valida:
-        | coordinatorProfile.course_id == topic.course_id
-        | OU
-        | coordinatorProfile.scientific_area_id == topic.scientific_area_id
-        |
-        | Portanto o cenário de teste deve respeitar essa regra.
-        | Para evitar conflitos, o seeder usa o mesmo curso/área do estudante.
-        |
-        */
-
- /*       $studentProfile = DB::table('student_profiles')
-            ->where('user_id', $studentId)
-            ->first();
-
+        // Ensure student profile exists
+        $studentProfile = DB::table('student_profiles')->where('user_id', $studentId)->first();
         if (!$studentProfile) {
-            $this->command->error(
-                'Estudante não possui StudentProfile.'
-            );
+            $this->command->error('Estudante não possui student_profile. Execute OrganizationDatabaseSeeder.');
             return;
         }
 
         $courseId = $studentProfile->course_id;
         $course = DB::table('courses')->where('id', $courseId)->first();
-
         if (!$course) {
             $this->command->error('Curso do estudante não encontrado.');
             return;
@@ -61,14 +39,10 @@ class MonographTestSeeder extends Seeder
 
         $areaId = $course->scientific_area_id;
 
-        $coordinatorProfile = DB::table('coordinator_profiles')
-            ->where('user_id', $coordinatorUserId)
-            ->first();
-
+        // Align coordinator profile to student's area/course for policy checks
+        $coordinatorProfile = DB::table('coordinator_profiles')->where('user_id', $coordinatorUserId)->first();
         if (!$coordinatorProfile) {
-            $this->command->error(
-                'Coordenador não possui CoordinatorProfile.'
-            );
+            $this->command->error('Coordenador não possui coordinator_profile. Execute OrganizationDatabaseSeeder.');
             return;
         }
 
@@ -78,39 +52,19 @@ class MonographTestSeeder extends Seeder
             'updated_at'         => $now,
         ]);
 
-
         $organId = DB::table('organs')->value('id');
-
         if (!$organId) {
-            $this->command->error(
-                'Corre primeiro o OrganizationDatabaseSeeder.'
-            );
+            $this->command->error('Execute OrganizationDatabaseSeeder primeiro.');
             return;
         }
 
+        // Grant minimal permissions for test roles
+        $this->grantPermission('monograph.endorse', ['supervisor']);
+        $this->grantPermission('monograph.comment', ['supervisor', 'secretary', 'coordinator']);
 
-      
-
-        $this->grantPermission(
-            'monograph.endorse',
-            ['supervisor']
-        );
-
-        $this->grantPermission(
-            'monograph.comment',
-            [
-                'supervisor',
-                'secretary',
-                'coordinator'
-            ]
-        );
-
-
-   
+        // Ensure supervisor has a teacher_profile
         DB::table('teacher_profiles')->updateOrInsert(
-            [
-                'user_id' => $supervisorUserId
-            ],
+            ['user_id' => $supervisorUserId],
             [
                 'scientific_area_id' => $areaId,
                 'department'         => 'Depto Teste',
@@ -121,147 +75,67 @@ class MonographTestSeeder extends Seeder
             ]
         );
 
+        $teacherProfileId = DB::table('teacher_profiles')->where('user_id', $supervisorUserId)->value('id');
 
-        $teacherProfileId = DB::table('teacher_profiles')
-            ->where('user_id', $supervisorUserId)
-            ->value('id');
-
-
-
-
-        $secretaryColumns = Schema::getColumnListing(
-            'secretary_profiles'
-        );
-
+        // Ensure secretary profile exists
+        $secretaryColumns = Schema::getColumnListing('secretary_profiles');
         $secretaryPayload = array_filter([
-            'organ_id' => in_array('organ_id', $secretaryColumns)
-                ? $organId
-                : null,
-
-            'office' => in_array('office', $secretaryColumns)
-                ? 'Secretaria Geral'
-                : null,
-
+            'organ_id' => in_array('organ_id', $secretaryColumns) ? $organId : null,
+            'office'   => in_array('office', $secretaryColumns) ? 'Secretaria Geral' : null,
         ], fn ($v) => !is_null($v));
-
-
         $secretaryPayload['created_at'] = $now;
         $secretaryPayload['updated_at'] = $now;
+        DB::table('secretary_profiles')->updateOrInsert(['user_id' => $secretaryUserId], $secretaryPayload);
 
-
-        DB::table('secretary_profiles')->updateOrInsert(
-            [
-                'user_id' => $secretaryUserId
-            ],
-            $secretaryPayload
-        );
-
-
-     
-
+        // Create a simple topic and protocol to attach the monograph
         $topicId = DB::table('topics')->insertGetId([
             'student_id'             => $studentId,
-
-            // Agora coincide com o coordenador
             'scientific_area_id'     => $areaId,
             'course_id'              => $courseId,
-
             'title'                  => 'Tema de Teste',
             'status'                 => 'topic_approved',
-
             'supervisor_id'          => $teacherProfileId,
             'supervisor_status'      => 'approved',
             'supervisor_decision_at' => $now,
-
             'submitted_at'           => $now,
             'created_at'             => $now,
             'updated_at'             => $now,
         ]);
-
-
-     
 
         $protocolId = DB::table('protocols')->insertGetId([
             'student'                => $studentId,
             'current_organ_id'       => $organId,
-
             'code'                   => 'PROT-' . Str::upper(Str::random(6)),
-
             'topic_id'               => $topicId,
-
             'approved_by_supervisor' => true,
-
             'protocol_type'          => 'cientifico',
-
             'submission_number'      => '2026-001',
-
             'status'                 => 'aprovado_para_campo',
-
             'version'                => '1',
-
             'submitted_at'           => $now,
-
             'supervisor_decision_at' => $now,
-
             'created_at'             => $now,
             'updated_at'             => $now,
         ]);
 
-
-
         $monographId = DB::table('monographs')->insertGetId([
             'protocol_id'   => $protocolId,
-
             'student_id'    => $studentId,
-
             'supervisor_id' => $teacherProfileId,
-
             'code'          => 'ISCISA-M001-' . now()->year,
-
             'title'         => 'Monografia de Teste',
-
             'status'        => 'aguarda_submissao',
-
             'created_at'    => $now,
             'updated_at'    => $now,
         ]);
 
-
-        $this->command->info("Topic ID: {$topicId}");
-        $this->command->info("Protocol ID: {$protocolId}");
-        $this->command->info("Monograph ID: {$monographId}");
-
-        $this->command->info(
-            "Área usada: {$areaId}"
-        );
-
-        $this->command->info(
-            "Curso usado: {$courseId}"
-        );
-
-        $this->command->info(
-            'Coordenador alinhado ao estudante para o teste.'
-        );
-
-        $this->command->info(
-            'Coordenadora: coord@iscisa.ac.mz / password123'
-        );
+        $this->command->info("Monograph seeded: ID={$monographId} code=ISCISA-M001-" . now()->year);
     }
 
-
-
-    private function grantPermission(
-        string $permissionCode,
-        array $roleNames
-    ): void {
-
-        $permId = DB::table('permissions')
-            ->where('code', $permissionCode)
-            ->value('id');
-
-
+    private function grantPermission(string $permissionCode, array $roleNames): void
+    {
+        $permId = DB::table('permissions')->where('code', $permissionCode)->value('id');
         if (!$permId) {
-
             $permId = DB::table('permissions')->insertGetId([
                 'code'        => $permissionCode,
                 'description' => $permissionCode,
@@ -270,29 +144,14 @@ class MonographTestSeeder extends Seeder
             ]);
         }
 
-
         foreach ($roleNames as $roleName) {
-
-            $roleId = DB::table('roles')
-                ->where('name', $roleName)
-                ->value('id');
-
-
+            $roleId = DB::table('roles')->where('name', $roleName)->value('id');
             if ($roleId) {
-
-                DB::table('role_permissions')
-                    ->updateOrInsert(
-                        [
-                            'role_id'       => $roleId,
-                            'permission_id' => $permId,
-                        ],
-                        [
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]
-                    );
+                DB::table('role_permissions')->updateOrInsert(
+                    ['role_id' => $roleId, 'permission_id' => $permId],
+                    ['created_at' => now(), 'updated_at' => now()]
+                );
             }
         }
     }
 }
- */

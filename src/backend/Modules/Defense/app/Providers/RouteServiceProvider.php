@@ -13,6 +13,13 @@ class RouteServiceProvider extends ServiceProvider
     public function boot(): void
     {
         parent::boot();
+
+        // Bind {defense} route parameter by monograph code (blind-review code)
+        Route::bind('defense', function ($value) {
+            return \Modules\Defense\app\Models\Defense::whereHas('monograph', function ($q) use ($value) {
+                $q->where('code', $value);
+            })->firstOrFail();
+        });
     }
 
     public function map(): void

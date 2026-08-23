@@ -14,6 +14,9 @@ Route::prefix('defenses')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/{defense}/schedule/propose', [DefenseController::class, 'proposeSchedule'])
         ->middleware('permission:defense.schedule');
 
+    // Secretaria insere data escolhida externamente
+    Route::post('/{defense}/schedule/set-by-secretary', [DefenseController::class, 'secretarySetDate']);
+
     Route::post('/{defense}/schedule/respond', [DefenseController::class, 'respondToSchedule']);
 
     Route::get('/{defense}/schedule/responses', [DefenseController::class, 'scheduleResponses'])

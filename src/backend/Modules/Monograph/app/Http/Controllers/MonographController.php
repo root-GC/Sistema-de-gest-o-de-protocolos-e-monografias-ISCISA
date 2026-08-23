@@ -12,6 +12,7 @@ use Modules\Monograph\app\Http\Requests\{
 };
 use Illuminate\Http\Request;
 use Modules\Monograph\app\Transformers\MonographResource;
+use Illuminate\Support\Facades\Storage;
 
 class MonographController extends Controller
 {
@@ -107,4 +108,18 @@ public function history(Monograph $monograph)
 
     return response()->json($c, 201);
 }
+
+    public function download(Monograph $monograph)
+    {
+        $this->authorize('view', $monograph);
+
+        $submission = $monograph->submissions()->latest('version')->first();
+        abort_unless($submission && $submission->document, 404, 'Documento da monografia não encontrado.');
+
+        $path = $submission->document->file_path;
+
+        abort_unless($path && Storage::exists($path), 404, 'Ficheiro não encontrado.');
+
+        return Storage::download($path, $submission->document->file_name);
+    }
 }

@@ -19,7 +19,18 @@ class DefenseService
     public function assignJury(Defense $d, array $members): Defense
     {
         $this->assertStatus($d, DefenseStatus::AguardaJuri);
-        abort_if(count($members) < 3, 422, 'Júri requer no mínimo 3 membros.');
+
+        // Require exactly two members: presidente and arguente
+        abort_unless(count($members) === 2, 422, 'O júri deve conter exactamente 2 membros: presidente e arguente.');
+
+        $expectedRoles = ['presidente', 'arguente'];
+        $providedRoles = array_map(fn($m) => $m['jury_role'] ?? null, $members);
+
+        // Validate roles
+        sort($expectedRoles);
+        $rolesCopy = $providedRoles;
+        sort($rolesCopy);
+        abort_unless($rolesCopy === $expectedRoles, 422, 'Os papéis do júri devem ser apenas "presidente" e "arguente".');
 
         foreach ($members as $member) {
             abort_if(
@@ -28,6 +39,11 @@ class DefenseService
                 'O supervisor não pode integrar o júri.'
             );
 
+            // Prevent non-allowed roles such as 'orientador'
+            if (!in_array($member['jury_role'], $expectedRoles, true)) {
+                abort(422, 'Papel inválido no júri: ' . ($member['jury_role'] ?? 'nulo'));
+            }
+
             $d->jury()->create([
                 'teacher_id' => $member['teacher_id'],
                 'jury_role'  => $member['jury_role'],
@@ -35,6 +51,23 @@ class DefenseService
         }
 
         $d->update(['status' => DefenseStatus::JuriDefinido]);
+
+        // Create review assignments for presidente and arguente with 7-day deadline
+        $d->fresh('jury');
+        $assignments = [];
+        foreach ($d->jury as $member) {
+            if (in_array($member->jury_role, ['presidente', 'arguente'], true)) {
+                $assignments[] = \Modules\Defense\app\Models\DefenseJuryAssignment::create([
+                    'defense_jury_id' => $member->id,
+                    'assigned_at'     => now(),
+                    'due_at'          => now()->addDays(7),
+                    'status'          => 'pending',
+                ]);
+            }
+        }
+
+        // Dispatch event to notify assigned jury members
+        \Modules\Defense\app\Events\DefenseAssignedToJury::dispatch($d->fresh(), $assignments);
 
         return $d->fresh('jury');
     }
@@ -69,6 +102,27 @@ class DefenseService
 
             return $d->fresh();
         });
+    }
+
+    /**
+     * A secretaria insere a data escolhida externamente no sistema.
+     * Marca a defesa como agendada sem exigir resposta do arguente.
+     */
+    public function secretarySetSchedule(Defense $d, int $secretaryUserId, string $scheduledAt, string $location): Defense
+    {
+        $this->assertStatus($d, [DefenseStatus::JuriDefinido, DefenseStatus::DataProposta]);
+
+        $d->update([
+            'coordinator_id' => null,
+            'scheduled_at'   => $scheduledAt,
+            'location'       => $location,
+            'status'         => DefenseStatus::DefesaAgendada,
+        ]);
+
+        // Dispatch scheduled event
+        DefenseScheduled::dispatch($d->fresh());
+
+        return $d->fresh();
     }
 
     /**
