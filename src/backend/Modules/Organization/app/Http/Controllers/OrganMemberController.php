@@ -54,142 +54,374 @@ class OrganMemberController extends Controller
         ]);
     }
 
-    /**
-     * GET /api/v1/organ-members/available-teachers
-     * Listar docentes do Núcleo Científico disponíveis para convidar
-     * (que ainda NÃO são membros do órgão do presidente)
-     */
-   public function availableTeachers(Request $request)
+  /**
+ * GET /api/v1/organ-members/available-teachers
+ *
+ * Listar docentes disponíveis para serem membros/revisores
+ * do órgão do presidente autenticado.
+ *
+ * Regras:
+ *
+ * 1. Se o órgão atual for um Núcleo:
+ *    - mostrar apenas docentes pertencentes a esse próprio Núcleo;
+ *
+ * 2. Se o órgão atual for um Comité/órgão:
+ *    - mostrar docentes pertencentes ao Núcleo Científico;
+ *
+ * 3. Em ambos os casos:
+ *    - excluir docentes que já possuem OrganMember ativo
+ *      neste órgão.
+ */
+public function availableTeachers(Request $request)
 {
     $actorProfile = $request->user()->adminProfile;
-    
+
     if (!$actorProfile || !$actorProfile->organ_id) {
-        return response()->json(['message' => 'Sem permissão.'], 403);
+        return response()->json([
+            'message' => 'Sem permissão.',
+        ], 403);
     }
 
-    $organId = $actorProfile->organ_id;
+    // Órgão do presidente autenticado
+    $organ = Organ::findOrFail($actorProfile->organ_id);
 
-    // Buscar o Núcleo Científico
-    $nucleoOrgan = Organ::where('type', 'nucleus')->first();
-    
-    if (!$nucleoOrgan) {
-        return response()->json(['message' => 'Núcleo Científico não encontrado.'], 404);
-    }
-
-    // 🆕 IDs dos membros que já pertencem ao órgão (incluindo soft-deleted)
-    $existingMemberIds = OrganMember::withTrashed()
-        ->where('organ_id', $organId)
-        ->whereNull('deleted_at') // Apenas os ativos (não soft-deleted)
+    /*
+     * IDs dos utilizadores que já são membros ATIVOS
+     * deste órgão.
+     *
+     * Um professor pode continuar a existir como membro
+     * soft-deleted e, nesse caso, poderá ser reativado
+     * pelo inviteService.
+     */
+    $existingMemberIds = OrganMember::where('organ_id', $organ->id)
+        ->whereNull('deleted_at')
         ->pluck('user_id')
         ->toArray();
 
-    // Buscar docentes do Núcleo que NÃO são membros ativos deste órgão
-    $teachers = User::whereHas('roles', fn ($q) => $q->where('name', 'teacher'))
-        ->whereHas('teacherProfile', function ($q) use ($nucleoOrgan) {
-            $q->whereHas('scientificArea', function ($q) use ($nucleoOrgan) {
-                $q->where('organ_id', $nucleoOrgan->id);
+    /*
+     * Começamos pelos docentes.
+     */
+    $query = User::whereHas('roles', function ($q) {
+        $q->where('name', 'teacher');
+    });
+
+    /*
+     * ============================================================
+     * CASO 1 — O PRÓPRIO ÓRGÃO É UM NÚCLEO
+     * ============================================================
+     *
+     * O docente precisa pertencer a este Núcleo específico.
+     */
+    if ($organ->type === 'nucleus') {
+
+        $query->whereHas('teacherProfile', function ($q) use ($organ) {
+
+            $q->whereHas('scientificArea', function ($q) use ($organ) {
+
+                $q->where('organ_id', $organ->id);
+
             });
-        })
-        ->whereNotIn('id', $existingMemberIds)
-        ->where('status', 'active')
+
+        });
+
+    /*
+     * ============================================================
+     * CASO 2 — O ÓRGÃO É UM COMITÉ / OUTRO ÓRGÃO
+     * ============================================================
+     *
+     * O docente precisa pertencer ao Núcleo Científico.
+     */
+    } else {
+
+        $nucleoOrgan = Organ::where('type', 'nucleus')->first();
+
+        if (!$nucleoOrgan) {
+            return response()->json([
+                'message' => 'Núcleo Científico não encontrado.',
+            ], 404);
+        }
+
+        $query->whereHas('teacherProfile', function ($q) use ($nucleoOrgan) {
+
+            $q->whereHas('scientificArea', function ($q) use ($nucleoOrgan) {
+
+                $q->where('organ_id', $nucleoOrgan->id);
+
+            });
+
+        });
+    }
+
+    /*
+     * Não mostrar quem já é membro ATIVO deste órgão.
+     */
+    $query->whereNotIn('id', $existingMemberIds);
+
+    /*
+     * Pesquisa.
+     *
+     * O whereNested é importante para o OR não quebrar
+     * as outras condições da query.
+     */
+    $query->when($request->search, function ($q, $search) {
+
+        $q->where(function ($q) use ($search) {
+
+            $q->where('name', 'like', "%{$search}%")
+              ->orWhere('email', 'like', "%{$search}%");
+
+        });
+
+    });
+
+    /*
+     * Dados necessários para o frontend.
+     */
+    $teachers = $query
         ->select('id', 'name', 'email', 'status')
-        ->with(['teacherProfile' => function ($q) {
-            $q->select('id', 'user_id', 'scientific_area_id', 'academic_degree')
-              ->with(['scientificArea' => function ($q) {
-                  $q->select('id', 'name');
-              }]);
-        }])
-        ->when($request->search, fn ($q) => 
-            $q->where('name', 'like', "%{$request->search}%")
-              ->orWhere('email', 'like', "%{$request->search}%")
-        )
+        ->where('status', 'active')
+        ->with([
+            'teacherProfile' => function ($q) {
+
+                $q->select(
+                    'id',
+                    'user_id',
+                    'scientific_area_id',
+                    'academic_degree'
+                )
+                ->with([
+                    'scientificArea' => function ($q) {
+
+                        $q->select(
+                            'id',
+                            'name',
+                            'organ_id'
+                        );
+
+                    },
+                ]);
+
+            },
+        ])
         ->orderBy('name')
         ->paginate($request->per_page ?? 20);
 
     return response()->json([
         'data' => collect($teachers->items())->map(fn ($t) => [
-            'id'                => $t->id,
-            'name'              => $t->name,
-            'email'             => $t->email,
-            'status'            => $t->status,
-            'academic_degree'   => $t->teacherProfile?->academic_degree,
-            'scientific_area'   => $t->teacherProfile?->scientificArea?->name,
-            'scientific_area_id' => $t->teacherProfile?->scientific_area_id,
+
+            'id' => $t->id,
+
+            'name' => $t->name,
+
+            'email' => $t->email,
+
+            'status' => $t->status,
+
+            'academic_degree' =>
+                $t->teacherProfile?->academic_degree,
+
+            'scientific_area' =>
+                $t->teacherProfile?->scientificArea?->name,
+
+            'scientific_area_id' =>
+                $t->teacherProfile?->scientificArea?->id,
+
         ]),
-        'total'        => $teachers->total(),
+
+        'total' => $teachers->total(),
+
         'current_page' => $teachers->currentPage(),
-        'last_page'    => $teachers->lastPage(),
+
+        'last_page' => $teachers->lastPage(),
     ]);
 }
 
-    /**
-     * POST /api/v1/organ-members/invite
-     * Convidar docente do Núcleo para ser revisor no órgão do presidente
-     */
-       // ... (index, availableTeachers - mantêm-se iguais)
 
     /**
-     * POST /api/v1/organ-members/invite
+ * POST /api/v1/organ-members/invite
+ *
+ * Convidar/promover um docente para ser revisor do órgão.
+ *
+ * Regras:
+ *
+ * - Se o órgão for um Núcleo:
+ *   o docente precisa pertencer a esse próprio Núcleo.
+ *
+ * - Se o órgão for um Comité/outro órgão:
+ *   o docente precisa pertencer ao Núcleo Científico.
+ *
+ * Em ambos os casos, o resultado é:
+ *
+ * OrganMember {
+ *     user_id,
+ *     organ_id,
+ *     role = reviewer
+ * }
+ */
+public function invite(Request $request)
+{
+    $actorProfile = $request->user()->adminProfile;
+
+    if (!$actorProfile || !$actorProfile->organ_id) {
+        return response()->json([
+            'message' => 'Sem permissão.',
+        ], 403);
+    }
+
+    /*
+     * Órgão do presidente autenticado.
      */
-    public function invite(Request $request)
-    {
-        $actorProfile = $request->user()->adminProfile;
-        
-        if (!$actorProfile || !$actorProfile->organ_id) {
-            return response()->json(['message' => 'Sem permissão.'], 403);
-        }
+    $organ = Organ::findOrFail($actorProfile->organ_id);
 
-        $organId = $actorProfile->organ_id;
-        $organ = Organ::findOrFail($organId);
+    /*
+     * Validar utilizador recebido.
+     */
+    $data = $request->validate([
+        'user_id' => [
+            'required',
+            'integer',
+            'exists:users,id',
+        ],
+    ]);
 
-        $data = $request->validate([
-            'user_id' => ['required', 'integer', 'exists:users,id'],
-        ]);
+    /*
+     * Buscar docente.
+     */
+    $teacher = User::findOrFail($data['user_id']);
 
-        $teacher = User::findOrFail($data['user_id']);
+    /*
+     * ============================================================
+     * VALIDAR SE O DOCENTE PODE SER CONVIDADO
+     * ============================================================
+     */
 
-        // Verificar se é um docente do Núcleo Científico
-        $hasTeacherProfile = $teacher->teacherProfile()
-            ->whereHas('scientificArea', function ($q) {
-                $q->whereHas('organ', fn ($q) => $q->where('type', 'nucleus'));
+    if ($organ->type === 'nucleus') {
+
+        /*
+         * O próprio órgão é um Núcleo.
+         *
+         * Portanto, o professor precisa pertencer
+         * EXATAMENTE a este Núcleo.
+         */
+        $allowed = $teacher->teacherProfile()
+            ->whereHas('scientificArea', function ($q) use ($organ) {
+
+                $q->where('organ_id', $organ->id);
+
             })
             ->exists();
 
-        if (!$hasTeacherProfile) {
+    } else {
+
+        /*
+         * O órgão é um Comité/outro órgão.
+         *
+         * O professor precisa pertencer ao Núcleo Científico.
+         */
+        $nucleoOrgan = Organ::where('type', 'nucleus')->first();
+
+        if (!$nucleoOrgan) {
             return response()->json([
-                'message' => 'Este utilizador não é um docente do Núcleo Científico.',
-            ], 422);
+                'message' => 'Núcleo Científico não encontrado.',
+            ], 404);
         }
 
-        // Verificar se já é membro ATIVO deste órgão
-        $existingActiveMember = OrganMember::where('organ_id', $organId)
-            ->where('user_id', $teacher->id)
-            ->whereNull('deleted_at')
-            ->first();
+        $allowed = $teacher->teacherProfile()
+            ->whereHas('scientificArea', function ($q) use ($nucleoOrgan) {
 
-        if ($existingActiveMember) {
-            return response()->json([
-                'message' => 'Este docente já é membro ativo deste órgão.',
-            ], 422);
-        }
+                $q->where('organ_id', $nucleoOrgan->id);
 
-        try {
-            $member = $this->inviteService->invite($teacher, $organ);
-
-            $wasRestored = $member->wasRecentlyCreated === false;
-
-            return response()->json([
-                'message' => $wasRestored 
-                    ? 'Docente reativado como revisor. Email enviado.'
-                    : 'Docente convidado como revisor. Email enviado.',
-                'member'  => $member->load('user'),
-            ], 201);
-        } catch (\RuntimeException $e) {
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 500);
-        }
+            })
+            ->exists();
     }
+
+    /*
+     * Docente não pertence ao Núcleo permitido.
+     */
+    if (!$allowed) {
+
+        return response()->json([
+            'message' =>
+                'Este docente não pertence ao Núcleo Científico permitido para este órgão.',
+        ], 422);
+    }
+
+    /*
+     * Garantir que o utilizador é realmente docente.
+     */
+    if (!$teacher->hasRole('teacher')) {
+
+        return response()->json([
+            'message' => 'Este utilizador não possui a função de docente.',
+        ], 422);
+    }
+
+    /*
+     * ============================================================
+     * VERIFICAR MEMBRO ATIVO
+     * ============================================================
+     *
+     * Se já existe OrganMember ativo neste órgão,
+     * não podemos criar outro.
+     */
+    $existingActiveMember = OrganMember::where('organ_id', $organ->id)
+        ->where('user_id', $teacher->id)
+        ->whereNull('deleted_at')
+        ->first();
+
+    if ($existingActiveMember) {
+
+        return response()->json([
+            'message' =>
+                'Este docente já é membro ativo deste órgão.',
+        ], 422);
+    }
+
+    /*
+     * ============================================================
+     * CONVIDAR / PROMOVER
+     * ============================================================
+     *
+     * O service é responsável por:
+     *
+     * - criar o OrganMember;
+     * - ou restaurar um soft-deleted;
+     * - definir role = reviewer;
+     * - enviar o email;
+     * - executar eventual rollback.
+     */
+    try {
+
+        $member = $this->inviteService->invite(
+            $teacher,
+            $organ
+        );
+
+        /*
+         * O service pode ter restaurado um membro soft-deleted
+         * em vez de criar um novo.
+         */
+        $wasRestored = $member->wasRecentlyCreated === false;
+
+        return response()->json([
+
+            'message' => $wasRestored
+                ? 'Docente reativado como revisor. Email enviado.'
+                : 'Docente promovido como revisor. Email enviado.',
+
+            'member' => $member->load([
+                'user',
+            ]),
+
+        ], 201);
+
+    } catch (\RuntimeException $e) {
+
+        return response()->json([
+            'message' => $e->getMessage(),
+        ], 500);
+    }
+}
 
     /**
      * PUT /api/v1/organ-members/{id}

@@ -29,6 +29,12 @@ interface OrganMember {
   created_at?: string
 }
 
+interface PaginationInfo {
+  total: number
+  current_page: number
+  last_page: number
+}
+
 const ROLE_LABELS: Record<string, string> = {
   president: 'Presidente',
   coordinator: 'Coordenador',
@@ -51,11 +57,28 @@ const ROLE_OPTIONS = [
   { value: 'member', label: 'Membro' },
 ]
 
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Ativo',
+  pending: 'Pendente',
+  inactive: 'Inativo',
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  active: 'var(--primary-container)',
+  pending: 'var(--tertiary-container)',
+  inactive: 'var(--error-container)',
+}
+
 export default function InviteReviewersPage() {
   const { profiles } = useAuth()
   
   const [members, setMembers] = useState<OrganMember[]>([])
   const [availableTeachers, setAvailableTeachers] = useState<Teacher[]>([])
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    total: 0,
+    current_page: 1,
+    last_page: 1,
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -63,6 +86,7 @@ export default function InviteReviewersPage() {
   const [isInviting, setIsInviting] = useState<number | null>(null)
   const [isRemoving, setIsRemoving] = useState<number | null>(null)
   const [isUpdating, setIsUpdating] = useState<number | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const organType = profiles?.admin?.organ?.type || 'scientific_committee'
   const config = getOrganConfig(organType)
@@ -70,6 +94,10 @@ export default function InviteReviewersPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    loadAvailableTeachers(currentPage, searchTerm)
+  }, [currentPage])
 
   async function loadData() {
     setLoading(true)
@@ -94,10 +122,45 @@ export default function InviteReviewersPage() {
 
       setMembers(membersData)
       setAvailableTeachers(teachersData)
+      
+      // Atualizar informações de paginação
+      if (teachersRes && typeof teachersRes === 'object' && !Array.isArray(teachersRes)) {
+        setPagination({
+          total: teachersRes.total || teachersData.length,
+          current_page: teachersRes.current_page || 1,
+          last_page: teachersRes.last_page || 1,
+        })
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadAvailableTeachers(page: number = 1, search: string = '') {
+    setError(null)
+    try {
+      const teachersRes = await organPresidentService.listAvailableTeachers()
+      
+      const teachersData = Array.isArray(teachersRes?.data) 
+        ? teachersRes.data as Teacher[] 
+        : Array.isArray(teachersRes) 
+          ? teachersRes as Teacher[]
+          : []
+
+      setAvailableTeachers(teachersData)
+      
+      if (teachersRes && typeof teachersRes === 'object' && !Array.isArray(teachersRes)) {
+        setPagination({
+          total: teachersRes.total || teachersData.length,
+          current_page: teachersRes.current_page || page,
+          last_page: teachersRes.last_page || 1,
+        })
+      }
+    } catch (e: any) {
+      const errorMessage = e?.response?.data?.message || e?.message || 'Erro ao carregar docentes.'
+      setError(errorMessage)
     }
   }
 
@@ -265,6 +328,18 @@ export default function InviteReviewersPage() {
                       }}>
                         {ROLE_LABELS[member.role] || member.role}
                       </span>
+                      {member.user?.status && (
+                        <span style={{
+                          fontSize: 'var(--label-xs)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-full)',
+                          background: STATUS_COLORS[member.user.status] || 'var(--surface-container)',
+                          color: 'var(--on-surface)',
+                          fontWeight: 'var(--font-medium)'
+                        }}>
+                          {STATUS_LABELS[member.user.status] || member.user.status}
+                        </span>
+                      )}
                     </div>
                     <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
                       {member.user?.email}
@@ -365,7 +440,7 @@ export default function InviteReviewersPage() {
               fontSize: 'var(--label-sm)',
               color: 'var(--on-tertiary-container)'
             }}>
-              {availableTeachers.length} disponíveis
+              {pagination.total} disponíveis
             </span>
           </h2>
 
@@ -383,7 +458,13 @@ export default function InviteReviewersPage() {
             <input
               type="text"
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={e => {
+                setSearchTerm(e.target.value)
+                // Debounce para pesquisa
+                setTimeout(() => {
+                  loadAvailableTeachers(1, e.target.value)
+                }, 500)
+              }}
               placeholder="Pesquisar docentes..."
               style={{
                 width: '100%',
@@ -404,108 +485,173 @@ export default function InviteReviewersPage() {
         {filteredTeachers.length === 0 ? (
           <EmptyState message={searchTerm ? 'Nenhum docente encontrado' : 'Todos os docentes já são membros'} />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-            {filteredTeachers.map(teacher => (
-              <div key={teacher.id} className="card" style={{
-                padding: 'var(--space-3) var(--space-4)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 'var(--space-3)',
-                flexWrap: 'wrap'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%',
-                    background: 'var(--tertiary-container)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 'var(--font-bold)',
-                    color: 'var(--on-tertiary-container)',
-                    flexShrink: 0
-                  }}>
-                    {teacher.name?.charAt(0)?.toUpperCase() || '?'}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <h3 style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', margin: 0 }}>
-                      {teacher.name}
-                    </h3>
-                    <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
-                      {teacher.email}
-                    </p>
-                    <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: '2px' }}>
-                      {teacher.academic_degree && (
-                        <span style={{
-                          fontSize: 'var(--label-xs)',
-                          padding: '1px 6px',
-                          borderRadius: 'var(--radius-full)',
-                          background: 'var(--primary-container)',
-                          color: 'var(--on-primary-container)',
-                          fontWeight: 'var(--font-medium)'
-                        }}>
-                          {teacher.academic_degree}
-                        </span>
-                      )}
-                      {teacher.scientific_area && (
-                        <span style={{
-                          fontSize: 'var(--label-xs)',
-                          padding: '1px 6px',
-                          borderRadius: 'var(--radius-full)',
-                          background: 'var(--secondary-container)',
-                          color: 'var(--on-secondary-container)',
-                          fontWeight: 'var(--font-medium)'
-                        }}>
-                          {teacher.scientific_area}
-                        </span>
-                      )}
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              {filteredTeachers.map(teacher => (
+                <div key={teacher.id} className="card" style={{
+                  padding: 'var(--space-3) var(--space-4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 'var(--space-3)',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      background: 'var(--tertiary-container)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 'var(--font-bold)',
+                      color: 'var(--on-tertiary-container)',
+                      flexShrink: 0
+                    }}>
+                      {teacher.name?.charAt(0)?.toUpperCase() || '?'}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                        <h3 style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', margin: 0 }}>
+                          {teacher.name}
+                        </h3>
+                        {teacher.status && (
+                          <span style={{
+                            fontSize: 'var(--label-xs)',
+                            padding: '2px 8px',
+                            borderRadius: 'var(--radius-full)',
+                            background: STATUS_COLORS[teacher.status] || 'var(--surface-container)',
+                            color: 'var(--on-surface)',
+                            fontWeight: 'var(--font-medium)'
+                          }}>
+                            {STATUS_LABELS[teacher.status] || teacher.status}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
+                        {teacher.email}
+                      </p>
+                      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: '2px' }}>
+                        {teacher.academic_degree && (
+                          <span style={{
+                            fontSize: 'var(--label-xs)',
+                            padding: '1px 6px',
+                            borderRadius: 'var(--radius-full)',
+                            background: 'var(--primary-container)',
+                            color: 'var(--on-primary-container)',
+                            fontWeight: 'var(--font-medium)'
+                          }}>
+                            {teacher.academic_degree}
+                          </span>
+                        )}
+                        {teacher.scientific_area && (
+                          <span style={{
+                            fontSize: 'var(--label-xs)',
+                            padding: '1px 6px',
+                            borderRadius: 'var(--radius-full)',
+                            background: 'var(--secondary-container)',
+                            color: 'var(--on-secondary-container)',
+                            fontWeight: 'var(--font-medium)'
+                          }}>
+                            {teacher.scientific_area}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  <button
+                    onClick={() => handleInvite(teacher.id)}
+                    disabled={isInviting === teacher.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--space-1)',
+                      padding: '8px 16px',
+                      background: 'var(--secondary)',
+                      color: 'var(--on-secondary)',
+                      border: 'none',
+                      borderRadius: 'var(--radius-lg)',
+                      cursor: isInviting === teacher.id ? 'not-allowed' : 'pointer',
+                      fontSize: 'var(--body-md)',
+                      fontWeight: 'var(--font-semibold)',
+                      fontFamily: 'var(--font-family)',
+                      opacity: isInviting === teacher.id ? 0.7 : 1,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {isInviting === teacher.id ? (
+                      <>
+                        <span style={{
+                          width: '14px',
+                          height: '14px',
+                          border: '2px solid var(--on-secondary)',
+                          borderTopColor: 'transparent',
+                          borderRadius: '50%',
+                          animation: 'spin 0.8s linear infinite'
+                        }} />
+                        A convidar...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person_add</span>
+                        Convidar como Revisor
+                      </>
+                    )}
+                  </button>
                 </div>
+              ))}
+            </div>
+
+            {/* Paginação */}
+            {pagination.last_page > 1 && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+                marginTop: 'var(--space-3)'
+              }}>
                 <button
-                  onClick={() => handleInvite(teacher.id)}
-                  disabled={isInviting === teacher.id}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-1)',
-                    padding: '8px 16px',
-                    background: 'var(--secondary)',
-                    color: 'var(--on-secondary)',
+                    padding: '6px 12px',
+                    background: 'var(--surface-container)',
+                    color: 'var(--on-surface)',
                     border: 'none',
                     borderRadius: 'var(--radius-lg)',
-                    cursor: isInviting === teacher.id ? 'not-allowed' : 'pointer',
-                    fontSize: 'var(--body-md)',
-                    fontWeight: 'var(--font-semibold)',
-                    fontFamily: 'var(--font-family)',
-                    opacity: isInviting === teacher.id ? 0.7 : 1,
-                    whiteSpace: 'nowrap'
+                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                    opacity: currentPage === 1 ? 0.5 : 1,
+                    fontFamily: 'var(--font-family)'
                   }}
                 >
-                  {isInviting === teacher.id ? (
-                    <>
-                      <span style={{
-                        width: '14px',
-                        height: '14px',
-                        border: '2px solid var(--on-secondary)',
-                        borderTopColor: 'transparent',
-                        borderRadius: '50%',
-                        animation: 'spin 0.8s linear infinite'
-                      }} />
-                      A convidar...
-                    </>
-                  ) : (
-                    <>
-                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person_add</span>
-                      Convidar como Revisor
-                    </>
-                  )}
+                  Anterior
+                </button>
+                
+                <span style={{ fontSize: 'var(--label-md)', color: 'var(--on-surface-variant)' }}>
+                  Página {pagination.current_page} de {pagination.last_page}
+                </span>
+                
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(pagination.last_page, prev + 1))}
+                  disabled={currentPage === pagination.last_page}
+                  style={{
+                    padding: '6px 12px',
+                    background: 'var(--surface-container)',
+                    color: 'var(--on-surface)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-lg)',
+                    cursor: currentPage === pagination.last_page ? 'not-allowed' : 'pointer',
+                    opacity: currentPage === pagination.last_page ? 0.5 : 1,
+                    fontFamily: 'var(--font-family)'
+                  }}
+                >
+                  Próxima
                 </button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </section>
 
