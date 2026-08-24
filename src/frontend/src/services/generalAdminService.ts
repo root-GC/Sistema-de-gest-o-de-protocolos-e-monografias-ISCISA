@@ -39,6 +39,8 @@ export interface ScientificArea {
   name: string
   description?: string
   organ?: { id: number; name: string; type: string }
+  created_at?: string
+  updated_at?: string
 }
 
 export interface Organ {
@@ -76,6 +78,30 @@ export interface Activity {
   created_at: string
 }
 
+// Interface para resposta paginada do Laravel
+interface PaginatedResponse<T> {
+  current_page: number
+  data: T[]
+  first_page_url: string | null
+  from: number | null
+  last_page: number
+  last_page_url: string | null
+  links: Array<{ url: string | null; label: string; page: number | null; active: boolean }>
+  next_page_url: string | null
+  path: string
+  per_page: number
+  prev_page_url: string | null
+  to: number | null
+  total: number
+}
+
+// Interface para resposta padrão da API
+interface ApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string
+}
+
 const BASE = '/api/v1'
 
 export const generalAdminService = {
@@ -84,7 +110,7 @@ export const generalAdminService = {
 
   // ── Coordinators ──────────────────────────────────────────
   listCoordinators: () =>
-    req('GET', `${BASE}/coordinators`) as Promise<{ data: Coordinator[] }>,
+    req('GET', `${BASE}/coordinators`) as Promise<ApiResponse<Coordinator[]>>,
 
   // ⚠️ Sem GET /coordinators/{id} — AdminCoordinatorController não tem show()
 
@@ -113,7 +139,7 @@ export const generalAdminService = {
 
   // ── Secretaries ───────────────────────────────────────────
   listSecretaries: () =>
-    req('GET', `${BASE}/secretaries`) as Promise<{ data: Secretary[] }>,
+    req('GET', `${BASE}/secretaries`) as Promise<ApiResponse<Secretary[]>>,
 
   createSecretary: (data: {
     name: string
@@ -150,15 +176,15 @@ export const generalAdminService = {
 
   // 🆕 AINDA NÃO EXISTE NO BACKEND
   listOrganPresidents: () =>
-    req('GET', `${BASE}/organ-presidents`) as Promise<{ data: Secretary[] }>,
+    req('GET', `${BASE}/organ-presidents`) as Promise<ApiResponse<Secretary[]>>,
 
   // 🆕 AINDA NÃO EXISTE NO BACKEND
   removeOrganPresident: (id: number) =>
     req('DELETE', `${BASE}/organ-presidents/${id}`) as Promise<{ message: string }>,
 
   // ── Courses ────────────────────────────────────────
-  listAllCourses: () =>
-    req('GET', `${BASE}/courses`) as Promise<{ data: Course[] }>,
+  listAllCourses: (page = 1) =>
+    req('GET', `${BASE}/courses?page=${page}`) as Promise<ApiResponse<PaginatedResponse<Course>>>,
 
   createCourse: (data: { scientific_area_id: number; name: string; code: string; description?: string }) =>
     req('POST', `${BASE}/courses`, data) as Promise<{ message: string; course: Course }>,
@@ -175,8 +201,8 @@ export const generalAdminService = {
     req('DELETE', `${BASE}/courses/${id}`) as Promise<{ message: string }>,
 
   // ── Scientific Areas ──────────────────────────────────────
-  listAllAreas: () =>
-    req('GET', `${BASE}/scientific-areas`) as Promise<{ data: ScientificArea[] }>,
+  listAllAreas: (page = 1) =>
+    req('GET', `${BASE}/scientific-areas?page=${page}`) as Promise<ApiResponse<PaginatedResponse<ScientificArea>>>,
 
   createArea: (data: { organ_id: number; name: string; description?: string }) =>
     req('POST', `${BASE}/scientific-areas`, data) as Promise<{ message: string; area: ScientificArea }>,
@@ -193,11 +219,11 @@ export const generalAdminService = {
     if (params?.role) query.append('role', params.role)
     if (params?.search) query.append('search', params.search)
     const qs = query.toString()
-    return req('GET', `${BASE}/users${qs ? `?${qs}` : ''}`) as Promise<{ data: User[] }>
+    return req('GET', `${BASE}/users${qs ? `?${qs}` : ''}`) as Promise<ApiResponse<User[]>>
   },
 
   // ── Organs (para dropdowns) ───────────────────────────────
   listOrgans: () =>
-    req('GET', `${BASE}/organs`) as Promise<{ data: Organ[] }>,
+    req('GET', `${BASE}/organs`) as Promise<ApiResponse<Organ[]>>,
 
 }

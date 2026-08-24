@@ -33,7 +33,7 @@ export default function CoursesManagementPage() {
 
   useEffect(() => {
     loadData()
-  }, [activeTab])
+  }, [])
 
   async function loadData() {
     setLoading(true)
@@ -45,31 +45,18 @@ export default function CoursesManagementPage() {
         generalAdminService.listOrgans(),
       ])
       
-      // Extrair cursos (lidar com paginação)
-      const coursesRaw = (coursesResponse as any)?.data ?? coursesResponse
-      const coursesArray = Array.isArray(coursesRaw) 
-        ? coursesRaw 
-        : (Array.isArray(coursesRaw?.data) ? coursesRaw.data : [])
-      
-      // Extrair áreas (lidar com paginação)
-      const areasRaw = (areasResponse as any)?.data ?? areasResponse
-      const areasArray = Array.isArray(areasRaw) 
-        ? areasRaw 
-        : (Array.isArray(areasRaw?.data) ? areasRaw.data : [])
-      
-      // Extrair órgãos
-      const organsRaw = (organsResponse as any)?.data ?? organsResponse
-      const organsArray = Array.isArray(organsRaw) 
-        ? organsRaw 
-        : (Array.isArray(organsRaw?.data) ? organsRaw.data : [])
-      
-      setCourses(Array.isArray(coursesArray) ? coursesArray : [])
-      setAreas(Array.isArray(areasArray) ? areasArray : [])
-      setOrgans(Array.isArray(organsArray) ? organsArray : [])
+      // Agora a resposta é: { success: true, data: [...] }
+      const coursesArray = (coursesResponse as any)?.data || []
+      const areasArray = (areasResponse as any)?.data || []
+      const organsArray = (organsResponse as any)?.data || []
       
       console.log('Cursos carregados:', coursesArray)
       console.log('Áreas carregadas:', areasArray)
       console.log('Órgãos carregados:', organsArray)
+      
+      setCourses(Array.isArray(coursesArray) ? coursesArray : [])
+      setAreas(Array.isArray(areasArray) ? areasArray : [])
+      setOrgans(Array.isArray(organsArray) ? organsArray : [])
     } catch (e) {
       console.error('Erro ao carregar dados:', e)
       setError((e as Error).message)
@@ -173,9 +160,9 @@ export default function CoursesManagementPage() {
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
-      c.name.toLowerCase().includes(term) ||
-      c.code.toLowerCase().includes(term) ||
-      c.scientific_area?.name?.toLowerCase().includes(term)
+      (c.name && c.name.toLowerCase().includes(term)) ||
+      (c.code && c.code.toLowerCase().includes(term)) ||
+      (c.scientific_area?.name && c.scientific_area.name.toLowerCase().includes(term))
     )
   })
 
@@ -183,8 +170,8 @@ export default function CoursesManagementPage() {
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
-      a.name.toLowerCase().includes(term) ||
-      a.organ?.name?.toLowerCase().includes(term)
+      (a.name && a.name.toLowerCase().includes(term)) ||
+      (a.organ?.name && a.organ.name.toLowerCase().includes(term))
     )
   })
 

@@ -837,17 +837,17 @@ private function eligibleReviewersQuery(Topic $topic): ?\Illuminate\Database\Que
             ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
     }
 
-    // COMITÉ CIENTÍFICO / BIOÉTICA: elegibilidade por organ_id via organ_members
-    return DB::table('teacher_profiles')
-        ->distinct()
-        ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
-        ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
-        ->leftJoin('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
-        ->where('organ_members.organ_id', $organ->id)
-        ->whereNull('organ_members.deleted_at')
-        ->whereNull('teacher_profiles.deleted_at')
-        ->whereNull('users.deleted_at')
-        ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
+    // // COMITÉ CIENTÍFICO / BIOÉTICA: elegibilidade por organ_id via organ_members
+    // return DB::table('teacher_profiles')
+    //     ->distinct()
+    //     ->join('users', 'teacher_profiles.user_id', '=', 'users.id')
+    //     ->join('organ_members', 'users.id', '=', 'organ_members.user_id')
+    //     ->leftJoin('scientific_areas', 'teacher_profiles.scientific_area_id', '=', 'scientific_areas.id')
+    //     ->where('organ_members.organ_id', $organ->id)
+    //     ->whereNull('organ_members.deleted_at')
+    //     ->whereNull('teacher_profiles.deleted_at')
+    //     ->whereNull('users.deleted_at')
+    //     ->when($topic->supervisor_id, fn($q) => $q->where('teacher_profiles.id', '!=', $topic->supervisor_id));
 }
 
 

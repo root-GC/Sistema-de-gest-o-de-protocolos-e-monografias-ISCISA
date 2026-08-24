@@ -18,9 +18,10 @@ class CourseController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
+            // CORRIGIDO: Usar getAll() para retornar todos os cursos
             $courses = $request->has('scientific_area_id')
                 ? $this->courseService->getByScientificArea($request->scientific_area_id)
-                : $this->courseService->getPaginated();
+                : $this->courseService->getAll(); // <- Mudou de getPaginated() para getAll()
 
             return response()->json([
                 'success' => true,
@@ -29,7 +30,7 @@ class CourseController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao buscar cursos'
+                'message' => 'Erro ao buscar cursos: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -54,6 +55,10 @@ class CourseController extends Controller
     {
         try {
             $course = $this->courseService->create($request->validated());
+            
+            // Recarregar com relacionamento
+            $course = $this->courseService->getById($course->id);
+            
             return response()->json([
                 'success' => true,
                 'data' => $course,
@@ -62,7 +67,7 @@ class CourseController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao criar curso'
+                'message' => 'Erro ao criar curso: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -71,6 +76,10 @@ class CourseController extends Controller
     {
         try {
             $course = $this->courseService->update($id, $request->validated());
+            
+            // Recarregar com relacionamento
+            $course = $this->courseService->getById($id);
+            
             return response()->json([
                 'success' => true,
                 'data' => $course,
@@ -79,7 +88,7 @@ class CourseController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao atualizar curso'
+                'message' => 'Erro ao atualizar curso: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -95,7 +104,7 @@ class CourseController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao excluir curso'
+                'message' => 'Erro ao excluir curso: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -111,7 +120,7 @@ class CourseController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro na pesquisa'
+                'message' => 'Erro na pesquisa: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -135,7 +144,7 @@ class CourseController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao buscar curso'
+                'message' => 'Erro ao buscar curso: ' . $e->getMessage()
             ], 500);
         }
     }
