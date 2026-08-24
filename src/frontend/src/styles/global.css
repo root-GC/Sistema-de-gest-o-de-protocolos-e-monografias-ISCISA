@@ -3,11 +3,11 @@
    Global Design System
 ========================================================= */
 
-:root {
+/* :root { */
   /* =======================================================
      🌿 SURFACES (LIGHT MODE BASE)
   ======================================================= */
-  --surface: #f9f9fc;
+  /* --surface: #f9f9fc;
   --surface-dim: #dadadc;
   --surface-bright: #f9f9fc;
 
@@ -17,61 +17,61 @@
   --surface-container-high: #e8e8ea;
   --surface-container-highest: #e2e2e5;
 
-  --background: #f9f9fc;
+  --background: #f9f9fc; */
 
   /* =======================================================
      🖋 TEXT
   ======================================================= */
-  --on-surface: #1a1c1e;
+  /* --on-surface: #1a1c1e;
   --on-surface-variant: #3e4a3f;
   --on-background: #1a1c1e;
 
   --inverse-surface: #2f3133;
-  --inverse-on-surface: #f0f0f3;
+  --inverse-on-surface: #f0f0f3; */
 
   /* =======================================================
      🧭 OUTLINE / BORDERS
   ======================================================= */
-  --outline: #6e7a6e;
-  --outline-variant: #bdcabc;
+  /* --outline: #6e7a6e;
+  --outline-variant: #bdcabc; */
 
   /* =======================================================
      🎯 PRIMARY (Emerald Institutional)
   ======================================================= */
-  --primary: #006933;
+  /* --primary: #006933;
   --primary-container: #008542;
   --on-primary: #ffffff;
   --on-primary-container: #eeffec;
-  --inverse-primary: #71dc8e;
+  --inverse-primary: #71dc8e; */
 
   /* =======================================================
      🔴 SECONDARY (Bordeaux Academic)
   ======================================================= */
-  --secondary: #b7150b;
+  /* --secondary: #b7150b;
   --secondary-container: #db3323;
   --on-secondary: #ffffff;
-  --on-secondary-container: #fffbff;
+  --on-secondary-container: #fffbff; */
 
   /* =======================================================
      🟡 TERTIARY (Gold Academic)
   ======================================================= */
-  --tertiary: #735c00;
-  --tertiary-container: #cca730;
+  /* --tertiary: #735c00; */
+  /* --tertiary-container: #cca730;
   --on-tertiary: #ffffff;
-  --on-tertiary-container: #4f3d00;
+  --on-tertiary-container: #4f3d00; */
 
   /* =======================================================
      ⚠ ERROR
   ======================================================= */
-  --error: #ba1a1a;
+  /* --error: #ba1a1a;
   --error-container: #ffdad6;
   --on-error: #ffffff;
-  --on-error-container: #93000a;
+  --on-error-container: #93000a; */
 
   /* =======================================================
      🧊 FIXED TONES (advanced UI states)
   ======================================================= */
-  --primary-fixed: #8df9a8;
+  /* --primary-fixed: #8df9a8;
   --primary-fixed-dim: #71dc8e;
   --on-primary-fixed: #00210c;
   --on-primary-fixed-variant: #005226;
@@ -84,18 +84,18 @@
   --tertiary-fixed: #ffe088;
   --tertiary-fixed-dim: #e9c349;
   --on-tertiary-fixed: #241a00;
-  --on-tertiary-fixed-variant: #574500;
+  --on-tertiary-fixed-variant: #574500; */
 
   /* =======================================================
      🔁 SURFACE VARIANT
   ======================================================= */
-  --surface-variant: #e2e2e5;
-  --surface-tint: #006d35;
+  /* --surface-variant: #e2e2e5;
+  --surface-tint: #006d35; */
 
   /* =======================================================
      🧱 TYPOGRAPHY
   ======================================================= */
-  --font-family: 'Inter', system-ui, sans-serif;
+  /* --font-family: 'Inter', system-ui, sans-serif;
 
   --headline-xl: 40px;
   --headline-lg: 32px;
@@ -109,11 +109,203 @@
   --font-bold: 700;
   --font-semibold: 600;
   --font-medium: 500;
-  --font-regular: 400;
+  --font-regular: 400; */
 
   /* =======================================================
      📏 SPACING SYSTEM (8px base)
   ======================================================= */
+  /* --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 48px;
+  --space-6: 64px;
+
+  --margin-mobile: 16px;
+  --margin-desktop: 32px;
+  --gutter: 24px; */
+
+  /* =======================================================
+     🔳 RADIUS SYSTEM
+  ======================================================= */
+  /* --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px; */
+
+  /* =======================================================
+     🌑 ELEVATION (SCIENTIFIC TONAL DEPTH)
+  ======================================================= */
+  /* --elevation-0: none;
+  --elevation-1: 0 1px 0 rgba(0,0,0,0.04);
+  --elevation-2: 0 4px 12px rgba(0,0,0,0.06);
+  --elevation-3: 0 16px 40px rgba(0,0,0,0.12);
+
+  --backdrop: rgba(0,0,0,0.4); */
+
+  /* =======================================================
+     📐 LAYOUT
+  ======================================================= */
+  /* --sidebar-width: 280px;
+  --container-max-width: 1440px; */
+/* } */
+
+/* =========================================================
+   ISCISA SCIENTIFIC MANAGEMENT SYSTEM
+   Global Design System
+   WHITE-FIRST / INSTITUTIONAL ACADEMIC
+========================================================= */
+
+:root {
+
+  /* =======================================================
+     🤍 SURFACES — WHITE FIRST
+     Base visual: branco, não cinza.
+  ======================================================= */
+
+  --surface: #FCFDFC;
+  --surface-dim: #E8ECE9;
+  --surface-bright: #FFFFFF;
+
+  --surface-container-lowest: #FFFFFF;
+  --surface-container-low: #FAFBFA;
+  --surface-container: #F6F8F6;
+  --surface-container-high: #F1F4F1;
+  --surface-container-highest: #E9EEEA;
+
+  --background: #FCFDFC;
+
+
+  /* =======================================================
+     🖋 TEXT
+  ======================================================= */
+
+  --on-surface: #17201A;
+  --on-surface-variant: #465149;
+
+  --on-background: #17201A;
+
+  --inverse-surface: #26302A;
+  --inverse-on-surface: #F5F7F5;
+
+
+  /* =======================================================
+     🧭 OUTLINE / BORDERS
+     Muito suaves para preservar a estética white-first.
+  ======================================================= */
+
+  --outline: #718078;
+  --outline-variant: #D5DED7;
+
+
+  /* =======================================================
+     🌿 PRIMARY — EMERALD INSTITUTIONAL
+  ======================================================= */
+
+  --primary: #006933;
+  --primary-container: #008542;
+
+  --on-primary: #FFFFFF;
+  --on-primary-container: #EEFFEC;
+
+  --inverse-primary: #71DC8E;
+
+
+  /* =======================================================
+     🔴 SECONDARY — BORDEAUX / ACADEMIC RED
+  ======================================================= */
+
+  --secondary: #B7150B;
+  --secondary-container: #DB3323;
+
+  --on-secondary: #FFFFFF;
+  --on-secondary-container: #FFFBFF;
+
+
+  /* =======================================================
+     🟡 TERTIARY — ACADEMIC GOLD
+  ======================================================= */
+
+  --tertiary: #735C00;
+  --tertiary-container: #CCA730;
+
+  --on-tertiary: #FFFFFF;
+  --on-tertiary-container: #4F3D00;
+
+
+  /* =======================================================
+     ⚠ ERROR
+  ======================================================= */
+
+  --error: #BA1A1A;
+  --error-container: #FFDAD6;
+
+  --on-error: #FFFFFF;
+  --on-error-container: #93000A;
+
+
+  /* =======================================================
+     🧊 FIXED TONES
+  ======================================================= */
+
+  --primary-fixed: #8DF9A8;
+  --primary-fixed-dim: #71DC8E;
+
+  --on-primary-fixed: #00210C;
+  --on-primary-fixed-variant: #005226;
+
+
+  --secondary-fixed: #FFDAD4;
+  --secondary-fixed-dim: #FFB4A8;
+
+  --on-secondary-fixed: #410000;
+  --on-secondary-fixed-variant: #930000;
+
+
+  --tertiary-fixed: #FFE088;
+  --tertiary-fixed-dim: #E9C349;
+
+  --on-tertiary-fixed: #241A00;
+  --on-tertiary-fixed-variant: #574500;
+
+
+  /* =======================================================
+     🔁 SURFACE VARIANT
+  ======================================================= */
+
+  --surface-variant: #E8EDE9;
+  --surface-tint: #006D35;
+
+
+  /* =======================================================
+     🧱 TYPOGRAPHY
+  ======================================================= */
+
+  --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --headline-xl: 40px;
+  --headline-lg: 32px;
+  --headline-lg-mobile: 28px;
+
+  --title-md: 20px;
+
+  --body-lg: 16px;
+  --body-md: 14px;
+
+  --label-md: 12px;
+
+  --font-bold: 700;
+  --font-semibold: 600;
+  --font-medium: 500;
+  --font-regular: 400;
+
+
+  /* =======================================================
+     📏 SPACING SYSTEM
+     8px base
+  ======================================================= */
+
   --space-1: 8px;
   --space-2: 16px;
   --space-3: 24px;
@@ -123,33 +315,50 @@
 
   --margin-mobile: 16px;
   --margin-desktop: 32px;
+
   --gutter: 24px;
+
 
   /* =======================================================
      🔳 RADIUS SYSTEM
+     Contemporâneo, mas institucional.
   ======================================================= */
-  --radius-sm: 0.125rem;
-  --radius-md: 0.25rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+
   --radius-full: 9999px;
 
-  /* =======================================================
-     🌑 ELEVATION (SCIENTIFIC TONAL DEPTH)
-  ======================================================= */
-  --elevation-0: none;
-  --elevation-1: 0 1px 0 rgba(0,0,0,0.04);
-  --elevation-2: 0 4px 12px rgba(0,0,0,0.06);
-  --elevation-3: 0 16px 40px rgba(0,0,0,0.12);
 
-  --backdrop: rgba(0,0,0,0.4);
+  /* =======================================================
+     🌑 ELEVATION
+     Border-first, shadow-second.
+  ======================================================= */
+
+  --elevation-0: none;
+
+  --elevation-1:
+    0 1px 2px rgba(23, 32, 26, 0.04);
+
+  --elevation-2:
+    0 4px 14px rgba(23, 32, 26, 0.06);
+
+  --elevation-3:
+    0 16px 40px rgba(23, 32, 26, 0.10);
+
+  --backdrop: rgba(10, 18, 13, 0.40);
+
 
   /* =======================================================
      📐 LAYOUT
   ======================================================= */
+
   --sidebar-width: 280px;
   --container-max-width: 1440px;
 }
+
 
 /* =========================================================
    🌙 DARK MODE
@@ -195,7 +404,7 @@
 /* =========================================================
    🧱 BASE RESET
 ========================================================= */
-
+/* 
 * {
   margin: 0;
   padding: 0;
@@ -207,13 +416,13 @@ body {
   background: var(--background);
   color: var(--on-background);
   font-size: var(--body-md);
-}
+} */
 
 /* =========================================================
    🧭 LAYOUT SYSTEM
 ========================================================= */
 
-.app-layout {
+/* .app-layout {
   display: flex;
   height: 100vh;
 }
@@ -243,13 +452,13 @@ body {
   flex: 1;
   padding: var(--space-3);
   overflow: auto;
-}
+} */
 
 /* =========================================================
    🧩 COMPONENT BASES
 ========================================================= */
 
-.btn {
+/* .btn {
   padding: 10px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--outline-variant);
@@ -273,12 +482,12 @@ body {
   background: var(--secondary);
   color: var(--on-secondary);
   border: none;
-}
+} */
 
 /* =========================================================
    📊 CARDS (DASHBOARD MODULES)
 ========================================================= */
-
+/* 
 .card {
   background: var(--surface-container-lowest);
   border: 1px solid var(--surface-container-high);
@@ -288,13 +497,13 @@ body {
 
 .card:hover {
   box-shadow: var(--elevation-2);
-}
+} */
 
 /* =========================================================
    📋 TABLES
 ========================================================= */
 
-.table {
+/* .table {
   width: 100%;
   border-collapse: collapse;
 }
@@ -315,13 +524,13 @@ body {
 
 .table tr:nth-child(even) {
   background: var(--surface-container-low);
-}
+} */
 
 /* =========================================================
    🧭 BADGES / STATUS
 ========================================================= */
 
-.badge {
+/* .badge {
   padding: 4px 10px;
   border-radius: var(--radius-full);
   font-size: var(--label-md);
@@ -340,7 +549,327 @@ body {
 .badge-warning {
   background: var(--tertiary-container);
   color: var(--on-tertiary-container);
+} */
+
+
+
+ /* =========================================================
+    🧱 BASE RESET
+ ========================================================= */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
+
+html {
+  background: var(--background);
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--background);
+  color: var(--on-background);
+  font-size: var(--body-md);
+  line-height: 1.5;
+}
+
+
+/* =========================================================
+   🧭 LAYOUT SYSTEM
+   White-first / institutional
+========================================================= */
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+
+  background: var(--surface-container-lowest);
+
+  border-right: 1px solid var(--outline-variant);
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  background: var(--background);
+}
+
+.topbar {
+  height: 64px;
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+
+  padding: 0 var(--space-3);
+
+  background: var(--surface-container-lowest);
+
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.app-content {
+  flex: 1;
+
+  padding: var(--space-3);
+
+  overflow: auto;
+
+  background: var(--background);
+}
+
+
+/* =========================================================
+   🧩 COMPONENT BASES
+========================================================= */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-height: 40px;
+
+  padding: 10px 14px;
+
+  border-radius: var(--radius-md);
+  border: 1px solid var(--outline-variant);
+
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+
+  font-family: inherit;
+  font-size: var(--body-md);
+  font-weight: var(--font-medium);
+
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.btn:hover {
+  background: var(--surface-container-low);
+  border-color: var(--outline);
+  box-shadow: var(--elevation-1);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+
+/* =========================================================
+   🌿 PRIMARY BUTTON
+========================================================= */
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+
+  border: 1px solid var(--primary);
+}
+
+.btn-primary:hover {
+  background: var(--primary-container);
+  border-color: var(--primary-container);
+
+  box-shadow: var(--elevation-2);
+}
+
+
+/* =========================================================
+   🔴 DANGER BUTTON
+========================================================= */
+
+.btn-danger {
+  background: var(--secondary);
+  color: var(--on-secondary);
+
+  border: 1px solid var(--secondary);
+}
+
+.btn-danger:hover {
+  background: var(--secondary-container);
+  border-color: var(--secondary-container);
+
+  box-shadow: var(--elevation-2);
+}
+
+
+/* =========================================================
+   📊 CARDS — PURE WHITE
+========================================================= */
+
+.card {
+  background: var(--surface-container-lowest);
+
+  border: 1px solid var(--outline-variant);
+
+  border-radius: var(--radius-lg);
+
+  padding: var(--space-3);
+
+  box-shadow: var(--elevation-1);
+
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.card:hover {
+  border-color: #C7D3CA;
+  box-shadow: var(--elevation-2);
+}
+
+
+/* =========================================================
+   📋 TABLES
+========================================================= */
+
+.table-wrapper {
+  width: 100%;
+
+  overflow-x: auto;
+
+  background: var(--surface-container-lowest);
+
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+
+  box-shadow: var(--elevation-1);
+}
+
+.table {
+  width: 100%;
+
+  border-collapse: collapse;
+
+  background: var(--surface-container-lowest);
+}
+
+.table th {
+  padding: 12px 14px;
+
+  text-align: left;
+
+  font-size: var(--label-md);
+  font-weight: var(--font-semibold);
+
+  color: var(--on-surface-variant);
+
+  /*
+    Não usamos cinza forte.
+    Apenas um branco levemente esverdeado.
+  */
+  background: var(--surface-container-low);
+
+  border-bottom: 1px solid var(--outline-variant);
+
+  position: sticky;
+  top: 0;
+
+  z-index: 1;
+}
+
+.table td {
+  padding: 12px 14px;
+
+  color: var(--on-surface);
+
+  background: var(--surface-container-lowest);
+
+  border-bottom: 1px solid #E7ECE8;
+}
+
+.table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.table tbody tr:hover td {
+  background: #FAFCFA;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+
+/* =========================================================
+   🧭 BADGES / STATUS
+========================================================= */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 24px;
+
+  padding: 4px 10px;
+
+  border-radius: var(--radius-full);
+
+  font-size: var(--label-md);
+  font-weight: var(--font-semibold);
+
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   🌿 SUCCESS
+========================================================= */
+
+.badge-success {
+  background: #E8F7EC;
+  color: var(--on-primary-fixed-variant);
+
+  border: 1px solid #C8E8D0;
+}
+
+
+/* =========================================================
+   🔴 ERROR
+========================================================= */
+
+.badge-error {
+  background: var(--error-container);
+  color: var(--on-error-container);
+
+  border: 1px solid #F2B8B5;
+}
+
+
+/* =========================================================
+   🟡 WARNING
+========================================================= */
+
+.badge-warning {
+  background: #FFF4CC;
+  color: var(--on-tertiary-fixed-variant);
+
+  border: 1px solid #E9D889;
+}
+
+
+
 
 /* =========================================================
    ⏳ LOADING & PROCESSING SYSTEM
