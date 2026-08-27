@@ -12,7 +12,7 @@ class TeacherProfileController extends Controller
     public function show(Request $request)
     {
         $user = $request->user()
-            ->loadMissing('roles.permissions', 'teacherProfile.scientificArea');
+            ->loadMissing('roles.permissions', 'teacherProfile.scientificArea', 'teacherProfile.course');
 
         return response()->json([
             'data'              => $user,
@@ -60,7 +60,7 @@ class TeacherProfileController extends Controller
 
         // 🔑 Agora carrega também roles + permissions, senão o frontend
         // recebe roles/permissions vazios e o UserPayload fica incompleto.
-        $user = $user->fresh()->load('roles.permissions', 'teacherProfile.scientificArea');
+        $user = $user->fresh()->load('roles.permissions', 'teacherProfile.scientificArea', 'teacherProfile.course');
 
         return response()->json([
             'message'           => 'Perfil atualizado com sucesso.',

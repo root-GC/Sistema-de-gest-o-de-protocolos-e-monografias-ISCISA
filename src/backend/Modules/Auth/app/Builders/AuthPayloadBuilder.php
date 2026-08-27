@@ -37,6 +37,7 @@ class AuthPayloadBuilder
         $user->load([
             'roles.permissions',
             'teacherProfile.scientificArea',
+            'teacherProfile.course',
             'studentProfile.course',
             'studentProfile.course.scientificArea',  // ← Carrega via curso
             'coordinatorProfile.course',
@@ -79,6 +80,9 @@ class AuthPayloadBuilder
                 'is_internal'     => (bool) $tp->is_Internal,
                 'scientific_area' => $tp->scientificArea
                     ? ['id' => $tp->scientificArea->id, 'name' => $tp->scientificArea->name]
+                    : null,
+                'course' => $tp->course
+                    ? ['id' => $tp->course->id, 'name' => $tp->course->name, 'code' => $tp->course->code]
                     : null,
             ];
 
@@ -141,8 +145,13 @@ class AuthPayloadBuilder
             $profiles['admin'] = [
                 'id'           => $adm->id,
                 'access_scope' => $adm->access_scope,  // global | organ
+                'organ_id'     => $adm->organ_id,
                 'organ'        => $adm->organ
-                    ? ['id' => $adm->organ->id, 'name' => $adm->organ->name]
+                    ? [
+                        'id'   => $adm->organ->id,
+                        'name' => $adm->organ->name,
+                        'type' => $adm->organ->type,
+                    ]
                     : null,
             ];
         }

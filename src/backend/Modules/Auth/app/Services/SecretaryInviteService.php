@@ -55,9 +55,9 @@ class SecretaryInviteService
                 view('auth::emails.admin-invite', ['name' => $user->name, 'link' => $link, 'ttlMinutes' => 60])->render()
             );
         } catch (\Throwable $e) {
-            Log::error('[SecretaryInviteService] falha ao enviar convite', ['email' => $user->email, 'error' => $e->getMessage()]);
+            Log::error('[SecretaryInviteService] falha ao enviar email de acesso', ['email' => $user->email, 'error' => $e->getMessage()]);
             $this->rollbackUser($user);
-            throw new \RuntimeException('Não foi possível enviar o email de convite. Detalhe: ' . $e->getMessage());
+            throw new \RuntimeException('Não foi possível enviar o email de acesso. Detalhe: ' . $e->getMessage());
         }
 
         return $user;

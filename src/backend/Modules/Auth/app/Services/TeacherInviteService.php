@@ -16,7 +16,7 @@ class TeacherInviteService
     ) {}
 
     /**
-     * Cria um docente + convite por email.
+     * Cria um docente e envia o email de acesso.
      *
      * $data espera: name, email, scientific_area_id (imposto pelo controller,
      * nunca vindo do request), roles (array — imposto pelo controller/import
@@ -64,9 +64,9 @@ class TeacherInviteService
                 view('auth::emails.admin-invite', ['name' => $user->name, 'link' => $link, 'ttlMinutes' => 60])->render()
             );
         } catch (\Throwable $e) {
-            Log::error('[TeacherInviteService] falha ao enviar convite', ['email' => $user->email, 'error' => $e->getMessage()]);
+            Log::error('[TeacherInviteService] falha ao enviar email de acesso', ['email' => $user->email, 'error' => $e->getMessage()]);
             $this->rollbackUser($user);
-            throw new \RuntimeException('Não foi possível enviar o email de convite. Detalhe: ' . $e->getMessage());
+            throw new \RuntimeException('Não foi possível enviar o email de acesso. Detalhe: ' . $e->getMessage());
         }
 
         return $user;

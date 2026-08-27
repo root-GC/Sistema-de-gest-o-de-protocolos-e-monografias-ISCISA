@@ -23,7 +23,7 @@ class SetPasswordController extends Controller
         );
 
         if ($status !== Password::PASSWORD_RESET) {
-            return response()->json(['message' => 'Link inválido ou expirado. Peça um novo convite.'], 422);
+            return response()->json(['message' => 'Link inválido ou expirado. Peça um novo link para definir a senha.'], 422);
         }
 
         return response()->json(['message' => 'Senha definida com sucesso. Pode agora iniciar sessão.']);

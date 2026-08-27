@@ -36,7 +36,7 @@ class AdminSecretaryController extends Controller
         $user = $this->inviteService->invite($data);
 
         return response()->json([
-            'message' => 'Convite enviado com sucesso.',
+            'message' => 'Secretário/a adicionado/a com sucesso. Email enviado.',
             'user'    => $user->load('secretaryProfile.organ', 'roles'),
         ], 201);
     }

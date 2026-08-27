@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
  * Wrapper único para a API transacional do Brevo (https://api.brevo.com/v3/smtp/email).
  *
  * Centraliza o que já tinhas duplicado no sendInvite: headers, payload, log de
- * sucesso/erro. Qualquer fluxo que precise de mandar email (OTP, convites,
+ * sucesso/erro. Qualquer fluxo que precise de mandar email (OTP, acessos,
  * notificações) passa a chamar isto em vez de montar o pedido HTTP à mão.
  */
 class BrevoMailerService

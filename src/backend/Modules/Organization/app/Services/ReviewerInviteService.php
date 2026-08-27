@@ -16,7 +16,7 @@ class ReviewerInviteService
     ) {}
 
     /**
-     * Convidar docente como revisor
+     * Adicionar docente como revisor
      * Se o email falhar, faz rollback de tudo
      */
     public function invite(User $teacher, Organ $organ): OrganMember
@@ -49,7 +49,7 @@ class ReviewerInviteService
                 
                 $this->mailer->send(
                     ['email' => $teacher->email, 'name' => $teacher->name],
-                    "Convite: Revisor no {$organ->name} — SGPMC-ISCISA",
+                    "Adicionado como Revisor no {$organ->name} — SGPMC-ISCISA",
                     view('auth::emails.reviewer-invitation', [
                         'teacherName' => $teacher->name,
                         'organName'   => $organ->name,
@@ -58,12 +58,12 @@ class ReviewerInviteService
                     ])->render()
                 );
 
-                Log::info('[ReviewerInviteService] Email de convite enviado', [
+                Log::info('[ReviewerInviteService] Email de acesso enviado', [
                     'teacher_email' => $teacher->email,
                     'organ_name'    => $organ->name,
                 ]);
             } catch (\Throwable $e) {
-                Log::error('[ReviewerInviteService] Falha ao enviar email de convite', [
+                Log::error('[ReviewerInviteService] Falha ao enviar email de acesso', [
                     'email' => $teacher->email,
                     'error' => $e->getMessage(),
                 ]);
@@ -82,7 +82,7 @@ class ReviewerInviteService
                     $teacher->roles()->detach($reviewerRole->id);
                 }
                 
-                throw new \RuntimeException('Não foi possível enviar o email de convite. Detalhe: ' . $e->getMessage());
+                throw new \RuntimeException('Não foi possível enviar o email de acesso. Detalhe: ' . $e->getMessage());
             }
 
             return $member->fresh()->load('user');

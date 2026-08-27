@@ -50,7 +50,7 @@ class AdminUserController extends Controller
     }
 
     /**
-     * POST /api/v1/admin/users — Criar executivo de órgão + enviar convite
+     * POST /api/v1/admin/users — Adicionar executivo de órgão + enviar email de acesso
      *
      * Duplo portão:
      *   Técnico (access_scope = global)        → só pode criar o executivo da Direção Científica.
@@ -116,13 +116,13 @@ class AdminUserController extends Controller
                 'organ_id' => $targetOrgan->id,
             ]);
 
-            Log::info('[AdminUserController] store — executivo criado e convite enviado', [
+            Log::info('[AdminUserController] store — executivo adicionado e email enviado', [
                 'user_id'  => $user->id,
                 'organ_id' => $targetOrgan->id,
             ]);
 
             return response()->json([
-                'message' => 'Convite enviado com sucesso.',
+                'message' => 'Administrador/a adicionado/a com sucesso. Email enviado.',
                 'user'    => $this->transform($user->load('roles', 'adminProfile.organ')),
             ], 201);
         } catch (\Exception $e) {

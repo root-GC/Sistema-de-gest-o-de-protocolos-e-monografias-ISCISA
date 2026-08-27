@@ -8,23 +8,27 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
-class SuperAdminSeeder extends Seeder
+class ScientificDirectionAdminSeeder extends Seeder
 {
     public function run(): void
     {
-        $email = env('SUPER_ADMIN_EMAIL');
-        $password = env('SUPER_ADMIN_PASSWORD');
         $now = now();
+        $email = 'Dulnerio@gmail.com';
 
-        if (! $email || ! $password) {
-            throw new RuntimeException('SUPER_ADMIN_EMAIL e SUPER_ADMIN_PASSWORD devem estar definidos no .env.');
+        $organId = DB::table('organs')
+            ->where('type', 'scientific_direction')
+            ->where('name', 'Direção Científica')
+            ->value('id');
+
+        if (! $organId) {
+            throw new RuntimeException('Órgão Direção Científica não encontrado. Execute o OrganSeeder antes.');
         }
 
         DB::table('users')->updateOrInsert(
             ['email' => $email],
             [
-                'name' => 'Administrador Supremo',
-                'password' => Hash::make($password),
+                'name' => 'Dulnerio sengo',
+                'password' => Hash::make('password123'),
                 'status' => 'active',
                 'email_verified_at' => $now,
                 'deleted_at' => null,
@@ -43,26 +47,6 @@ class SuperAdminSeeder extends Seeder
             ]
         );
 
-        $permissions = [
-            'admin.users' => 'Gerir utilizadores',
-            'admin.organs' => 'Gerir órgãos',
-            'admin.settings' => 'Configurar sistema',
-            'admin.reports' => 'Aceder relatórios',
-            'admin.roles' => 'Gerir roles e permissões',
-        ];
-
-        foreach ($permissions as $code => $description) {
-            DB::table('permissions')->updateOrInsert(
-                ['code' => $code],
-                [
-                    'description' => $description,
-                    'deleted_at' => null,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]
-            );
-        }
-
         $userId = DB::table('users')->where('email', $email)->value('id');
         $roleId = DB::table('roles')->where('name', 'admin')->value('id');
 
@@ -75,24 +59,11 @@ class SuperAdminSeeder extends Seeder
             ]
         );
 
-        foreach (array_keys($permissions) as $code) {
-            $permissionId = DB::table('permissions')->where('code', $code)->value('id');
-
-            DB::table('role_permissions')->updateOrInsert(
-                ['role_id' => $roleId, 'permission_id' => $permissionId],
-                [
-                    'deleted_at' => null,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]
-            );
-        }
-
         DB::table('admin_profiles')->updateOrInsert(
             ['user_id' => $userId],
             [
-                'organ_id' => null,
-                'access_scope' => 'global',
+                'organ_id' => $organId,
+                'access_scope' => 'organ',
                 'deleted_at' => null,
                 'created_at' => $now,
                 'updated_at' => $now,

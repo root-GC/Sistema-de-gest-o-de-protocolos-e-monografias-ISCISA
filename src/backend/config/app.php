@@ -123,7 +123,6 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
-    //Forntend url
-    'frontend_url' => env('FRONTEND_URL'),
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
 
 ];

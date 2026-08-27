@@ -41,7 +41,7 @@ class PasswordService
                 ])->render()
             );
         } catch (\Throwable $e) {
-            // Ao contrário do convite, aqui NÃO fazemos rollback de nada
+            // Ao contrário da criação de conta, aqui NÃO fazemos rollback de nada
             // (não criámos user nenhum) — só logamos. A resposta ao
             // frontend continua genérica, não revelamos a falha.
             Log::error('[PasswordService] falha ao enviar email de reset', [
@@ -53,7 +53,7 @@ class PasswordService
 
     /**
      * Gera e persiste um novo token de reset para o email indicado.
-     * Reaproveitado tanto pelo "esqueci-me da senha" como pelo convite de admin.
+     * Reaproveitado tanto pelo "esqueci-me da senha" como pela criação de admin.
      */
     public function createToken(string $email): string
     {

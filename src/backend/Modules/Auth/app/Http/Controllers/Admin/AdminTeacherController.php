@@ -100,6 +100,7 @@ class AdminTeacherController extends Controller
         $users = User::with([
                 'roles',
                 'teacherProfile.scientificArea',
+                'teacherProfile.course',
             ])
             ->whereHas('roles', function ($q) {
                 $q->where('name', 'teacher');
@@ -198,7 +199,8 @@ class AdminTeacherController extends Controller
 
                 'user' => $user->load(
                     'roles',
-                    'teacherProfile.scientificArea'
+                    'teacherProfile.scientificArea',
+                    'teacherProfile.course'
                 ),
             ], 201);
 
@@ -331,7 +333,8 @@ class AdminTeacherController extends Controller
                 ->fresh()
                 ->load(
                     'roles',
-                    'teacherProfile.scientificArea'
+                    'teacherProfile.scientificArea',
+                    'teacherProfile.course'
                 ),
         ]);
     }
@@ -369,6 +372,7 @@ class AdminTeacherController extends Controller
     ): User {
         $teacher = User::with([
             'teacherProfile.scientificArea',
+            'teacherProfile.course',
         ])->findOrFail($id);
 
         abort_unless(

@@ -3,7 +3,7 @@
 <html lang="pt">
 <head>
     <meta charset="utf-8">
-    <title>Convite para Revisor</title>
+    <title>Adição como Revisor</title>
 </head>
 <body style="font-family: Arial, sans-serif; background:#f4f5f7; padding:24px;">
     <table role="presentation" width="100%" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">
@@ -23,7 +23,7 @@
                 <p style="color:#333;font-size:15px;">Olá, <strong>{{ $teacherName }}</strong>.</p>
                 
                 <p style="color:#333;font-size:15px;">
-                    Foi convidado para ser <strong>{{ $role }}</strong> no órgão abaixo:
+                    Foi adicionado como <strong>{{ $role }}</strong> no órgão abaixo:
                 </p>
                 
                 <div style="background:#f0f2f5;border-radius:6px;padding:16px;margin:16px 0;">

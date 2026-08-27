@@ -27,7 +27,7 @@ class TeacherProfile extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'user_id', 'scientific_area_id',
+        'user_id', 'scientific_area_id', 'course_id',
         'department', 'academic_degree', 'is_Internal',
     ];
 
@@ -41,5 +41,10 @@ class TeacherProfile extends Model
     public function scientificArea()
     {
         return $this->belongsTo(ScientificArea::class);
+    }
+
+    public function course()
+    {
+        return $this->belongsTo(Course::class);
     }
 }

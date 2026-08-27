@@ -8,6 +8,6 @@ class ProtocolDatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $this->call(EvaluationCriteriaSeeder::class);
+        //
     }
 }

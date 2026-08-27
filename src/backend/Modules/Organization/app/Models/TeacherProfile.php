@@ -15,6 +15,7 @@ class TeacherProfile extends Model
     protected $fillable = [
         'user_id',
         'scientific_area_id',
+        'course_id',
         'department',
         'academic_degree',
         'is_internal',
@@ -48,6 +49,11 @@ class TeacherProfile extends Model
     public function scientificArea(): BelongsTo
     {
         return $this->belongsTo(ScientificArea::class);
+    }
+
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
     }
 
     // Estudantes que este docente supervisiona

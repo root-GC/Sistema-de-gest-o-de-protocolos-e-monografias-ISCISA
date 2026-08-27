@@ -4,64 +4,85 @@ namespace Modules\Organization\database\seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
-/**
- * Áreas científicas e cursos do ISCISA.
- *
- * Estrutura: Órgão → Área Científica → Curso
- *
- * As áreas estão todas sob o Núcleo Científico (organ_id = nucleus)
- * porque é ele que agrupa os cursos para efeitos de coordenação.
- * Os outros órgãos (Comitê, Bioética) actuam transversalmente sobre
- * todos os cursos — não têm áreas próprias.
- */
 class ScientificAreaAndCourseSeeder extends Seeder
 {
     public function run(): void
     {
         $now = now();
 
-        $nucleoId = DB::table('organs')->where('type', 'nucleus')->value('id');
-
-        if (! $nucleoId) {
-            throw new \Exception('OrganSeeder deve correr antes de ScientificAreaAndCourseSeeder.');
-        }
-
         $structure = [
+            'Medicina' => [
+                'organ' => 'Núcleo Científico de Medicina',
+                'courses' => [
+                    ['name' => 'Medicina', 'code' => 'MED'],
+                    ['name' => 'Cirurgia', 'code' => 'CIR'],
+                    ['name' => 'Anatomia Patológica', 'code' => 'AP'],
+                    ['name' => 'Imagiologia', 'code' => 'IMG'],
+                    ['name' => 'Tecnologia Biomédica e Laboratorial', 'code' => 'TBL'],
+                ],
+            ],
             'Saúde Pública' => [
-                ['name' => 'Medicina',                    'code' => 'MED'],
-                ['name' => 'Saúde Pública',               'code' => 'SP'],
+                'organ' => 'Núcleo Científico de Saúde Pública',
+                'courses' => [
+                    ['name' => 'Saúde Pública', 'code' => 'SP'],
+                    ['name' => 'Nutrição', 'code' => 'NUT'],
+                    ['name' => 'Administração e Gestão Hospitalar', 'code' => 'AGH'],
+                    ['name' => 'Gestão Logística em Saúde', 'code' => 'GLS'],
+                    ['name' => 'Serviço Social', 'code' => 'SS'],
+                ],
             ],
             'Enfermagem' => [
-                ['name' => 'Enfermagem',                  'code' => 'ENF'],
-                ['name' => 'Enfermagem de Saúde Mental',  'code' => 'ESM'],
+                'organ' => 'Núcleo Científico de Enfermagem',
+                'courses' => [
+                    ['name' => 'Enfermagem Geral', 'code' => 'EG'],
+                    ['name' => 'Enfermagem', 'code' => 'ENF'],
+                    ['name' => 'Enfermagem de Saúde Mental', 'code' => 'ESM'],
+                    ['name' => 'Enfermagem de Saúde Materna e Infantil', 'code' => 'ESMI'],
+                    ['name' => 'Enfermagem Médico-Cirúrgica', 'code' => 'EMC'],
+                ],
             ],
             'Reabilitação' => [
-                ['name' => 'Fisioterapia',                'code' => 'FIS'],
-                ['name' => 'Terapia Ocupacional',         'code' => 'TO'],
-            ],
-            'Farmácia e Ciências Laboratoriais' => [
-                ['name' => 'Farmácia',                    'code' => 'FARM'],
-                ['name' => 'Análises Clínicas',           'code' => 'AC'],
+                'organ' => 'Núcleo Científico de Reabilitação',
+                'courses' => [
+                    ['name' => 'Fisioterapia', 'code' => 'FIS'],
+                    ['name' => 'Terapia Ocupacional', 'code' => 'TO'],
+                    ['name' => 'Terapia da Fala', 'code' => 'TF'],
+                    ['name' => 'Psicologia Clínica', 'code' => 'PC'],
+                    ['name' => 'Reabilitação Psicossocial', 'code' => 'RP'],
+                ],
             ],
         ];
 
-        foreach ($structure as $areaName => $courses) {
-            $areaId = DB::table('scientific_areas')->insertGetId([
-                'organ_id'   => $nucleoId,
-                'name'       => $areaName,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+        foreach ($structure as $areaName => $data) {
+            $organId = DB::table('organs')->where('name', $data['organ'])->value('id');
 
-            foreach ($courses as $course) {
+            if (! $organId) {
+                throw new RuntimeException("Órgão não encontrado: {$data['organ']}");
+            }
+
+            DB::table('scientific_areas')->updateOrInsert(
+                ['name' => $areaName],
+                [
+                    'organ_id' => $organId,
+                    'deleted_at' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]
+            );
+
+            $areaId = DB::table('scientific_areas')->where('name', $areaName)->value('id');
+
+            foreach ($data['courses'] as $course) {
                 DB::table('courses')->updateOrInsert(
                     ['code' => $course['code']],
                     [
                         'scientific_area_id' => $areaId,
-                        'name'               => $course['name'],
-                        'created_at'         => $now,
-                        'updated_at'         => $now,
+                        'name' => $course['name'],
+                        'deleted_at' => null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
                     ]
                 );
             }

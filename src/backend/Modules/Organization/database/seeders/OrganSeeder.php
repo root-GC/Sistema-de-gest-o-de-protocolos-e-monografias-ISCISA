@@ -5,14 +5,6 @@ namespace Modules\Organization\database\seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Órgãos institucionais do ISCISA.
- *
- * Fluxo de um protocolo:
- *   Núcleo Científico → Comitê Científico → Comitê de Bioética → Direção Científica
- *
- * Ordem importa: scientific_areas referencia organs.id.
- */
 class OrganSeeder extends Seeder
 {
     public function run(): void
@@ -21,31 +13,54 @@ class OrganSeeder extends Seeder
 
         $organs = [
             [
-                'name'        => 'Núcleo Científico',
-                'type'        => 'nucleus',
-                'description' => 'Ponto de entrada dos protocolos. Faz triagem documental e validação inicial dos temas e protocolos submetidos pelos estudantes.',
+                'name' => 'Direção Científica',
+                'type' => 'scientific_direction',
+                'description' => 'Órgão superior de direção científica.',
             ],
             [
-                'name'        => 'Comitê Científico',
-                'type'        => 'scientific_committee',
-                'description' => 'Avalia o mérito científico dos protocolos aprovados pelo Núcleo. Atribui revisores e harmoniza avaliações.',
+                'name' => 'Comité Científico',
+                'type' => 'scientific_committee',
+                'description' => 'Órgão superior responsável pela avaliação científica.',
             ],
             [
-                'name'        => 'Comitê de Bioética',
-                'type'        => 'bioethics_committee',
-                'description' => 'Avalia a conformidade ética dos protocolos de investigação. Aceite explícito obrigatório (RF-035).',
+                'name' => 'Comité de Bioética',
+                'type' => 'bioethics_committee',
+                'description' => 'Órgão superior responsável pela avaliação ética.',
             ],
             [
-                'name'        => 'Direção Científica',
-                'type'        => 'scientific_direction',
-                'description' => 'Órgão máximo. Emite parecer final e autoriza defesas.',
+                'name' => 'Núcleo Científico de Medicina',
+                'type' => 'nucleus',
+                'description' => 'Núcleo científico da área de Medicina.',
+            ],
+            [
+                'name' => 'Núcleo Científico de Saúde Pública',
+                'type' => 'nucleus',
+                'description' => 'Núcleo científico da área de Saúde Pública.',
+            ],
+            [
+                'name' => 'Núcleo Científico de Enfermagem',
+                'type' => 'nucleus',
+                'description' => 'Núcleo científico da área de Enfermagem.',
+            ],
+            [
+                'name' => 'Núcleo Científico de Reabilitação',
+                'type' => 'nucleus',
+                'description' => 'Núcleo científico da área de Reabilitação.',
             ],
         ];
 
         foreach ($organs as $organ) {
             DB::table('organs')->updateOrInsert(
-                ['type' => $organ['type']],
-                array_merge($organ, ['created_at' => $now, 'updated_at' => $now])
+                [
+                    'name' => $organ['name'],
+                    'type' => $organ['type'],
+                ],
+                [
+                    'description' => $organ['description'],
+                    'deleted_at' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]
             );
         }
     }

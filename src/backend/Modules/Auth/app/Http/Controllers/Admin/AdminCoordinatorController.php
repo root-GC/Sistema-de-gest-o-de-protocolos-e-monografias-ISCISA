@@ -37,7 +37,7 @@ class AdminCoordinatorController extends Controller
         $user = $this->inviteService->invite($data);
 
         return response()->json([
-            'message' => 'Convite enviado com sucesso.',
+            'message' => 'Coordenador adicionado com sucesso. Email enviado.',
             'user'    => $user->load('coordinatorProfile.course', 'roles'),
         ], 201);
     }

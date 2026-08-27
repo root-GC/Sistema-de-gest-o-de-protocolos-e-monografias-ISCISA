@@ -3,7 +3,7 @@
 <html lang="pt">
 <head>
     <meta charset="utf-8">
-    <title>Convite de Acesso ao SGPMC</title>
+    <title>Acesso ao SGPMC</title>
 </head>
 <body style="font-family: Arial, sans-serif; background:#f4f5f7; padding:24px;">
     <table role="presentation" width="100%" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">
@@ -21,7 +21,7 @@
                 <h2 style="margin:0 0 16px;color:#1a1a1a;text-align:center;">SGPMC — ISCISA</h2>
                 <p style="color:#333;font-size:15px;">Olá, {{ $name }}.</p>
                 <p style="color:#333;font-size:15px;">
-                    Foi convidado(a) a aderir ao <strong>Sistema de Gestão de Protocolos de Monografias e Comitês (SGPMC)</strong>.
+                    Foi adicionado(a) ao <strong>Sistema de Gestão de Protocolos de Monografias e Comitês (SGPMC)</strong>.
                 </p>
                 <p style="color:#333;font-size:15px;">
                     Para activar a sua conta e aceder à plataforma, defina a sua palavra-passe clicando no botão abaixo.
@@ -38,7 +38,7 @@
                 </p>
                 <p style="color:#777;font-size:13px;">
                     Este link expira em {{ $ttlMinutes ?? 60 }} minutos.
-                    Se não esperava este convite, pode ignorar este email com segurança.
+                    Se não reconhece este registo, pode ignorar este email com segurança.
                 </p>
                 <hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0;">
                 <p style="color:#999;font-size:11px;text-align:center;">

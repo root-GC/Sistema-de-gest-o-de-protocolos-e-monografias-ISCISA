@@ -75,7 +75,7 @@ class TopicService
             'scientific_area_id' => $data['scientific_area_id'],
             'course_id' => $data['course_id'],
             'title' => $data['title'],
-            'justification' => $data['justification'] ?? null,
+            'justification' => null,
             'status' => Topic::STATUS_PENDING_SUPERVISOR,
             'supervisor_status' => Topic::SUPERVISOR_STATUS_PENDING,
             'submitted_at' => now(),
