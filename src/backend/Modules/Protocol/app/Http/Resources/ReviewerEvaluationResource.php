@@ -5,6 +5,7 @@ namespace Modules\Protocol\app\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
+use Illuminate\Support\Carbon;
 
 class ReviewerEvaluationResource extends JsonResource
 {
@@ -14,6 +15,13 @@ class ReviewerEvaluationResource extends JsonResource
         $teacherProfile = $user?->teacherProfile;
         $isReviewer = $teacherProfile && $teacherProfile->id === $this->reviewer_id;
         $isSecretary = $user?->hasPermission('protocol.assign') ?? false;
+
+        $assignedAt = $this->protocolReviewAssignment?->assigned_at
+            ? Carbon::parse($this->protocolReviewAssignment->assigned_at)
+            : Carbon::parse($this->created_at);
+        $dueAt = $assignedAt->copy()->addDays(7);
+        $overdue = now()->gt($dueAt) && $this->status !== ReviewerEvaluation::STATUS_SUBMITTED;
+        $days = (int) ceil(abs(now()->diffInSeconds($dueAt, false)) / 86400);
 
         $base = [
             'id' => $this->id,
@@ -25,6 +33,11 @@ class ReviewerEvaluationResource extends JsonResource
             'role' => $this->protocolReviewAssignment?->is_primary ? 'primary' : 'reviewer',
             'submitted_at' => $this->submitted_at,
             'evaluated_at' => $this->submitted_at,
+            'assigned_at' => $assignedAt,
+            'due_at' => $dueAt,
+            'days_remaining' => $overdue ? -$days : $days,
+            'overdue' => $overdue,
+            'review_status' => $this->status === ReviewerEvaluation::STATUS_SUBMITTED ? 'reviewed' : 'not_reviewed',
             'reviewer' => $this->whenLoaded('reviewer', fn() => [
                 'id' => $this->reviewer->id,
                 'user' => $this->reviewer->relationLoaded('user') && $this->reviewer->user ? [

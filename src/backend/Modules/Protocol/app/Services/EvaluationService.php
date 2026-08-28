@@ -655,7 +655,6 @@ class EvaluationService
                 'deliberation_date' => $date,
                 'deliberation_location' => $location,
                 'deliberation_scheduled_by' => $secretary->id,
-                'status' => EvaluationForm::STATUS_DELIBERATION_SCHEDULED,
             ]);
 
             $this->recordProtocolHistory(
@@ -681,9 +680,15 @@ class EvaluationService
         return DB::transaction(function () use ($form, $reviewer) {
             $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
 
-            if ($form->status !== EvaluationForm::STATUS_DELIBERATION_SCHEDULED) {
+            if (! in_array($form->status, [
+                EvaluationForm::STATUS_PENDING_REVIEW,
+                EvaluationForm::STATUS_IN_REVIEW,
+                EvaluationForm::STATUS_DELIBERATION_PENDING,
+                EvaluationForm::STATUS_NOT_DELIBERATED,
+                EvaluationForm::STATUS_DELIBERATION_SCHEDULED,
+            ], true)) {
                 throw new HttpResponseException(
-                    response()->json(['message' => 'A deliberação ainda não foi marcada pela secretaria.'], 422)
+                    response()->json(['message' => 'Esta ficha não pode entrar em deliberação no estado actual.'], 422)
                 );
             }
 
@@ -876,14 +881,6 @@ class EvaluationService
             if ($this->isBioeticaForm($form) && ! $this->isPrimaryReviewer($form, $decider)) {
                 throw new HttpResponseException(
                     response()->json(['message' => 'Apenas o revisor principal do Comité de Bioética pode tomar a decisão final.'], 403)
-                );
-            }
-
-            $allSubmitted = $form->hasAllSubmitted();
-
-            if (! $allSubmitted) {
-                throw new HttpResponseException(
-                    response()->json(['message' => 'A decisão final só pode ser tomada após todos os revisores submeterem as suas avaliações.'], 422)
                 );
             }
 
@@ -1172,12 +1169,6 @@ class EvaluationService
                 );
             }
 
-            if (! $form->hasAllSubmitted()) {
-                throw new HttpResponseException(
-                    response()->json(['message' => 'Todos os revisores devem submeter a decisão antes de encerrar a reunião.'], 422)
-                );
-            }
-
             $teacherProfile = $user->teacherProfile;
             $isReviewer = $teacherProfile && $form->reviewerEvaluations()
                 ->where('reviewer_id', $teacherProfile->id)
@@ -1209,6 +1200,7 @@ class EvaluationService
                     'status' => EvaluationForm::STATUS_NOT_DELIBERATED,
                     'deliberation_date' => null,
                     'deliberation_location' => null,
+                    'deliberation_scheduled_by' => null,
                 ]);
 
                 if (! $this->isSharedCommitteeForm($form)) {

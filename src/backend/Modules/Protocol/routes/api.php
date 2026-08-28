@@ -8,6 +8,8 @@ use Modules\Protocol\app\Http\Controllers\OnlyOfficeController;
 use Modules\Protocol\app\Http\Controllers\SupervisorController;
 use Modules\Protocol\app\Http\Controllers\ProtocolApiController;
 use Modules\Protocol\app\Http\Controllers\DashboardController;
+use Modules\Protocol\app\Http\Controllers\AgendaController;
+use Modules\Protocol\app\Http\Controllers\DeliberationMeetingController;
 
 Route::prefix('api')->middleware(['api'])->group(function () {
     Route::get('/onlyoffice/config',
@@ -31,6 +33,16 @@ Route::prefix('api')->middleware(['api'])->group(function () {
 
 
 Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () {
+
+    Route::get('deliberation-queue', [DeliberationMeetingController::class, 'queue']);
+    Route::get('deliberation-meetings', [DeliberationMeetingController::class, 'index']);
+    Route::post('deliberation-meetings', [DeliberationMeetingController::class, 'store']);
+    Route::get('deliberation-meetings/{meeting}', [DeliberationMeetingController::class, 'show']);
+    Route::patch('deliberation-meetings/{meeting}', [DeliberationMeetingController::class, 'update']);
+    Route::post('deliberation-meetings/{meeting}/cancel', [DeliberationMeetingController::class, 'cancel']);
+    Route::post('deliberation-meetings/{meeting}/items/{item}/start', [DeliberationMeetingController::class, 'startItem']);
+    Route::post('deliberation-meetings/{meeting}/items/{item}/close', [DeliberationMeetingController::class, 'closeItem']);
+    Route::get('agenda/events', [AgendaController::class, 'index']);
 
     //Seus proprios temas
      Route::get(

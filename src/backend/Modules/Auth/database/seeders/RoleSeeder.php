@@ -118,5 +118,27 @@ class RoleSeeder extends Seeder
                 );
             }
         }
+
+        $teacherRoleIds = DB::table('roles')
+            ->whereIn('name', ['teacher', 'supervisor'])
+            ->whereNull('deleted_at')
+            ->pluck('id');
+
+        $teacherUserIds = DB::table('teacher_profiles')
+            ->whereNull('deleted_at')
+            ->pluck('user_id');
+
+        foreach ($teacherUserIds as $userId) {
+            foreach ($teacherRoleIds as $roleId) {
+                DB::table('user_roles')->updateOrInsert(
+                    ['user_id' => $userId, 'role_id' => $roleId],
+                    [
+                        'deleted_at' => null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
+            }
+        }
     }
 }

@@ -26,6 +26,7 @@ class SecretaryDashboardBuilder implements DashboardBuilder
 
         if (! $organ) {
             return [
+                'organ' => null,
                 'queue' => [
                     'pending_topics' => 0,
                     'pending_nucleo' => 0,
@@ -36,6 +37,8 @@ class SecretaryDashboardBuilder implements DashboardBuilder
                 'notifications' => $this->notifications($user),
             ];
         }
+
+        $organSummary = $this->organSummary($organ);
 
         if ($organ->type === 'nucleus') {
             $topics = Topic::query()
@@ -62,6 +65,7 @@ class SecretaryDashboardBuilder implements DashboardBuilder
             $pendingTopics = (clone $topics)->count();
 
             return [
+                'organ' => $organSummary,
                 'queue' => [
                     'pending_topics' => $pendingTopics,
                     'pending_nucleo' => 0,
@@ -96,6 +100,7 @@ class SecretaryDashboardBuilder implements DashboardBuilder
             ->all();
 
         return [
+            'organ' => $organSummary,
             'queue' => [
                 'pending_topics'            => 0,
                 'pending_nucleo'           => 0,
@@ -104,6 +109,16 @@ class SecretaryDashboardBuilder implements DashboardBuilder
                 'items'                    => $items,
             ],
             'notifications' => $this->notifications($user),
+        ];
+    }
+
+    private function organSummary($organ): array
+    {
+        return [
+            'id' => $organ->id,
+            'name' => $organ->name,
+            'type' => $organ->type,
+            'description' => $organ->description,
         ];
     }
 
@@ -116,10 +131,10 @@ class SecretaryDashboardBuilder implements DashboardBuilder
         return $user->notifications()
             ->latest()
             ->take(10)
-            ->get(['id', 'data', 'read_at', 'created_at'])
+            ->get(['id', 'title', 'body', 'read_at', 'created_at'])
             ->map(fn ($n) => [
                 'id'         => $n->id,
-                'message'    => $n->data['message'] ?? '',
+                'message'    => $n->body ?: $n->title,
                 'read'       => $n->read_at !== null,
                 'created_at' => $n->created_at,
             ])

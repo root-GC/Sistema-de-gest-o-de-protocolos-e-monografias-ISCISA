@@ -9,11 +9,11 @@ class AssignReviewerRoleFromTopic
 {
     public function handle(TopicReviewersAssigned $event): void
     {
-        $roleId = DB::table('roles')
-            ->where('name', 'reviewer')
-            ->value('id');
+        $roleIds = DB::table('roles')
+            ->whereIn('name', ['teacher', 'supervisor', 'reviewer'])
+            ->pluck('id');
 
-        if (! $roleId) {
+        if ($roleIds->isEmpty()) {
             return;
         }
 
@@ -23,16 +23,19 @@ class AssignReviewerRoleFromTopic
             ->all();
 
         foreach ($userIds as $userId) {
-            DB::table('user_roles')->updateOrInsert(
-                [
-                    'user_id' => $userId,
-                    'role_id' => $roleId,
-                ],
-                [
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]
-            );
+            foreach ($roleIds as $roleId) {
+                DB::table('user_roles')->updateOrInsert(
+                    [
+                        'user_id' => $userId,
+                        'role_id' => $roleId,
+                    ],
+                    [
+                        'deleted_at' => null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                );
+            }
         }
     }
 }

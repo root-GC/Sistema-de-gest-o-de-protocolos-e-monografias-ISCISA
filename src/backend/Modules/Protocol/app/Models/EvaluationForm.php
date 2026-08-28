@@ -84,6 +84,11 @@ class EvaluationForm extends Model
         return $this->hasMany(self::class, 'parent_form_id');
     }
 
+    public function deliberationMeetingItems()
+    {
+        return $this->hasMany(DeliberationMeetingItem::class, 'evaluation_form_id');
+    }
+
     public function isEvaluation(): bool
     {
         return $this->form_type === self::FORM_TYPE_EVALUATION;

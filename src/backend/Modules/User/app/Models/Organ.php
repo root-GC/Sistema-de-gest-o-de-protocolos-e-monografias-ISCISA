@@ -57,6 +57,11 @@ class Organ extends Model
         return $this->hasMany(AdminProfile::class);
     }
 
+    public function deliberationMeetings(): HasMany
+    {
+        return $this->hasMany(\Modules\Protocol\app\Models\DeliberationMeeting::class);
+    }
+
     /**
      * Único órgão que autoriza criar os outros 3 executivos + coordenadores.
      * Centralizado aqui para não espalhar comparações de string pelos controllers.

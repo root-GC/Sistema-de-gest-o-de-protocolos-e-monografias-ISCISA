@@ -3,6 +3,7 @@
 namespace Modules\Auth\app\Builders;
 
 use Modules\User\app\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 /**
  * AuthPayloadBuilder — SGPMC-ISCISA
@@ -27,6 +28,8 @@ class AuthPayloadBuilder
 {
     public function build(User $user): array
     {
+
+        $this->ensureTeacherBaseRoles($user);
 
     Log::info('[PAYLOAD]', [
         'step' => 'build_start',
@@ -63,6 +66,82 @@ class AuthPayloadBuilder
             'permissions' => $permissions,
             'profiles'    => $this->buildProfiles($user, $roles),
         ];
+    }
+
+    /**
+     * Um teacher_profile representa sempre um docente e supervisor. Esta
+     * garantia também corrige contas antigas antes de montar o payload.
+     */
+    private function ensureTeacherBaseRoles(User $user): void
+    {
+        if (! $user->teacherProfile()->exists()) {
+            return;
+        }
+
+        $now = now();
+        $roleIds = DB::table('roles')
+            ->whereIn('name', ['teacher', 'supervisor'])
+            ->whereNull('deleted_at')
+            ->pluck('id', 'name');
+
+        foreach (['teacher', 'supervisor'] as $roleName) {
+            $roleId = $roleIds->get($roleName);
+
+            if (! $roleId) {
+                continue;
+            }
+
+            $query = DB::table('user_roles')
+                ->where('user_id', $user->id)
+                ->where('role_id', $roleId);
+
+            if ($query->exists()) {
+                $query->update([
+                    'deleted_at' => null,
+                    'updated_at' => $now,
+                ]);
+                continue;
+            }
+
+            DB::table('user_roles')->insert([
+                'user_id' => $user->id,
+                'role_id' => $roleId,
+                'deleted_at' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        $supervisorRoleId = $roleIds->get('supervisor');
+
+        if ($supervisorRoleId) {
+            foreach (['supervision.view', 'supervision.approve', 'supervision.comment'] as $permissionCode) {
+                DB::table('permissions')->updateOrInsert(
+                    ['code' => $permissionCode],
+                    [
+                        'description' => $permissionCode,
+                        'deleted_at' => null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
+
+                $permissionId = DB::table('permissions')
+                    ->where('code', $permissionCode)
+                    ->value('id');
+
+                DB::table('role_permissions')->updateOrInsert(
+                    ['role_id' => $supervisorRoleId, 'permission_id' => $permissionId],
+                    [
+                        'deleted_at' => null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
+            }
+        }
+
+        $user->unsetRelation('roles');
     }
 
     private function buildProfiles(User $user, array $roles): array

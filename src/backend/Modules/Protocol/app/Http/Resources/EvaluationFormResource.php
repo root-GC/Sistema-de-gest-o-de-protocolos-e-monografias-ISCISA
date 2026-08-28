@@ -59,7 +59,8 @@ class EvaluationFormResource extends JsonResource
             'deliberation_scheduled_by' => $this->deliberation_scheduled_by,
             'auto_approved' => $this->final_decision && $this->decided_by === null,
             'deliberation_pending' => $this->status === EvaluationForm::STATUS_DELIBERATION_PENDING,
-            'deliberation_scheduled' => $this->status === EvaluationForm::STATUS_DELIBERATION_SCHEDULED,
+            'deliberation_scheduled' => $this->deliberation_date !== null
+                && ! in_array($this->status, [EvaluationForm::STATUS_IN_DELIBERATION, EvaluationForm::STATUS_DELIBERATED, EvaluationForm::STATUS_CONCLUDED], true),
             'in_deliberation' => $this->status === EvaluationForm::STATUS_IN_DELIBERATION,
             'protocol' => $this->whenLoaded('protocol', fn() => [
                 'id' => $this->protocol->id,

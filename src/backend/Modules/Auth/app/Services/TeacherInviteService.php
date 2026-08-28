@@ -27,8 +27,11 @@ class TeacherInviteService
     public function invite(array $data): User
     {
         $roles = $data['roles'] ?? ['teacher', 'supervisor'];
-        if (! in_array('teacher', $roles, true)) {
-            $roles[] = 'teacher'; // garantia extra — nunca criar docente sem a role base
+
+        foreach (['teacher', 'supervisor'] as $requiredRole) {
+            if (! in_array($requiredRole, $roles, true)) {
+                $roles[] = $requiredRole;
+            }
         }
 
         $user = DB::transaction(function () use ($data, $roles) {
@@ -90,7 +93,7 @@ class TeacherInviteService
 
             DB::table('user_roles')->updateOrInsert(
                 ['user_id' => $user->id, 'role_id' => $roleId],
-                ['created_at' => $now, 'updated_at' => $now]
+                ['deleted_at' => null, 'created_at' => $now, 'updated_at' => $now]
             );
         }
     }

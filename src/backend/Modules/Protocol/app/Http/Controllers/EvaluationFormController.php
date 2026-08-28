@@ -16,13 +16,17 @@ use Modules\Protocol\app\Models\Opinion;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Services\DocumentGenerationService;
 use Modules\Protocol\app\Services\EvaluationService;
+use Modules\Protocol\app\Services\DeliberationMeetingService;
 use Modules\User\app\Models\User;
 
 class EvaluationFormController extends Controller
 {
     use AuthorizesRequests;
 
-    public function __construct(private EvaluationService $evaluationService) {}
+    public function __construct(
+        private EvaluationService $evaluationService,
+        private DeliberationMeetingService $meetingService,
+    ) {}
 
     private function canAccessProtocolDocument(User $user, Protocol $protocol): bool
     {
@@ -202,10 +206,12 @@ class EvaluationFormController extends Controller
         }
 
         if (! in_array($form->status, [
+            EvaluationForm::STATUS_PENDING_REVIEW,
+            EvaluationForm::STATUS_IN_REVIEW,
             EvaluationForm::STATUS_DELIBERATION_PENDING,
             EvaluationForm::STATUS_NOT_DELIBERATED,
         ], true)) {
-            return response()->json(['message' => 'A ficha não está em estado de deliberação pendente.'], 422);
+            return response()->json(['message' => 'A ficha não está elegível para deliberação.'], 422);
         }
 
         $validated = $request->validate([
@@ -213,12 +219,12 @@ class EvaluationFormController extends Controller
             'deliberation_location' => 'required|string|max:500',
         ]);
 
-        $form = $this->evaluationService->scheduleDeliberation(
-            $form,
-            $user,
-            $validated['deliberation_date'],
-            $validated['deliberation_location']
-        );
+        $meeting = $this->meetingService->create($user, [
+            'scheduled_at' => $validated['deliberation_date'],
+            'location' => $validated['deliberation_location'],
+            'evaluation_form_ids' => [$form->id],
+        ]);
+        $form = $meeting->items->first()->evaluationForm;
 
         return response()->json([
             'message' => 'Deliberação marcada com sucesso.',
@@ -235,7 +241,12 @@ class EvaluationFormController extends Controller
             return response()->json(['message' => 'Apenas revisores podem iniciar a deliberação.'], 403);
         }
 
-        $form = $this->evaluationService->startDeliberation($form, $user);
+        $item = $this->meetingService->activeItemForForm($form);
+        if (! $item) {
+            return response()->json(['message' => 'A ficha não pertence a uma reunião ativa.'], 422);
+        }
+        $meeting = $this->meetingService->startItem($item->meeting, $item, $user);
+        $form = $meeting->items->firstWhere('evaluation_form_id', $form->id)?->evaluationForm ?? $form->fresh();
 
         return response()->json([
             'message' => 'Reunião de deliberação iniciada.',
@@ -522,11 +533,17 @@ class EvaluationFormController extends Controller
         'result' => 'nullable|string|in:deliberated,not_deliberated',
     ]);
 
-    $form = $this->evaluationService->closeMeeting(
-        $form,
-        $request->user(),
-        $validated['result'] ?? null
+    $item = $this->meetingService->activeItemForForm($form);
+    if (! $item) {
+        return response()->json(['message' => 'A ficha não pertence a uma reunião ativa.'], 422);
+    }
+    $result = $validated['result'] ?? (
+        $form->reviewerEvaluations()->pluck('decision')->filter()->unique()->count() === 1
+            ? EvaluationForm::STATUS_DELIBERATED
+            : EvaluationForm::STATUS_NOT_DELIBERATED
     );
+    $meeting = $this->meetingService->closeItem($item->meeting, $item, $request->user(), $result);
+    $form = $meeting->items->firstWhere('evaluation_form_id', $form->id)?->evaluationForm ?? $form->fresh();
 
     $message = $form->status === EvaluationForm::STATUS_DELIBERATED
         ? 'Reunião encerrada com deliberação. Aguardando decisão final.'

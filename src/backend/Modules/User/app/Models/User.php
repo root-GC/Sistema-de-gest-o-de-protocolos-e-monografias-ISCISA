@@ -78,6 +78,11 @@ class User extends Authenticatable
         return $this->belongsToMany(Permission::class, 'user_permissions')->withTimestamps();
     }
 
+    public function notifications()
+    {
+        return $this->hasMany(\App\Models\Notification::class);
+    }
+
     // ── Perfis ───────────────────────────────────────────────────────
     public function teacherProfile()     { return $this->hasOne(TeacherProfile::class); }
     public function studentProfile()     { return $this->hasOne(StudentProfile::class); }
