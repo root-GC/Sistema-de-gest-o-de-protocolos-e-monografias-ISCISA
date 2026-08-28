@@ -7,5 +7,10 @@
     "providers": [
         "Modules\\Protocol\\app\\Providers\\ProtocolServiceProvider"
     ],
+    "migration": {
+        "seeds": [
+            "Modules\\Protocol\\database\\seeders\\ProtocolDatabaseSeeder"
+        ]
+    },
     "files": []
 }

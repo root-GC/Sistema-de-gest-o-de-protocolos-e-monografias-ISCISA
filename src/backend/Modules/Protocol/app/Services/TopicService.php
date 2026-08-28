@@ -100,6 +100,15 @@ class TopicService
             'supervisor.user:id,name,email',
         ]);
 
+        app(TopicHistoryService::class)->record(
+            $topic,
+            'submitted',
+            $user,
+            null,
+            $topic->status,
+            'Tema submetido pelo estudante.'
+        );
+
         event(new TopicStatusChanged($topic, null, $topic->status, $user));
 
         return [
@@ -265,6 +274,15 @@ class TopicService
                 'supervisor_decision_at' => now(),
             ]);
 
+            app(TopicHistoryService::class)->record(
+                $topic,
+                'supervisor_approved',
+                $supervisor,
+                Topic::STATUS_PENDING_SUPERVISOR,
+                Topic::STATUS_PENDING_NUCLEO,
+                'Tema aprovado pelo supervisor e encaminhado ao Nucleo Cientifico.'
+            );
+
             event(new TopicStatusChanged($topic, Topic::STATUS_PENDING_SUPERVISOR, Topic::STATUS_PENDING_NUCLEO, $supervisor));
 
             return $topic->load([
@@ -304,6 +322,16 @@ class TopicService
                 'supervisor_decision_at' => now(),
             ]);
 
+            app(TopicHistoryService::class)->record(
+                $topic,
+                'supervisor_rejected',
+                $supervisor,
+                Topic::STATUS_PENDING_SUPERVISOR,
+                Topic::STATUS_REJECTED_SUPERVISOR,
+                'Tema nao aprovado pelo supervisor.',
+                ['comment' => $comment]
+            );
+
             event(new TopicStatusChanged($topic, Topic::STATUS_PENDING_SUPERVISOR, Topic::STATUS_REJECTED_SUPERVISOR, $supervisor));
 
             return $topic->load([
@@ -341,12 +369,18 @@ class TopicService
                 Topic::STATUS_PENDING_NUCLEO,
                 Topic::STATUS_ASSIGNED,
                 Topic::STATUS_IN_REVIEW,
+                Topic::STATUS_APPROVED_NUCLEO,
+                Topic::STATUS_REJECTED_NUCLEO,
             ])
             ->with([
                 'scientificArea:id,name,organ_id',
                 'course:id,name,code',
                 'reviewAssignments.reviewer.user:id,name,email',
                 'reviewAssignments.evaluation.comment:id,content,status,created_at',
+                'histories' => fn($query) => $query
+                    ->with('actor:id,name,email')
+                    ->orderBy('occurred_at')
+                    ->orderBy('id'),
             ])
             ->latest('submitted_at')
             ->get();
@@ -499,9 +533,21 @@ class TopicService
                 ->all();
 
             if ($assignedReviewerIds !== []) {
+                $oldStatus = $topic->status;
+
                 $topic->update([
                     'status' => Topic::STATUS_ASSIGNED,
                 ]);
+
+                app(TopicHistoryService::class)->record(
+                    $topic,
+                    'reviewers_assigned',
+                    $secretary,
+                    $oldStatus,
+                    Topic::STATUS_ASSIGNED,
+                    'Revisores atribuidos ao tema no Nucleo Cientifico.',
+                    ['reviewer_ids' => array_values($assignedReviewerIds)]
+                );
 
                 event(new TopicReviewersAssigned($topic->fresh(), $assignedReviewerIds));
             }
@@ -511,6 +557,7 @@ class TopicService
                 'course:id,name,code',
                 'reviewAssignments.reviewer.user:id,name,email',
                 'reviewAssignments.evaluation:id,assignment_id,decision,evaluated_at',
+                'histories.actor:id,name,email',
             ]);
         });
     }
@@ -648,12 +695,28 @@ class TopicService
             }
 
             $oldStatus = $topic->status;
+            $newStatus = $finalDecision ?: Topic::STATUS_IN_REVIEW;
+
             $topic->update([
-                'status' => $finalDecision ?: Topic::STATUS_IN_REVIEW,
+                'status' => $newStatus,
             ]);
 
+            app(TopicHistoryService::class)->record(
+                $topic,
+                $finalDecision ? 'review_completed' : 'review_submitted',
+                $reviewer,
+                $oldStatus,
+                $newStatus,
+                $finalDecision ? 'Avaliação final do tema concluída no Nucleo Cientifico.' : 'Avaliação do tema submetida por um revisor.',
+                [
+                    'reviewer_id' => $teacherProfile->id,
+                    'assignment_id' => $assignment->id,
+                    'decision' => $evaluation->decision,
+                ]
+            );
+
             if ($finalDecision) {
-                event(new TopicStatusChanged($topic, $oldStatus, $finalDecision));
+                event(new TopicStatusChanged($topic, $oldStatus, $finalDecision, $reviewer));
             }
 
             return [

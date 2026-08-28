@@ -59,6 +59,24 @@ class ProtocolApiController extends Controller
         return false;
     }
 
+    private function reviewerCanAccessRequirement(User $user, Protocol $protocol, ProtocolDocumentRequirement $requirement): bool
+    {
+        $teacherProfile = $user->teacherProfile;
+        $requiredOrganType = Protocol::organTypeFromFormOrgan($requirement->required_for_organ);
+
+        if (! $teacherProfile || ! $requiredOrganType || ! $user->hasPermission('protocol.evaluate')) {
+            return false;
+        }
+
+        return $protocol->reviewAssignments()
+            ->where(fn($query) => $query
+                ->where('reviewer_one', $teacherProfile->id)
+                ->orWhere('reviewer_two', $teacherProfile->id)
+            )
+            ->whereHas('organ', fn($query) => $query->where('type', $requiredOrganType))
+            ->exists();
+    }
+
     private function hasSecretaryOrganTrace(Protocol $protocol, int $organId, ?string $organType): bool
     {
         $formOrgan = $organType ? Protocol::formOrganFromOrganType($organType) : null;
@@ -261,6 +279,24 @@ class ProtocolApiController extends Controller
             if ($user->secretaryProfile->organ->type === Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE) {
                 $requirements = $requirements->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO);
             }
+        }
+
+        if ($user->teacherProfile && $user->hasPermission('protocol.evaluate')) {
+            $assignment = $protocol->reviewAssignments()
+                ->with('organ:id,name,type')
+                ->where(fn($query) => $query
+                    ->where('reviewer_one', $user->teacherProfile->id)
+                    ->orWhere('reviewer_two', $user->teacherProfile->id)
+                )
+                ->orderByDesc('assigned_at')
+                ->first();
+            $formOrgan = $assignment?->organ?->type
+                ? Protocol::formOrganFromOrganType($assignment->organ->type)
+                : null;
+
+            $requirements = $formOrgan
+                ? $requirements->where('required_for_organ', $formOrgan)
+                : collect();
         }
 
         return response()->json([
@@ -813,6 +849,10 @@ class ProtocolApiController extends Controller
         $user = $request->user();
 
         if ((int) $requirement->protocol_id !== (int) $protocol->id || ! $this->canAccessProtocolDocument($user, $protocol)) {
+            abort(403);
+        }
+
+        if ($user->hasPermission('protocol.evaluate') && ! $this->reviewerCanAccessRequirement($user, $protocol, $requirement)) {
             abort(403);
         }
 

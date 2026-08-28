@@ -926,10 +926,6 @@ class ProtocolService
         }
 
         $statusMap = [
-            Protocol::ORGAN_TYPE_NUCLEUS => [
-                Protocol::STATUS_PENDING_NUCLEO,
-                Protocol::STATUS_IN_REVIEW_NUCLEO,
-            ],
             Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => [
                 Protocol::STATUS_DOCUMENTS_PENDING_CC,
                 Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
@@ -1187,34 +1183,34 @@ class ProtocolService
         }
 
         return Protocol::query()
-            ->whereIn('status', [
-                Protocol::STATUS_IN_REVIEW_NUCLEO,
-                Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
-                Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA,
-            ])
             ->whereHas(
                 'reviewAssignments',
                 fn($q) => $q
-                    ->where('status', 'pending')
-                    ->whereColumn('protocol_review_assignments.organ_id', 'protocols.current_organ_id')
                     ->where(
                         fn($q) => $q
-                            ->where('reviewer_one', $teacherProfile->id)
+                        ->where('reviewer_one', $teacherProfile->id)
                             ->orWhere('reviewer_two', $teacherProfile->id)
                     )
             )
             ->with([
-                'topic:id,title,status,scientific_area_id',
+                'topic:id,title,status,scientific_area_id,course_id',
                 'topic.scientificArea:id,name',
                 'topic.course:id,name,code,scientific_area_id',
                 'latestDocument',
+                'protocolDocumentRequirements',
+                'histories' => fn($q) => $q
+                    ->with(['actor:id,name,email', 'organ:id,name,type'])
+                    ->orderByDesc('occurred_at')
+                    ->orderByDesc('id'),
                 'reviewAssignments' => fn($q) => $q
-                    ->where('status', 'pending')
                     ->where(
                         fn($q) => $q
-                            ->where('reviewer_one', $teacherProfile->id)
-                            ->orWhere('reviewer_two', $teacherProfile->id)
-                    ),
+                        ->where('reviewer_one', $teacherProfile->id)
+                        ->orWhere('reviewer_two', $teacherProfile->id)
+                    )
+                    ->with('organ:id,name,type')
+                    ->orderByDesc('assigned_at')
+                    ->orderByDesc('id'),
             ])
             ->latest('submitted_at')
             ->get();
@@ -1400,6 +1396,12 @@ class ProtocolService
 
     public function assignReviewersToOrgan(Protocol $protocol, array $reviewerIds, User $secretary, string $expectedOrganType): Protocol
     {
+        if ($expectedOrganType === Protocol::ORGAN_TYPE_NUCLEUS) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'Os Núcleos Científicos não atribuem revisores a protocolos.'], 422)
+            );
+        }
+
         return DB::transaction(function () use ($protocol, $reviewerIds, $secretary, $expectedOrganType) {
             $protocol = Protocol::lockForUpdate()->findOrFail($protocol->id);
             $secretaryProfile = $secretary->secretaryProfile;
@@ -1418,7 +1420,6 @@ class ProtocolService
             }
 
             $assignableStatuses = [
-                Protocol::STATUS_PENDING_NUCLEO,
                 Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
                 Protocol::STATUS_PENDING_COMITE_BIOETICA,
             ];
@@ -1917,7 +1918,6 @@ class ProtocolService
             }
 
             $assignableStatuses = [
-                Protocol::STATUS_PENDING_NUCLEO,
                 Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
                 Protocol::STATUS_PENDING_COMITE_BIOETICA,
             ];
@@ -1929,6 +1929,12 @@ class ProtocolService
             }
 
             $organ = $secretaryProfile->organ;
+
+            if ($organ?->type === Protocol::ORGAN_TYPE_NUCLEUS) {
+                throw new HttpResponseException(
+                    response()->json(['message' => 'Os Núcleos Científicos não atribuem revisores a protocolos.'], 422)
+                );
+            }
 
             if (! $organ || (int) $protocol->current_organ_id !== (int) $organ->id) {
                 throw new HttpResponseException(

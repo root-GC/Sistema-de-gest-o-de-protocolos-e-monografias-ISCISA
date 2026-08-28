@@ -52,7 +52,7 @@ Template global de critérios de avaliação. Populado pelo seeder.
 | order_column | INT | Ordem de apresentação |
 | is_active | BOOLEAN | Activar/desactivar critério |
 
-**Seeder**: 26 critérios extraídos da ficha oficial do Comité Científico do ISCISA.
+**Seeder**: 28 critérios extraídos da ficha oficial do Comité Científico do ISCISA.
 
 ### `evaluation_forms`
 Uma ficha por par (protocolo, versão, órgão).
@@ -242,7 +242,7 @@ database/migrations/
 └── 2026_07_09_000006_create_opinions_table.php
 
 database/seeders/
-├── EvaluationCriteriaSeeder.php (26 critérios em 3 grupos)
+├── EvaluationCriteriaSeeder.php (28 critérios em 3 grupos)
 └── ProtocolDatabaseSeeder.php   (actualizado)
 
 app/Models/

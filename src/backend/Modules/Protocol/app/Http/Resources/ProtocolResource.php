@@ -97,6 +97,24 @@ class ProtocolResource extends JsonResource
                     'type' => $history->organ->type,
                 ] : null,
             ])->values()),
+            'review_assignments' => $this->whenLoaded('reviewAssignments', fn() => $this->reviewAssignments->map(fn($assignment) => [
+                'id' => $assignment->id,
+                'organ_id' => $assignment->organ_id,
+                'status' => $assignment->status,
+                'review_order' => (bool) $assignment->review_order,
+                'is_primary' => (bool) $assignment->is_primary,
+                'assigned_at' => $assignment->assigned_at,
+                'reviewer_one' => $assignment->reviewerOne ? [
+                    'id' => $assignment->reviewerOne->id,
+                    'name' => $assignment->reviewerOne->user?->name,
+                    'email' => $assignment->reviewerOne->user?->email,
+                ] : null,
+                'reviewer_two' => $assignment->reviewerTwo ? [
+                    'id' => $assignment->reviewerTwo->id,
+                    'name' => $assignment->reviewerTwo->user?->name,
+                    'email' => $assignment->reviewerTwo->user?->email,
+                ] : null,
+            ])->values()),
         ];
     }
 }

@@ -1118,10 +1118,6 @@ class EvaluationService
         }
 
         $statusMap = [
-            Protocol::ORGAN_TYPE_NUCLEUS => [
-                Protocol::STATUS_PENDING_NUCLEO,
-                Protocol::STATUS_IN_REVIEW_NUCLEO,
-            ],
             Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE => [
                 Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
                 Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
