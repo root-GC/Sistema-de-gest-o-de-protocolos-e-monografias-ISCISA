@@ -22,6 +22,7 @@ class EvaluationForm extends Model
 
     protected $fillable = [
         'protocol_id',
+        'source_document_id',
         'version',
         'form_type',
         'parent_form_id',
@@ -47,6 +48,11 @@ class EvaluationForm extends Model
     public function protocol()
     {
         return $this->belongsTo(Protocol::class);
+    }
+
+    public function sourceDocument()
+    {
+        return $this->belongsTo(Document::class, 'source_document_id');
     }
 
     public function formCriteria()

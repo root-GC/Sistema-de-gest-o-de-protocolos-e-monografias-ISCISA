@@ -24,6 +24,8 @@ Route::prefix('api')->middleware(['api', 'auth:sanctum'])->group(function () {
     Route::get('/onlyoffice/config/{protocol}',
         [OnlyOfficeController::class, 'configForProtocol']
     )->name('onlyoffice.config.protocol');
+    Route::get('/onlyoffice/topic/{topic}', [OnlyOfficeController::class, 'configForTopic'])
+        ->name('onlyoffice.config.topic');
 });
 
 Route::prefix('api')->middleware(['api'])->group(function () {
@@ -39,8 +41,8 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::post('deliberation-meetings', [DeliberationMeetingController::class, 'store']);
     Route::get('deliberation-meetings/{meeting}', [DeliberationMeetingController::class, 'show']);
     Route::patch('deliberation-meetings/{meeting}', [DeliberationMeetingController::class, 'update']);
+    Route::post('deliberation-meetings/{meeting}/start', [DeliberationMeetingController::class, 'start']);
     Route::post('deliberation-meetings/{meeting}/cancel', [DeliberationMeetingController::class, 'cancel']);
-    Route::post('deliberation-meetings/{meeting}/items/{item}/start', [DeliberationMeetingController::class, 'startItem']);
     Route::post('deliberation-meetings/{meeting}/items/{item}/close', [DeliberationMeetingController::class, 'closeItem']);
     Route::get('agenda/events', [AgendaController::class, 'index']);
 
@@ -55,6 +57,7 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
 
     Route::post('topics', [TopicController::class, 'store'])->name('topic.store');
     Route::get('topics', [TopicController::class, 'index'])->name('topic.index');
+    Route::get('topics/{topic}/document', [TopicController::class, 'downloadDocument'])->name('topic.document.download');
 
     Route::patch('topics/{topic}/supervisor-approve', [TopicController::class, 'approveBySupervisor'])->name('topic.approve');
     Route::patch('topics/{topic}/supervisor-reject', [TopicController::class, 'rejectBySupervisor'])->name('topic.reject');
@@ -69,6 +72,7 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::get('reviewer/topics', [TopicController::class, 'getForReviewer'])->name('reviewer.topics.list');
     Route::get('topics/{topic}/comments', [TopicController::class, 'getComments'])->name('topic.comments.index');
     Route::post('topics/{topic}/comments', [TopicController::class, 'submitComment'])->name('topic.comments.store');
+    Route::post('topics/{topic}/supervisor-comments', [TopicController::class, 'submitSupervisorComment'])->name('topic.supervisor-comments.store');
     Route::post('topics/{topic}/evaluations', [TopicController::class, 'submitEvaluation'])->name('topic.evaluations.store');
 
 
@@ -77,6 +81,11 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::get('protocols', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@index')->name('protocol.index');
     Route::get('protocols/{protocol}', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@show')->name('protocol.show');
     Route::get('protocols/{protocol}/history', [ProtocolApiController::class, 'history'])->name('protocol.history');
+    Route::get('protocols/{protocol}/review-context', [ProtocolApiController::class, 'reviewContext'])->name('protocol.review-context');
+    Route::get('protocols/{protocol}/documents/{document}/download', [ProtocolApiController::class, 'downloadDocumentVersion'])->name('protocol.documents.download');
+    Route::get('protocols/{protocol}/topic-document/download', [ProtocolApiController::class, 'downloadTopicDocumentForProtocol'])->name('protocol.topic-document.download');
+    Route::get('protocols/{protocol}/review-comments', [ProtocolApiController::class, 'listReviewComments'])->name('protocol.review-comments.index');
+    Route::post('protocols/{protocol}/review-comments', [ProtocolApiController::class, 'storeReviewComment'])->name('protocol.review-comments.store');
     Route::patch('protocols/{protocol}/supervisor-approve', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@approveBySupervisor')->name('protocol.supervisor-approve');
     Route::patch('protocols/{protocol}/supervisor-reject', 'Modules\\Protocol\\app\\Http\\Controllers\\ProtocolApiController@rejectBySupervisor')->name('protocol.supervisor-reject');
 
@@ -103,7 +112,6 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('nucleo.evaluation-forms.criteria.review');
         Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('nucleo.evaluation-forms.submit');
         Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('nucleo.evaluation-forms.schedule-deliberation');
-        Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('nucleo.evaluation-forms.start-deliberation');
         Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('nucleo.evaluation-forms.submit-deliberation');
 
         // NOVO: encerrar reunião (deliberated | not_deliberated)
@@ -132,7 +140,6 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::post('evaluation-forms/{form}/mark-evaluated', [EvaluationFormController::class, 'markEvaluated'])->name('cc.evaluation-forms.mark-evaluated');
         Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('cc.evaluation-forms.submit');
         Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('cc.evaluation-forms.schedule-deliberation');
-        Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('cc.evaluation-forms.start-deliberation');
         Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('cc.evaluation-forms.submit-deliberation');
 
         // NOVO
@@ -160,7 +167,6 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::post('evaluation-forms/{form}/mark-evaluated', [EvaluationFormController::class, 'markEvaluated'])->name('bioetica.evaluation-forms.mark-evaluated');
         Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('bioetica.evaluation-forms.submit');
         Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('bioetica.evaluation-forms.schedule-deliberation');
-        Route::post('evaluation-forms/{form}/start-deliberation', [EvaluationFormController::class, 'startDeliberation'])->name('bioetica.evaluation-forms.start-deliberation');
         Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('bioetica.evaluation-forms.submit-deliberation');
         Route::post('evaluation-forms/{form}/close-meeting', [EvaluationFormController::class, 'closeMeeting'])->name('bioetica.evaluation-forms.close-meeting');
         Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('bioetica.evaluation-forms.decide');

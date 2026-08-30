@@ -215,9 +215,19 @@ class Protocol extends Model
         return $this->hasMany(Opinion::class);
     }
 
+    public function evaluationForms()
+    {
+        return $this->hasMany(EvaluationForm::class);
+    }
+
     public function protocolDocumentRequirements()
     {
         return $this->hasMany(ProtocolDocumentRequirement::class);
+    }
+
+    public function reviewComments()
+    {
+        return $this->hasMany(ProtocolReviewComment::class);
     }
 
     public function supervisor()

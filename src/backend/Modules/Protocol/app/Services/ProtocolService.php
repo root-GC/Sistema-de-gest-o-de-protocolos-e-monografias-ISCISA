@@ -15,6 +15,7 @@ use Modules\Protocol\app\Events\ProtocolReviewersAssigned;
 use Modules\Protocol\app\Events\ProtocolStatusChanged;
 use Modules\Protocol\app\Models\ProtocolDocumentRequirement;
 use Modules\Protocol\app\Models\ProtocolReviewAssignment;
+use Modules\Protocol\app\Models\ProtocolReviewComment;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
 use Modules\Protocol\app\Models\Topic;
 use Modules\Protocol\app\Models\TopicReviewAssignment;
@@ -92,15 +93,18 @@ class ProtocolService
                 $oldStatus = $protocol->status;
                 $oldSubmissionNumber = (int) ($protocol->submission_number ?: 1);
                 $previousRequiredDocuments = $protocol->protocolDocumentRequirements()
+                    ->whereNull('archived_at')
                     ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
                     ->where('is_optional', false)
                     ->get()
                     ->keyBy('document_key');
                 $previousCIBSDocuments = $protocol->protocolDocumentRequirements()
+                    ->whereNull('archived_at')
                     ->where('required_for_organ', Protocol::ORGAN_COMITE_BIOETICA)
                     ->get()
                     ->keyBy('document_key');
                 $previousOtherDocuments = $protocol->protocolDocumentRequirements()
+                    ->whereNull('archived_at')
                     ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
                     ->where('is_optional', true)
                     ->get()
@@ -122,10 +126,11 @@ class ProtocolService
                     'supervisor_decision_at' => null,
                     'justification' => null,
                     'current_organ_id' => $currentOrganId,
-                    'nc_version' => 0,
-                    'cc_version' => 0,
-                    'cb_version' => 0,
                 ]);
+
+                $protocol->protocolDocumentRequirements()
+                    ->whereNull('archived_at')
+                    ->update(['archived_at' => now()]);
             } else {
                 $temporaryCode = 'TMP-' . strtoupper(uniqid());
 
@@ -314,18 +319,12 @@ class ProtocolService
             ];
         }
 
-        if ($previousRequiredDocuments->isNotEmpty()) {
-            $protocol->protocolDocumentRequirements()
-                ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
-                ->where('is_optional', false)
-                ->delete();
-        }
-
         $storedDocuments = [];
 
         foreach ($preparedDocuments as $preparedDocument) {
             $requirement = ProtocolDocumentRequirement::create([
                 'protocol_id' => $protocol->id,
+                'submission_number' => $submissionNumber,
                 'document_key' => $preparedDocument['document_key'],
                 'nome' => $preparedDocument['nome'],
                 'required_for_organ' => Protocol::ORGAN_COMITE_CIENTIFICO,
@@ -390,17 +389,12 @@ class ProtocolService
             ];
         }
 
-        if ($previousCIBSDocuments->isNotEmpty()) {
-            $protocol->protocolDocumentRequirements()
-                ->where('required_for_organ', Protocol::ORGAN_COMITE_BIOETICA)
-                ->delete();
-        }
-
         $storedDocuments = [];
 
         foreach ($preparedDocuments as $preparedDocument) {
             $requirement = ProtocolDocumentRequirement::create([
                 'protocol_id' => $protocol->id,
+                'submission_number' => $submissionNumber,
                 'document_key' => $preparedDocument['document_key'],
                 'nome' => $preparedDocument['nome'],
                 'required_for_organ' => Protocol::ORGAN_COMITE_BIOETICA,
@@ -434,11 +428,6 @@ class ProtocolService
         $previousOtherDocuments = $previousOtherDocuments ?? collect();
         $storedDocuments = [];
 
-        $protocol->protocolDocumentRequirements()
-            ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
-            ->where('is_optional', true)
-            ->delete();
-
         $index = 0;
 
         foreach ($otherDocuments as $key => $file) {
@@ -461,6 +450,7 @@ class ProtocolService
 
             $requirement = ProtocolDocumentRequirement::create([
                 'protocol_id' => $protocol->id,
+                'submission_number' => $submissionNumber,
                 'document_key' => $documentKey,
                 'nome' => $nome,
                 'required_for_organ' => Protocol::ORGAN_COMITE_CIENTIFICO,
@@ -494,6 +484,7 @@ class ProtocolService
 
             $requirement = ProtocolDocumentRequirement::create([
                 'protocol_id' => $protocol->id,
+                'submission_number' => $submissionNumber,
                 'document_key' => $previous->document_key,
                 'nome' => $previous->nome,
                 'required_for_organ' => Protocol::ORGAN_COMITE_CIENTIFICO,
@@ -714,6 +705,8 @@ class ProtocolService
             : count(ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS);
 
         $requirements = $protocol->protocolDocumentRequirements()
+            ->whereNull('archived_at')
+            ->where('submission_number', (int) ($protocol->submission_number ?: 1))
             ->where('required_for_organ', $organ)
             ->where('is_optional', false)
             ->get();
@@ -822,7 +815,8 @@ class ProtocolService
                     ], 500));
                 }
 
-                $versionLabel = Protocol::organVersionLabel(Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE, 1);
+                $ccVersion = max(0, (int) $protocol->cc_version) + 1;
+                $versionLabel = Protocol::organVersionLabel(Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE, $ccVersion);
 
                 $protocol->update([
                     'status' => Protocol::STATUS_DOCUMENTS_PENDING_CC,
@@ -831,13 +825,9 @@ class ProtocolService
                     'supervisor_decision_at' => now(),
                     'justification' => null,
                     'current_organ_id' => $ccOrgan->id,
-                    'nc_version' => 0,
-                    'cc_version' => 1,
-                    'cb_version' => 0,
+                    'cc_version' => $ccVersion,
                     'version' => $versionLabel,
                 ]);
-
-                $this->syncLatestDocumentVersionLabel($protocol, $versionLabel);
             } else {
                 $protocol->update([
                     'status' => Protocol::STATUS_REJECTED_SUPERVISOR,
@@ -845,10 +835,27 @@ class ProtocolService
                     'supervisor_id' => $assignedSupervisorId,
                     'supervisor_decision_at' => now(),
                     'justification' => $justification,
-                    'nc_version' => 0,
-                    'cc_version' => 0,
-                    'cb_version' => 0,
                 ]);
+
+                if (trim((string) $justification) !== '') {
+                    $content = trim($justification);
+                    $latestComment = ProtocolReviewComment::query()
+                        ->where('protocol_id', $protocol->id)
+                        ->where('user_id', $supervisor->id)
+                        ->where('stage', 'supervisor')
+                        ->latest('created_at')
+                        ->first();
+
+                    if (! $latestComment || $latestComment->content !== $content) {
+                        ProtocolReviewComment::create([
+                            'protocol_id' => $protocol->id,
+                            'document_id' => $protocol->latestDocument()->value('id'),
+                            'user_id' => $supervisor->id,
+                            'stage' => 'supervisor',
+                            'content' => $content,
+                        ]);
+                    }
+                }
 
                 $this->markLatestDocumentRejected($protocol, $supervisor->id);
             }
@@ -870,6 +877,8 @@ class ProtocolService
                 [
                     'justification' => $decision === 'approved' ? null : $justification,
                     'submission_number' => (int) $protocol->submission_number,
+                    'organ_version' => $protocol->version,
+                    'document_id' => $protocol->latestDocument()->value('id'),
                 ]
             );
 
@@ -892,9 +901,8 @@ class ProtocolService
             return;
         }
 
-        $latestDocument->update([
-            'version_label' => $versionLabel,
-        ]);
+        // O rótulo do documento é a versão da entrega do estudante. A versão
+        // do órgão é guardada em protocols.version e não altera o histórico.
     }
 
     public function markLatestDocumentRejected(Protocol $protocol, ?int $userId): void
@@ -1089,15 +1097,18 @@ class ProtocolService
                     );
                 }
 
+                $cibsVersion = max(0, (int) $protocol->cb_version) + 1;
+
                 $protocol->update([
                     'status' => Protocol::STATUS_DOCUMENTS_PENDING_CIBS,
                     'current_organ_id' => $nextOrgan->id,
-                    'cb_version' => 1,
-                    'version' => Protocol::organVersionLabel(Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE, 1),
+                    'cb_version' => $cibsVersion,
+                    'version' => Protocol::organVersionLabel(Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE, $cibsVersion),
                 ]);
 
                 ProtocolDocumentRequirement::create([
                     'protocol_id' => $protocol->id,
+                    'submission_number' => (int) ($protocol->submission_number ?: 1),
                     'document_key' => ProtocolDocumentRequirement::CIBS_AUTO_DOCUMENT_KEY,
                     'nome' => ProtocolDocumentRequirement::CIBS_AUTO_DOCUMENT_NAME,
                     'required_for_organ' => Protocol::ORGAN_COMITE_BIOETICA,

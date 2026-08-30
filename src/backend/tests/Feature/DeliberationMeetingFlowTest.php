@@ -72,15 +72,23 @@ class DeliberationMeetingFlowTest extends TestCase
 
         $item = $meeting->items->first();
         try {
-            $service->startItem($meeting, $item, $reviewer);
+            $service->startMeeting($meeting, $reviewer);
+            $this->fail('Um revisor não pode iniciar a reunião.');
+        } catch (HttpResponseException $exception) {
+            $this->assertSame(403, $exception->getResponse()->getStatusCode());
+        }
+
+        try {
+            $service->startMeeting($meeting, $secretary);
             $this->fail('A reunião não pode iniciar antes do horário marcado.');
         } catch (HttpResponseException $exception) {
             $this->assertSame(422, $exception->getResponse()->getStatusCode());
         }
 
         Carbon::setTestNow('2026-08-29 10:00:00 UTC');
-        $meeting = $service->startItem($meeting, $item, $reviewer);
+        $meeting = $service->startMeeting($meeting, $secretary);
         $this->assertSame('in_progress', $meeting->status);
+        $this->assertSame(DeliberationMeetingItem::STATUS_IN_PROGRESS, $meeting->items->first()->status);
         $this->assertSame(EvaluationForm::STATUS_IN_DELIBERATION, $form->fresh()->status);
 
         $meeting = $service->closeItem(

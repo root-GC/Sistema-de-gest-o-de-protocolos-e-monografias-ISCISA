@@ -13,6 +13,8 @@ use Modules\Protocol\app\Models\Document;
 use Modules\Protocol\app\Models\Opinion;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Models\ProtocolDocumentRequirement;
+use Modules\Protocol\app\Models\ProtocolReviewComment;
+use Modules\Protocol\app\Models\TopicReviewComment;
 use Modules\User\app\Models\User;
 
 class ProtocolApiController extends Controller
@@ -200,6 +202,189 @@ class ProtocolApiController extends Controller
         ]);
     }
 
+    public function reviewContext(Request $request, Protocol $protocol)
+    {
+        $user = $request->user();
+
+        if (! $this->canAccessProtocolDocument($user, $protocol)) {
+            abort(403);
+        }
+
+        $protocol->load([
+            'topic:id,title,document_path,document_name,student_id,supervisor_id',
+            'topic.reviewAssignments.evaluation.comment',
+            'documents' => fn ($query) => $query->orderBy('version'),
+            'evaluationForms.sourceDocument',
+            'evaluationForms.opinions',
+            'evaluationForms.reviewerEvaluations.reviewer.user',
+        ]);
+
+        $isStudent = (int) $protocol->student === (int) $user->id;
+        $isCC = $this->userHasOrganRole($user, Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE, $protocol);
+        $isCIBS = $this->userHasOrganRole($user, Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE, $protocol);
+        $topic = $protocol->topic;
+
+        $topicComments = $topic
+            ? TopicReviewComment::query()->where('topic_id', $topic->id)
+                ->with('user:id,name,email')->orderBy('created_at')->get()
+            : collect();
+
+        $response = [
+            'protocol' => [
+                'id' => $protocol->id,
+                'code' => $protocol->code,
+                'submission_number' => $protocol->submission_number,
+                'version' => $protocol->version,
+            ],
+            'documents' => $protocol->documents->map(fn (Document $document) => [
+                'id' => $document->id,
+                'submission_number' => $document->version,
+                'label' => $document->version_label,
+                'file_name' => $document->file_name,
+                'created_at' => $document->created_at,
+                'download_url' => url("api/v1/protocols/{$protocol->id}/documents/{$document->id}/download"),
+            ])->values(),
+            'topic' => $topic ? [
+                'id' => $topic->id,
+                'title' => $topic->title,
+                'document_name' => $topic->document_name,
+                'download_url' => $topic->document_path
+                    ? url("api/v1/protocols/{$protocol->id}/topic-document/download")
+                    : null,
+                'comments' => $topicComments->map(fn (TopicReviewComment $comment) => [
+                    'id' => $comment->id,
+                    'content' => $comment->content,
+                    'created_at' => $comment->created_at,
+                    'author' => $comment->user ? ['name' => $comment->user->name] : null,
+                ])->values(),
+                'evaluations' => $topic->reviewAssignments
+                    ->filter(fn ($assignment) => $assignment->evaluation)
+                    ->map(fn ($assignment) => [
+                        'decision' => $assignment->evaluation->decision,
+                        'evaluated_at' => $assignment->evaluation->evaluated_at,
+                        'comment' => $assignment->evaluation->comment?->content,
+                    ])->values(),
+            ] : null,
+        ];
+
+        if (! $isStudent && ($isCC || $isCIBS)) {
+            $ccForms = $protocol->evaluationForms
+                ->where('organ', Protocol::ORGAN_COMITE_CIENTIFICO)
+                ->map(fn ($form) => [
+                    'id' => $form->id,
+                    'version' => $form->version,
+                    'decision' => $form->final_decision,
+                    'conclusion_summary' => $form->conclusion_summary,
+                    'source_document_id' => $form->source_document_id,
+                    'reviews' => $form->reviewerEvaluations->map(fn ($review) => [
+                        'status' => $review->status,
+                        'decision' => $review->decision,
+                        'overall_comment' => $review->overall_comment,
+                        'submitted_at' => $review->submitted_at,
+                        'reviewer' => $review->reviewer?->user?->name,
+                    ])->values(),
+                    'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
+                    'opinions' => $form->opinions->map(fn ($opinion) => [
+                        'id' => $opinion->id,
+                        'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
+                        'signed_download_url' => $opinion->signed_document_path
+                            ? url("api/v1/opinions/{$opinion->id}/signed-download") : null,
+                    ])->values(),
+                ])->values();
+
+            $response['cc_context'] = [
+                'forms' => $ccForms,
+                'supervisor_comments' => ProtocolReviewComment::query()
+                    ->where('protocol_id', $protocol->id)->where('stage', 'supervisor')
+                    ->with('user:id,name,email')->orderBy('created_at')->get()
+                    ->map(fn (ProtocolReviewComment $comment) => [
+                        'id' => $comment->id,
+                        'content' => $comment->content,
+                        'created_at' => $comment->created_at,
+                        'author' => $comment->user?->name,
+                    ])->values(),
+            ];
+        }
+
+        return response()->json(['review_context' => $response]);
+    }
+
+    public function downloadDocumentVersion(Request $request, Protocol $protocol, Document $document)
+    {
+        if ((int) $document->protocol_id !== (int) $protocol->id || ! $this->canAccessProtocolDocument($request->user(), $protocol)) {
+            abort(403);
+        }
+
+        if (! Storage::disk('public')->exists($document->file_path)) {
+            abort(404, 'Documento não encontrado.');
+        }
+
+        return Storage::disk('public')->download($document->file_path, $document->file_name);
+    }
+
+    public function downloadTopicDocumentForProtocol(Request $request, Protocol $protocol)
+    {
+        if (! $this->canAccessProtocolDocument($request->user(), $protocol)) {
+            abort(403);
+        }
+
+        $topic = $protocol->topic;
+        if (! $topic?->document_path || ! Storage::disk('public')->exists($topic->document_path)) {
+            abort(404, 'Documento do tema não encontrado.');
+        }
+
+        return Storage::disk('public')->download($topic->document_path, $topic->document_name ?: basename($topic->document_path));
+    }
+
+    public function listReviewComments(Request $request, Protocol $protocol)
+    {
+        if (! $this->canAccessProtocolDocument($request->user(), $protocol)) {
+            abort(403);
+        }
+
+        return response()->json(['comments' => $protocol->reviewComments()
+            ->with('user:id,name,email')->orderBy('created_at')->get()]);
+    }
+
+    public function storeReviewComment(Request $request, Protocol $protocol)
+    {
+        $user = $request->user()->load('teacherProfile');
+        $validated = $request->validate(['content' => 'required|string|max:5000']);
+
+        if (! $user->teacherProfile || (int) $protocol->supervisor_id !== (int) $user->teacherProfile->id) {
+            abort(403);
+        }
+
+        $comment = ProtocolReviewComment::create([
+            'protocol_id' => $protocol->id,
+            'document_id' => $protocol->latestDocument()->value('id'),
+            'user_id' => $user->id,
+            'stage' => 'supervisor',
+            'content' => trim($validated['content']),
+        ]);
+
+        return response()->json(['comment' => $comment->load('user:id,name,email')], 201);
+    }
+
+    private function userHasOrganRole(User $user, string $organType, Protocol $protocol): bool
+    {
+        $user->loadMissing(['teacherProfile', 'secretaryProfile.organ']);
+
+        if ($user->hasPermission('protocol.view.all')) {
+            return true;
+        }
+
+        if ($user->secretaryProfile?->organ?->type === $organType) {
+            return true;
+        }
+
+        return $user->teacherProfile && $protocol->reviewAssignments()
+            ->where(fn ($query) => $query->where('reviewer_one', $user->teacherProfile->id)
+                ->orWhere('reviewer_two', $user->teacherProfile->id))
+            ->whereHas('organ', fn ($query) => $query->where('type', $organType))
+            ->exists();
+    }
+
     public function getForSupervisor(Request $request)
     {
         $user = $request->user()->load('teacherProfile');
@@ -273,7 +458,9 @@ class ProtocolApiController extends Controller
             abort(403);
         }
 
-        $requirements = $protocol->protocolDocumentRequirements;
+        $requirements = $protocol->protocolDocumentRequirements
+            ->whereNull('archived_at')
+            ->where('submission_number', (int) ($protocol->submission_number ?: 1));
 
         if ($user->secretaryProfile && $user->secretaryProfile->organ) {
             if ($user->secretaryProfile->organ->type === Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE) {
@@ -310,6 +497,8 @@ class ProtocolApiController extends Controller
         $protocol = Protocol::query()->findOrFail($protocol);
         $requirement = ProtocolDocumentRequirement::query()
             ->where('protocol_id', $protocol->id)
+            ->whereNull('archived_at')
+            ->where('submission_number', (int) ($protocol->submission_number ?: 1))
             ->findOrFail($requirement);
 
         $request->validate([
@@ -333,6 +522,8 @@ class ProtocolApiController extends Controller
         $protocol = Protocol::query()->findOrFail($protocol);
         $requirement = ProtocolDocumentRequirement::query()
             ->where('protocol_id', $protocol->id)
+            ->whereNull('archived_at')
+            ->where('submission_number', (int) ($protocol->submission_number ?: 1))
             ->findOrFail($requirement);
 
         $result = $this->protocolService()->reviewRequiredDocument(
@@ -353,6 +544,8 @@ class ProtocolApiController extends Controller
         $protocol = Protocol::query()->findOrFail($protocol);
         $requirement = ProtocolDocumentRequirement::query()
             ->where('protocol_id', $protocol->id)
+            ->whereNull('archived_at')
+            ->where('submission_number', (int) ($protocol->submission_number ?: 1))
             ->findOrFail($requirement);
 
         $validated = $request->validate([

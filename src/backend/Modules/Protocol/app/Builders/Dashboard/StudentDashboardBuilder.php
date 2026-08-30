@@ -138,10 +138,10 @@ class StudentDashboardBuilder implements DashboardBuilder
         return $user->notifications()
             ->latest()
             ->take(10)
-            ->get(['id', 'data', 'read_at', 'created_at'])
+            ->get(['id', 'title', 'body', 'read_at', 'created_at'])
             ->map(fn ($n) => [
                 'id'         => $n->id,
-                'message'    => $n->data['message'] ?? '',
+                'message'    => $n->body ?: $n->title,
                 'read'       => $n->read_at !== null,
                 'created_at' => $n->created_at,
             ])

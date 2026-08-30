@@ -151,6 +151,7 @@ class EvaluationService
                 ->values()
                 ->toArray();
             $version = $protocol->version ?: '1';
+            $sourceDocumentId = $protocol->latestDocument()->value('id');
 
             $form = EvaluationForm::query()->firstOrCreate(
                 [
@@ -162,8 +163,13 @@ class EvaluationService
                 [
                     'status' => EvaluationForm::STATUS_PENDING_REVIEW,
                     'form_type' => $formType,
+                    'source_document_id' => $sourceDocumentId,
                 ]
             );
+
+            if (! $form->source_document_id && $sourceDocumentId) {
+                $form->update(['source_document_id' => $sourceDocumentId]);
+            }
 
             if (! $form->formCriteria()->exists()) {
                 $criteria = EvaluationCriterion::query()
@@ -675,9 +681,9 @@ class EvaluationService
         });
     }
 
-    public function startDeliberation(EvaluationForm $form, User $reviewer): EvaluationForm
+    public function openForMeeting(EvaluationForm $form): EvaluationForm
     {
-        return DB::transaction(function () use ($form, $reviewer) {
+        return DB::transaction(function () use ($form) {
             $form = EvaluationForm::lockForUpdate()->findOrFail($form->id);
 
             if (! in_array($form->status, [
@@ -692,19 +698,8 @@ class EvaluationService
                 );
             }
 
-            $teacherProfile = $reviewer->teacherProfile;
-            $isReviewer = $form->reviewerEvaluations()
-                ->where('reviewer_id', $teacherProfile->id)
-                ->exists();
-
-            if (! $isReviewer) {
-                throw new HttpResponseException(
-                    response()->json(['message' => 'Apenas um revisor atribuído pode iniciar a deliberação.'], 403)
-                );
-            }
-
             $reviewerEvaluations = $form->reviewerEvaluations()
-                ->with(['protocolReviewAssignment', 'criterionReviews'])
+                ->with('protocolReviewAssignment')
                 ->get();
 
             if ($reviewerEvaluations->count() < 2) {
@@ -713,46 +708,7 @@ class EvaluationService
                 );
             }
 
-            if ($this->isBioeticaForm($form) && ! $this->isPrimaryReviewer($form, $reviewer)) {
-                throw new HttpResponseException(
-                    response()->json(['message' => 'Apenas o revisor principal do Comité de Bioética pode iniciar a deliberação.'], 403)
-                );
-            }
-
-            $primary = $this->sharedReviewerEvaluation($form);
-            $secondaryEvaluations = $reviewerEvaluations
-                ->where('id', '!=', $primary->id)
-                ->values();
-
-            foreach ($primary->criterionReviews as $primaryReview) {
-                foreach ($secondaryEvaluations as $secondaryEvaluation) {
-                    $secondaryReview = $secondaryEvaluation->criterionReviews
-                        ->where('evaluation_form_criterion_id', $primaryReview->evaluation_form_criterion_id)
-                        ->first();
-
-                    if ($secondaryReview && $secondaryReview->comment !== $primaryReview->comment) {
-                        $primaryReview->update([
-                            'comment' => $primaryReview->comment . "\n---\n" . $secondaryReview->comment,
-                        ]);
-                    }
-                }
-            }
-
-            foreach ($secondaryEvaluations as $secondaryEvaluation) {
-                $secondaryEvaluation->criterionReviews()->delete();
-            }
-
             $form->update(['status' => EvaluationForm::STATUS_IN_DELIBERATION]);
-
-            $this->recordProtocolHistory(
-                $form,
-                'deliberation_started',
-                $reviewer,
-                'Reuniao de deliberacao iniciada.',
-                [
-                    'reviewer_id' => $teacherProfile->id,
-                ]
-            );
 
             return $form->fresh()->load([
                 'formCriteria',
@@ -964,7 +920,7 @@ class EvaluationService
 
                     if ($flow['version_field'] && $flow['version_prefix']) {
                         $field = $flow['version_field'];
-                        $versionNumber = 1;
+                        $versionNumber = max(0, (int) $protocol->{$field}) + 1;
                         $nextVersionLabel = Protocol::organVersionLabel($flow['next_organ_type'], $versionNumber);
 
                         $protocolUpdates[$field] = $versionNumber;
@@ -983,10 +939,6 @@ class EvaluationService
                 app(ProtocolService::class)->markLatestDocumentRejected($protocol, $decider?->id);
             }
 
-            if ($decision === ReviewerEvaluation::DECISION_APPROVED && $nextVersionLabel) {
-                app(ProtocolService::class)->syncLatestDocumentVersionLabel($protocol, $nextVersionLabel);
-            }
-
             $this->recordProtocolHistory(
                 $form,
                 $decision === ReviewerEvaluation::DECISION_APPROVED ? 'approved' : 'rejected',
@@ -998,6 +950,9 @@ class EvaluationService
                     'decision' => $decision,
                     'conclusion_summary' => $conclusionSummary,
                     'opinion_version' => $opinionVersion,
+                    'source_document_id' => $form->source_document_id,
+                    'submission_number' => $protocol->submission_number,
+                    'organ_version' => $form->version,
                 ],
                 $protocol,
                 $oldOrganId,

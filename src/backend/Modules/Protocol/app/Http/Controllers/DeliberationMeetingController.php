@@ -82,15 +82,12 @@ class DeliberationMeetingController extends Controller
         ]);
     }
 
-    public function startItem(
-        Request $request,
-        DeliberationMeeting $meeting,
-        DeliberationMeetingItem $item
-    ) {
-        $meeting = $this->meetings->startItem($meeting, $item, $request->user());
+    public function start(Request $request, DeliberationMeeting $meeting)
+    {
+        $meeting = $this->meetings->startMeeting($meeting, $request->user());
 
         return response()->json([
-            'message' => 'Deliberação do protocolo iniciada.',
+            'message' => 'Reunião de deliberação iniciada.',
             'meeting' => $this->meetings->show($meeting, $request->user()),
         ]);
     }

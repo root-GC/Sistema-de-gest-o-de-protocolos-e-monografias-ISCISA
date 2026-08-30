@@ -56,10 +56,21 @@ class EvaluationFormController extends Controller
 
             return ! $secretaryProfile
                 || ! $secretaryProfile->organ_id
-                || (int) $protocol->current_organ_id === (int) $secretaryProfile->organ_id;
+                || (int) $protocol->current_organ_id === (int) $secretaryProfile->organ_id
+                || $this->hasSecretaryOrganTrace($protocol, $secretaryProfile->organ_id, $secretaryProfile->organ?->type);
         }
 
         return false;
+    }
+
+    private function hasSecretaryOrganTrace(Protocol $protocol, int $organId, ?string $organType): bool
+    {
+        $formOrgan = $organType ? Protocol::formOrganFromOrganType($organType) : null;
+
+        return $protocol->histories()
+            ->where('organ_id', $organId)
+            ->exists()
+            || ($formOrgan && $protocol->opinions()->where('organ', $formOrgan)->exists());
     }
 
     private function routeFormOrgan(Request $request): string
@@ -228,28 +239,6 @@ class EvaluationFormController extends Controller
 
         return response()->json([
             'message' => 'Deliberação marcada com sucesso.',
-            'evaluation_form' => EvaluationFormResource::make($form),
-        ]);
-    }
-
-    public function startDeliberation(EvaluationForm $form)
-    {
-        $user = request()->user();
-
-        $teacherProfile = $user->teacherProfile;
-        if (! $teacherProfile || ! $user->hasPermission('protocol.evaluate')) {
-            return response()->json(['message' => 'Apenas revisores podem iniciar a deliberação.'], 403);
-        }
-
-        $item = $this->meetingService->activeItemForForm($form);
-        if (! $item) {
-            return response()->json(['message' => 'A ficha não pertence a uma reunião ativa.'], 422);
-        }
-        $meeting = $this->meetingService->startItem($item->meeting, $item, $user);
-        $form = $meeting->items->firstWhere('evaluation_form_id', $form->id)?->evaluationForm ?? $form->fresh();
-
-        return response()->json([
-            'message' => 'Reunião de deliberação iniciada.',
             'evaluation_form' => EvaluationFormResource::make($form),
         ]);
     }

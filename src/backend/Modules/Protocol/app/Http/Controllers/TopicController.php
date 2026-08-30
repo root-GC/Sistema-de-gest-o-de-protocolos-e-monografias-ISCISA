@@ -17,6 +17,7 @@ use Modules\Protocol\app\Models\Topic;
 use Modules\Protocol\app\Models\TopicReviewComment;
 use Modules\Protocol\app\Services\TopicService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 
 class TopicController extends Controller
@@ -56,8 +57,9 @@ public function getComments(Request $request, Topic $topic)
 {
     $user = $request->user();
 
-    // Futuramente:
-    //$this->authorize('viewComments', $topic);
+    if (! $this->canViewComments($user, $topic)) {
+        abort(403);
+    }
 
 
     // Validação dos filtros
@@ -149,6 +151,24 @@ public function getComments(Request $request, Topic $topic)
         ], 201);
     }
 
+    public function downloadDocument(Request $request, Topic $topic)
+    {
+        $user = $request->user();
+
+        if (! $this->canViewComments($user, $topic)) {
+            abort(403);
+        }
+
+        if (! $topic->document_path || ! Storage::disk('public')->exists($topic->document_path)) {
+            abort(404);
+        }
+
+        return Storage::disk('public')->download(
+            $topic->document_path,
+            $topic->document_name ?: basename($topic->document_path)
+        );
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -224,7 +244,7 @@ public function getComments(Request $request, Topic $topic)
         $this->authorize('rejectBySupervisor', $topic);
 
         $validated = $request->validate([
-            'comment' => 'nullable|string|max:5000',
+            'comment' => 'required|string|max:5000',
             'comments' => 'nullable|string|max:5000',
             'supervisor_comment' => 'nullable|string|max:5000',
         ]);
@@ -237,6 +257,39 @@ public function getComments(Request $request, Topic $topic)
             'message' => 'Tema não aprovado pelo supervisor.',
             'topic' => $result,
         ]);
+    }
+
+    public function submitSupervisorComment(Request $request, Topic $topic)
+    {
+        $this->authorize('approveBySupervisor', $topic);
+        $validated = $request->validate(['content' => 'required|string|max:5000']);
+        $comment = $this->topicService->submitSupervisorComment($topic, $request->user()->load('teacherProfile'), $validated['content']);
+
+        return response()->json([
+            'message' => 'Comentário adicionado.',
+            'comment' => TopicReviewCommentResource::make($comment->load('user:id,name,email')),
+        ], 201);
+    }
+
+    private function canViewComments($user, Topic $topic): bool
+    {
+        $user->loadMissing(['teacherProfile', 'secretaryProfile']);
+
+        if ((int) $topic->student_id === (int) $user->id || $user->hasPermission('topic.view.all')) {
+            return true;
+        }
+
+        if ($user->teacherProfile && (int) $topic->supervisor_id === (int) $user->teacherProfile->id) {
+            return true;
+        }
+
+        if ($user->teacherProfile && $topic->reviewAssignments()
+            ->where('reviewer_id', $user->teacherProfile->id)->exists()) {
+            return true;
+        }
+
+        return $user->secretaryProfile?->organ_id
+            && (int) $topic->scientificArea()->value('organ_id') === (int) $user->secretaryProfile->organ_id;
     }
 
     /**

@@ -92,6 +92,8 @@ class TopicService
                 'document_path' => $path,
                 'document_name' => $document->getClientOriginalName(),
             ]);
+
+            $this->recordSupervisorComment($topic, $supervisor, $comment);
         }
 
         $topic->load([
@@ -274,6 +276,8 @@ class TopicService
                 'supervisor_decision_at' => now(),
             ]);
 
+            $this->recordSupervisorComment($topic, $supervisor, $comment);
+
             app(TopicHistoryService::class)->record(
                 $topic,
                 'supervisor_approved',
@@ -321,6 +325,8 @@ class TopicService
                 'supervisor_comment' => $comment,
                 'supervisor_decision_at' => now(),
             ]);
+
+            $this->recordSupervisorComment($topic, $supervisor, $comment);
 
             app(TopicHistoryService::class)->record(
                 $topic,
@@ -666,9 +672,26 @@ class TopicService
                 'assignment_id' => $assignment->id,
             ]);
 
+            if ($evaluation->exists && $evaluation->decision) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'A decisão deste revisor já foi registada e é definitiva.',
+                ], 422));
+            }
+
+            $commentId = $data['comment_id'] ?? null;
+            $comment = $commentId
+                ? TopicReviewComment::query()->where('topic_id', $topic->id)->where('user_id', $reviewer->id)->find($commentId)
+                : TopicReviewComment::query()->where('topic_id', $topic->id)->where('user_id', $reviewer->id)->latest('created_at')->first();
+
+            if ($data['decision'] === TopicReviewEvaluation::DECISION_REJECTED && ! $comment) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Registe um comentário antes de não aprovar o tema.',
+                ], 422));
+            }
+
             $evaluation->topic_id = $topic->id;
             $evaluation->reviewer_id = $teacherProfile->id;
-            $evaluation->comment_id = $data['comment_id'] ?? $evaluation->comment_id;
+            $evaluation->comment_id = $comment?->id ?? $evaluation->comment_id;
             $evaluation->decision = $data['decision'];
             $evaluation->evaluated_at = now();
 
@@ -805,6 +828,45 @@ class TopicService
                 ]),
             ];
         });
+    }
+
+    public function submitSupervisorComment(Topic $topic, User $supervisor, string $content): TopicReviewComment
+    {
+        $teacherProfile = $supervisor->teacherProfile;
+
+        if (! $teacherProfile || (int) $topic->supervisor_id !== (int) $teacherProfile->id) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'Apenas o supervisor atribuído pode comentar este tema.',
+            ], 403));
+        }
+
+        return $this->recordSupervisorComment($topic, $supervisor, $content);
+    }
+
+    private function recordSupervisorComment(Topic $topic, User $supervisor, ?string $content): ?TopicReviewComment
+    {
+        $content = trim((string) $content);
+
+        if ($content === '') {
+            return null;
+        }
+
+        $latest = TopicReviewComment::query()
+            ->where('topic_id', $topic->id)
+            ->where('user_id', $supervisor->id)
+            ->latest('created_at')
+            ->first();
+
+        if ($latest && $latest->content === $content) {
+            return $latest;
+        }
+
+        return TopicReviewComment::create([
+            'user_id' => $supervisor->id,
+            'topic_id' => $topic->id,
+            'content' => $content,
+            'status' => TopicReviewComment::STATUS_ACTIVE,
+        ]);
     }
 
     /**

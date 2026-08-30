@@ -45,6 +45,7 @@ class ProtocolDocumentRequirement extends Model
 
     protected $fillable = [
         'protocol_id',
+        'submission_number',
         'document_key',
         'nome',
         'required_for_organ',
@@ -56,6 +57,7 @@ class ProtocolDocumentRequirement extends Model
         'reviewed_by',
         'reviewed_at',
         'is_optional',
+        'archived_at',
     ];
 
     protected $casts = [
@@ -63,6 +65,7 @@ class ProtocolDocumentRequirement extends Model
         'aprovado' => 'boolean',
         'is_optional' => 'boolean',
         'reviewed_at' => 'datetime',
+        'archived_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

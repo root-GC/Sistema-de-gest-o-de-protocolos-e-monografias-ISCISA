@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Models\Document;
 use Modules\Protocol\app\Models\Protocol;
+use Modules\Protocol\app\Models\Topic;
 use Modules\User\app\Models\User;
 
 class OnlyOfficeController extends Controller
@@ -100,6 +101,50 @@ class OnlyOfficeController extends Controller
         ]);
     }
 
+    public function configForTopic(Topic $topic, Request $request)
+    {
+        $user = $request->user();
+
+        if (! $this->canAccessTopic($user, $topic)) {
+            abort(403);
+        }
+        if (! $topic->document_path || ! Storage::disk('public')->exists($topic->document_path)) {
+            return response()->json(['error' => 'Documento do tema não encontrado.'], 404);
+        }
+
+        $mode = $this->resolveTopicMode($user, $topic);
+        $key = "topic_{$topic->id}_" . md5($topic->updated_at?->timestamp . '|' . $topic->document_path) . '_' . time();
+
+        $config = [
+            'documentType' => 'word',
+            'document' => [
+                'title' => $topic->document_name ?: "tema-{$topic->id}.docx",
+                'fileType' => 'docx',
+                'key' => $key,
+                'url' => rtrim((string) env('ONLYOFFICE_DOCUMENT_URL'), '/') . "/storage/{$topic->document_path}",
+            ],
+            'editorConfig' => [
+                'callbackUrl' => rtrim((string) env('ONLYOFFICE_DOCUMENT_URL'), '/') . '/api/protocolo/onlyoffice/callback',
+                'mode' => $mode,
+                'user' => ['id' => (string) $user->id, 'name' => $user->name],
+                'customization' => [
+                    'review' => [
+                        'reviewMode' => in_array($mode, ['edit', 'review'], true),
+                        'showReviewChanges' => in_array($mode, ['edit', 'review'], true),
+                        'trackChanges' => true,
+                    ],
+                    'forcesave' => true,
+                ],
+                'forcesave' => true,
+            ],
+        ];
+
+        return response()->json([
+            'config' => $config,
+            'token' => JWT::encode($config, env('ONLYOFFICE_JWT_SECRET'), 'HS256'),
+        ]);
+    }
+
     private function canAccess(User $user, Protocol $protocol): bool
     {
         if ($user->hasPermission('protocol.view.all')) {
@@ -134,6 +179,47 @@ class OnlyOfficeController extends Controller
         }
 
         return false;
+    }
+
+    private function canAccessTopic(User $user, Topic $topic): bool
+    {
+        $user->loadMissing(['teacherProfile', 'secretaryProfile']);
+
+        if ((int) $topic->student_id === (int) $user->id || $user->hasPermission('topic.view.all')) {
+            return true;
+        }
+
+        if ($user->teacherProfile && (int) $topic->supervisor_id === (int) $user->teacherProfile->id) {
+            return true;
+        }
+
+        if ($user->teacherProfile && $topic->reviewAssignments()
+            ->where('reviewer_id', $user->teacherProfile->id)->exists()) {
+            return true;
+        }
+
+        return $user->secretaryProfile?->organ_id
+            && (int) $topic->scientificArea()->value('organ_id') === (int) $user->secretaryProfile->organ_id;
+    }
+
+    private function resolveTopicMode(User $user, Topic $topic): string
+    {
+        if ((int) $topic->student_id === (int) $user->id) {
+            return 'view';
+        }
+
+        $teacherProfile = $user->teacherProfile;
+
+        if ($teacherProfile && (int) $topic->supervisor_id === (int) $teacherProfile->id) {
+            return 'review';
+        }
+
+        if ($teacherProfile && $topic->reviewAssignments()
+            ->where('reviewer_id', $teacherProfile->id)->exists()) {
+            return 'review';
+        }
+
+        return 'view';
     }
 
     private function resolveMode(User $user, Protocol $protocol): string
@@ -192,8 +278,9 @@ class OnlyOfficeController extends Controller
     $key = $data['key'] ?? '';
 
     preg_match('/protocol_(\d+)_v(\d+)/', $key, $matches);
+    preg_match('/topic_(\d+)_/', $key, $topicMatches);
 
-    if (empty($matches)) {
+    if (empty($matches) && empty($topicMatches)) {
         Log::warning('ONLYOFFICE callback: key inválida', [
             'key' => $key,
         ]);
@@ -201,7 +288,6 @@ class OnlyOfficeController extends Controller
         return response()->json(['error' => 1]);
     }
 
-    $protocolId = (int) $matches[1];
     $downloadUrl = $data['url'] ?? null;
 
     if (! $downloadUrl) {
@@ -221,17 +307,25 @@ class OnlyOfficeController extends Controller
             throw new \Exception("Falha ao baixar documento de: {$downloadUrl}");
         }
 
+        if (! empty($topicMatches)) {
+            $topic = Topic::find($topicMatches[1]);
+
+            if (! $topic || ! $topic->document_path) {
+                return response()->json(['error' => 1]);
+            }
+
+            Storage::disk('public')->put($topic->document_path, $docContent);
+            $topic->touch();
+
+            Log::info('ONLYOFFICE callback: documento do tema actualizado', ['topic_id' => $topic->id]);
+
+            return response()->json(['error' => 0]);
+        }
+
+        $protocolId = (int) $matches[1];
         $document = Document::where('protocol_id', $protocolId)
             ->where('status', Document::STATUS_ACTIVE)
             ->first();
-
-        if (! $document) {
-            Log::warning('ONLYOFFICE callback: nenhum documento activo encontrado', [
-                'protocol_id' => $protocolId,
-            ]);
-
-            return response()->json(['error' => 1]);
-        }
 
         Log::info('Documento encontrado', [
             'id' => $document->id,

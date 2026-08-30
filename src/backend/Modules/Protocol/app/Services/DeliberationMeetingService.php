@@ -198,33 +198,41 @@ class DeliberationMeetingService
         });
     }
 
-    public function startItem(DeliberationMeeting $meeting, DeliberationMeetingItem $item, User $user): DeliberationMeeting
+    public function startMeeting(DeliberationMeeting $meeting, User $user): DeliberationMeeting
     {
-        $this->assertItemBelongsToMeeting($meeting, $item);
-        $this->assertReviewerCanOperate($item->evaluationForm, $user);
+        $this->assertSecretaryCanStart($meeting, $user);
 
-        return DB::transaction(function () use ($meeting, $item, $user) {
+        return DB::transaction(function () use ($meeting, $user) {
             $meeting = DeliberationMeeting::lockForUpdate()->findOrFail($meeting->id);
-            $item = DeliberationMeetingItem::lockForUpdate()->findOrFail($item->id);
 
             if (now()->lt($meeting->scheduled_at)) {
                 $this->fail('A reunião só pode ser iniciada no horário marcado.');
             }
-            if (! in_array($meeting->status, [DeliberationMeeting::STATUS_SCHEDULED, DeliberationMeeting::STATUS_IN_PROGRESS], true)) {
+            if ($meeting->status !== DeliberationMeeting::STATUS_SCHEDULED) {
                 $this->fail('Esta reunião já não pode ser iniciada.');
             }
-            if ($item->status !== DeliberationMeetingItem::STATUS_SCHEDULED) {
-                $this->fail('Este protocolo já foi iniciado ou encerrado nesta reunião.');
+
+            $items = $meeting->items()
+                ->lockForUpdate()
+                ->with('evaluationForm')
+                ->where('status', DeliberationMeetingItem::STATUS_SCHEDULED)
+                ->orderBy('queue_entered_at')
+                ->get();
+
+            if ($items->isEmpty()) {
+                $this->fail('Esta reunião não possui protocolos pendentes para iniciar.');
             }
 
-            $form = $this->evaluationService->startDeliberation($item->evaluationForm, $user);
-            $item->update(['status' => DeliberationMeetingItem::STATUS_IN_PROGRESS, 'started_at' => now()]);
-            if ($meeting->status === DeliberationMeeting::STATUS_SCHEDULED) {
-                $meeting->update(['status' => DeliberationMeeting::STATUS_IN_PROGRESS, 'started_at' => now()]);
+            foreach ($items as $item) {
+                $form = $this->evaluationService->openForMeeting($item->evaluationForm);
+                $item->update(['status' => DeliberationMeetingItem::STATUS_IN_PROGRESS, 'started_at' => now()]);
+                $this->recordHistory($form, $meeting, $user, 'deliberation_meeting_started', 'Reunião de deliberação iniciada pela secretaria.', [
+                    'meeting_item_id' => $item->id,
+                ]);
             }
-            $this->recordHistory($form, $meeting, $user, 'deliberation_meeting_item_started', 'Protocolo iniciado na reunião de deliberação.', [
-                'meeting_item_id' => $item->id,
-            ]);
+
+            $meeting->update(['status' => DeliberationMeeting::STATUS_IN_PROGRESS, 'started_at' => now()]);
+            event(new DeliberationMeetingChanged($meeting, 'started'));
 
             return $meeting->fresh()->load($this->meetingRelations());
         });
@@ -412,12 +420,19 @@ class DeliberationMeetingService
 
     private function protocolData(EvaluationForm $form): array
     {
+        $protocol = $form->protocol;
+        // The `student` column stores the user ID, so retrieve the loaded
+        // Eloquent relation explicitly instead of the colliding attribute.
+        $student = $protocol?->relationLoaded('student')
+            ? $protocol->getRelation('student')
+            : null;
+
         return [
-            'id' => $form->protocol?->id,
-            'code' => $form->protocol?->code,
-            'status' => $form->protocol?->status,
-            'title' => $form->protocol?->topic?->title,
-            'student_name' => $form->protocol?->student?->name,
+            'id' => $protocol?->id,
+            'code' => $protocol?->code,
+            'status' => $protocol?->status,
+            'title' => $protocol?->topic?->title,
+            'student_name' => $student?->name,
         ];
     }
 
@@ -516,6 +531,15 @@ class DeliberationMeetingService
     {
         if (! $this->canManageOrgan($user, $meeting->organ_id)) {
             $this->fail('Não tem permissão para gerir esta reunião.', 403);
+        }
+    }
+
+    private function assertSecretaryCanStart(DeliberationMeeting $meeting, User $user): void
+    {
+        $user->loadMissing('secretaryProfile');
+
+        if (! $user->hasPermission('protocol.assign') || (int) $user->secretaryProfile?->organ_id !== (int) $meeting->organ_id) {
+            $this->fail('Apenas a secretaria deste órgão pode iniciar a reunião.', 403);
         }
     }
 
