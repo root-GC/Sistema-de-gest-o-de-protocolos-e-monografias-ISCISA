@@ -20,7 +20,7 @@ class TopicSecretaryResource extends JsonResource
             'justification' => $this->justification,
             'status' => $this->status,
             'status_label' => $this->status_label,
-            'document_path' => $this->document_path,
+            'has_document' => $this->has_document,
             'document_name' => $this->document_name,
             'submitted_at' => $this->submitted_at,
             'scientific_area' => $this->whenLoaded('scientificArea', fn () => [

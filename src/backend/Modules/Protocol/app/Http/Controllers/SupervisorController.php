@@ -144,7 +144,7 @@ class SupervisorController extends Controller
             'justification' => $topic->justification,
             'status' => $topic->status,
             'status_label' => $topic->status_label,
-            'document_path' => $topic->document_path,
+            'has_document' => $topic->has_document,
             'document_name' => $topic->document_name,
             'submitted_at' => $topic->submitted_at,
             'scientific_area' => $topic->relationLoaded('scientificArea') && $topic->scientificArea ? [

@@ -1,5 +1,5 @@
 // src/pages/supervisor/SupervisorProtocolsPage.tsx
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { topicService, type Topic } from '../../services/topicService'
@@ -40,12 +40,7 @@ export default function SupervisorProtocolsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (tab === 'topics') loadTopics()
-    else loadProtocols()
-  }, [tab])
-
-  async function loadTopics() {
+  const loadTopics = useCallback(async () => {
     setLoading(true)
     try {
       const data = await topicService.listForSupervisor()
@@ -55,9 +50,9 @@ export default function SupervisorProtocolsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  async function loadProtocols() {
+  const loadProtocols = useCallback(async () => {
     setLoading(true)
     try {
       const data = await protocolService.listForSupervisor()
@@ -67,7 +62,15 @@ export default function SupervisorProtocolsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void (tab === 'topics' ? loadTopics() : loadProtocols())
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [loadProtocols, loadTopics, tab])
 
   // ============================================================
   // LOADING
@@ -101,7 +104,7 @@ export default function SupervisorProtocolsPage() {
   // RENDER
   // ============================================================
   return (
-    <div style={{
+    <div className="teacher-workspace" style={{
       width: '100%',
       fontFamily: 'var(--font-family)',
       color: 'var(--on-background)'
@@ -160,7 +163,7 @@ export default function SupervisorProtocolsPage() {
             cursor: 'pointer',
             background: tab === 'topics' ? 'var(--primary-container)' : 'transparent',
             color: tab === 'topics' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
-            transition: 'all 0.2s'
+            transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease'
           }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: '18px', verticalAlign: 'middle', marginRight: '6px' }}>
@@ -181,7 +184,7 @@ export default function SupervisorProtocolsPage() {
             cursor: 'pointer',
             background: tab === 'protocols' ? 'var(--primary-container)' : 'transparent',
             color: tab === 'protocols' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
-            transition: 'all 0.2s'
+            transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease'
           }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: '18px', verticalAlign: 'middle', marginRight: '6px' }}>
@@ -307,7 +310,7 @@ export default function SupervisorProtocolsPage() {
                           fontWeight: 'var(--font-semibold)',
                           whiteSpace: 'nowrap',
                           cursor: 'pointer',
-                          transition: 'all 0.2s'
+                          transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease'
                         }}
                       >
                         <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
@@ -464,7 +467,7 @@ export default function SupervisorProtocolsPage() {
                         fontWeight: 'var(--font-semibold)',
                         whiteSpace: 'nowrap',
                         border: isPending ? 'none' : '1px solid var(--outline-variant)',
-                        transition: 'all 0.2s'
+                        transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease'
                       }}
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>

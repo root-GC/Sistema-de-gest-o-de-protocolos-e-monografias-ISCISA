@@ -1,402 +1,256 @@
-import { useEffect, useState } from 'react'
-import { protocolService, type Protocol } from '../../services/protocolService'
-import '../../styles/global.css'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import PdfPreviewModal from '../../components/PdfPreviewModal'
+import OnlyOfficeEditor from '../../components/OnlyOfficeEditor/OnlyOfficeEditor'
+import { StudentWorkspaceNav } from '../../components/student/StudentWorkspaceNav'
+import { protocolService, type Document, type Protocol, type ProtocolOpinion } from '../../services/protocolService'
+import { topicService, type Topic } from '../../services/topicService'
+import '../../components/student/studentWorkspace.css'
 
-// ============================================================
-// HELPERS
-// ============================================================
-function getStatusStyle(status: string) {
-  const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
-    active:  { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Ativo' },
-    replaced:{ bg: 'var(--surface-container-highest)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: 'Substituído' },
-    deleted: { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Removido' },
-  }
-  return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
+function formatDate(value?: string | null) {
+  if (!value) return 'Data não disponível'
+
+  return new Intl.DateTimeFormat('pt-MZ', {
+    dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Maputo',
+  }).format(new Date(value))
 }
 
-function getProtocolStatusStyle(status: string) {
-  const map: Record<string, { bg: string; color: string; dot: string }> = {
-    protocol_submitted:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)' },
-    protocol_pending_supervisor:  { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)' },
-    protocol_approved_supervisor: { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)' },
-    protocol_rejected_supervisor: { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)' },
-    protocol_in_review:           { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)' },
-    protocol_approved_nucleo:     { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)' },
-    protocol_rejected_nucleo:     { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)' },
-    protocol_rejected_cc:         { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)' },
-    protocol_rejected_bioetica:   { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)' },
-    protocol_resubmitted:         { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)' },
-  }
-  return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)' }
+function documentLabel(document: Document) {
+  return `Versão ${document.version} · ${document.status === 'active' ? 'Atual' : 'Histórico'}`
 }
 
-// ============================================================
-// COMPONENTE
-// ============================================================
 export default function DocumentsPage() {
   const [protocols, setProtocols] = useState<Protocol[]>([])
+  const [topics, setTopics] = useState<Topic[]>([])
+  const [opinions, setOpinions] = useState<Record<number, ProtocolOpinion[]>>({})
+  const [selectedProtocolId, setSelectedProtocolId] = useState<number | null>(null)
+  const [preview, setPreview] = useState<{ url: string; title: string; filename: string } | null>(null)
+  const [topicViewer, setTopicViewer] = useState<Topic | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    protocolService.list()
-      .then(({ protocols }) => setProtocols(protocols))
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [protocolResponse, topicResponse] = await Promise.all([
+        protocolService.list(),
+        topicService.list(),
+      ])
+      setProtocols(protocolResponse.protocols)
+      setTopics(topicResponse.topics)
+      setSelectedProtocolId(current => current && protocolResponse.protocols.some(protocol => protocol.id === current) ? current : protocolResponse.protocols[0]?.id ?? null)
+      const entries = await Promise.all(protocolResponse.protocols.map(async protocol => {
+        try {
+          const result = await protocolService.listOpinions(protocol.id)
+          return [protocol.id, result.opinions] as const
+        } catch {
+          return [protocol.id, []] as const
+        }
+      }))
+      setOpinions(Object.fromEntries(entries))
+    } catch (requestError) {
+      setProtocols([])
+      setTopics([])
+      setOpinions({})
+      setError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar os documentos.')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const totalDocs = protocols.reduce((sum, p) => sum + (p.documents?.length || 0), 0)
+  useEffect(() => {
+    const requestId = window.setTimeout(() => { void load() }, 0)
+    return () => window.clearTimeout(requestId)
+  }, [load])
 
-  async function openFile(url: string | null | undefined, fallbackFilename?: string) {
+  const selectedProtocol = useMemo(
+    () => protocols.find(protocol => protocol.id === selectedProtocolId) ?? null,
+    [protocols, selectedProtocolId],
+  )
+  const documents = selectedProtocol?.documents ?? []
+  const protocolOpinions = selectedProtocol ? opinions[selectedProtocol.id] ?? [] : []
+  const topicDocuments = useMemo(
+    () => topics.filter(topic => Boolean(topic.has_document)),
+    [topics],
+  )
+  const topicDocument = selectedProtocol
+    ? topics.find(topic => topic.id === selectedProtocol.topic_id && topic.has_document)
+    : null
+
+  async function download(url: string | null | undefined, filename: string) {
     if (!url) return
-
     try {
-      await protocolService.openFile(url, fallbackFilename)
-    } catch (e) {
-      setError((e as Error).message)
+      await protocolService.downloadFile(url, filename)
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Não foi possível descarregar o ficheiro.')
     }
   }
 
-  async function downloadFile(url: string | null | undefined, fallbackFilename?: string) {
-    if (!url) return
+  if (loading) return <main className="student-workspace"><StudentWorkspaceNav /><div className="student-document-panel">A carregar documentos…</div></main>
 
-    try {
-      await protocolService.downloadFile(url, fallbackFilename)
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
-  // ============================================================
-  // LOADING
-  // ============================================================
-  if (loading) {
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '60vh',
-        fontFamily: 'var(--font-family)',
-        color: 'var(--on-surface-variant)',
-        fontSize: 'var(--body-lg)',
-        gap: 'var(--space-2)'
-      }}>
-        <span style={{
-          width: '24px', height: '24px',
-          border: '3px solid var(--outline-variant)',
-          borderTopColor: 'var(--primary)',
-          borderRadius: 'var(--radius-full)',
-          animation: 'spin 0.8s linear infinite'
-        }} />
-        A carregar...
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    )
-  }
-
-  // ============================================================
-  // RENDER
-  // ============================================================
   return (
-    <div style={{
-      width: '100%',
-      fontFamily: 'var(--font-family)',
-      color: 'var(--on-background)'
-    }}>
-
-      {/* Cabeçalho */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 'var(--space-2)',
-        marginBottom: 'var(--space-4)'
-      }}>
+    <main className="student-workspace" aria-labelledby="documents-title">
+      <StudentWorkspaceNav />
+      <header className="student-page-header">
         <div>
-          <h1 style={{
-            fontSize: 'var(--headline-lg)',
-            fontWeight: 'var(--font-semibold)',
-            color: 'var(--on-surface)',
-            marginBottom: 'var(--space-1)'
-          }}>
-            Documentos
-          </h1>
-          <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
-            Todos os documentos submetidos nos seus protocolos.
-          </p>
+          <p className="student-page-header__eyebrow">Área do estudante</p>
+          <h1 id="documents-title" className="student-page-header__title">Documentos e pareceres</h1>
+          <p className="student-page-header__description">Consulta, descarrega e imprime os documentos dos teus protocolos.</p>
         </div>
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '4px 12px',
-          borderRadius: 'var(--radius-full)',
-          fontSize: 'var(--label-md)',
-          fontWeight: 'var(--font-medium)',
-          background: 'var(--surface-container)',
-          color: 'var(--on-surface-variant)'
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>folder</span>
-          {totalDocs} documento{totalDocs !== 1 ? 's' : ''}
-        </span>
-      </div>
+        <button type="button" className="btn btn-outline" onClick={() => void load()}><span className="material-symbols-outlined" aria-hidden="true">refresh</span>Atualizar</button>
+      </header>
 
-      {/* Erro */}
-      {error && (
-        <div role="alert" style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-1)',
-          padding: 'var(--space-2) var(--space-3)',
-          background: 'var(--error-container)',
-          color: 'var(--on-error-container)',
-          borderRadius: 'var(--radius-lg)',
-          fontSize: 'var(--body-md)',
-          fontWeight: 'var(--font-medium)',
-          marginBottom: 'var(--space-4)'
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
-          {error}
-        </div>
-      )}
+      {error && <div className="student-alert" role="alert" aria-live="assertive"><span className="material-symbols-outlined" aria-hidden="true">error</span><span>{error}</span></div>}
 
-      {/* Estado vazio */}
-      {protocols.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: 'var(--space-6) var(--space-3)',
-          color: 'var(--on-surface-variant)',
-          background: 'var(--surface-container-low)',
-          borderRadius: 'var(--radius-xl)',
-          border: '1px dashed var(--outline-variant)'
-        }}>
-          <span className="material-symbols-outlined" style={{
-            fontSize: '48px',
-            marginBottom: 'var(--space-2)',
-            display: 'block'
-          }}>
-            folder_open
-          </span>
-          <p style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-medium)' }}>
-            Nenhum documento encontrado
-          </p>
-          <p style={{ fontSize: 'var(--body-md)', marginTop: 'var(--space-1)' }}>
-            Submeta o seu primeiro protocolo para ver os documentos aqui.
-          </p>
-        </div>
-      )}
-
-      {/* Lista de protocolos com documentos */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-4)'
-      }}>
-        {protocols.map(p => {
-          const ps = getProtocolStatusStyle(p.status)
-          const docs = p.documents || []
-
-          return (
-            <div key={p.id} className="card" style={{
-              padding: '0',
-              overflow: 'hidden'
-            }}>
-              {/* Cabeçalho do protocolo */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 'var(--space-2)',
-                padding: 'var(--space-3) var(--space-4)',
-                borderBottom: docs.length > 0 ? '1px solid var(--surface-variant)' : 'none'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                  <h3 style={{
-                    fontSize: 'var(--body-lg)',
-                    fontWeight: 'var(--font-bold)',
-                    color: 'var(--on-surface)'
-                  }}>
-                    {p.code}
-                  </h3>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '2px 10px',
-                    borderRadius: 'var(--radius-full)',
-                    fontSize: 'var(--label-md)',
-                    fontWeight: 'var(--font-medium)',
-                    background: ps.bg,
-                    color: ps.color,
-                    whiteSpace: 'nowrap'
-                  }}>
-                    <span style={{
-                      width: '6px', height: '6px',
-                      borderRadius: 'var(--radius-full)',
-                      background: ps.dot
-                    }} />
-                    {p.status_label}
-                  </span>
-                </div>
-                <span style={{
-                  fontSize: 'var(--label-md)',
-                  color: 'var(--on-surface-variant)',
-                  fontWeight: 'var(--font-medium)'
-                }}>
-                  {docs.length} documento{docs.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-
-              {/* Tabela de documentos */}
-              {docs.length > 0 && (
-                <div style={{ overflow: 'auto' }}>
-                  <table className="table" style={{ margin: 0 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ padding: 'var(--space-2) var(--space-4)' }}>Ficheiro</th>
-                        <th style={{ padding: 'var(--space-2) var(--space-4)', textAlign: 'center' }}>Versão</th>
-                        <th style={{ padding: 'var(--space-2) var(--space-4)' }}>Estado</th>
-                        <th style={{ padding: 'var(--space-2) var(--space-4)', textAlign: 'right' }}>Submetido em</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {docs.map(doc => {
-                        const ds = getStatusStyle(doc.status)
-                        const fileUrl = doc.download_url || doc.file_url
-                        return (
-                          <tr key={doc.id}>
-                            <td style={{ padding: 'var(--space-2) var(--space-4)' }}>
-                              <button
-                                type="button"
-                                onClick={() => openFile(fileUrl, doc.file_name)}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 'var(--space-1)',
-                                  color: 'var(--primary)',
-                                  fontWeight: 'var(--font-medium)',
-                                  fontSize: 'var(--body-md)',
-                                  transition: 'color 0.2s',
-                                  border: 'none',
-                                  background: 'transparent',
-                                  padding: 0,
-                                  cursor: 'pointer'
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.color = 'var(--on-primary-fixed-variant)'}
-                                onMouseLeave={e => e.currentTarget.style.color = 'var(--primary)'}
-                              >
-                                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                                  description
-                                </span>
-                                {doc.file_name}
-                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
-                                  open_in_new
-                                </span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => downloadFile(fileUrl, doc.file_name)}
-                                style={{
-                                  marginLeft: 'var(--space-2)',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px var(--space-1)',
-                                  fontSize: 'var(--label-sm)',
-                                  background: 'var(--surface-container)',
-                                  color: 'var(--on-surface)',
-                                  borderRadius: 'var(--radius-md)',
-                                  border: '1px solid var(--outline-variant)',
-                                  cursor: 'pointer',
-                                  fontWeight: 'var(--font-medium)'
-                                }}
-                              >
-                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-                                  download
-                                </span>
-                                Baixar
-                              </button>
-                            </td>
-                            <td style={{
-                              padding: 'var(--space-2) var(--space-4)',
-                              textAlign: 'center',
-                              fontSize: 'var(--body-md)',
-                              fontWeight: 'var(--font-medium)',
-                              color: 'var(--on-surface)'
-                            }}>
-                              v{doc.version}
-                            </td>
-                            <td style={{ padding: 'var(--space-2) var(--space-4)' }}>
-                              <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '2px 8px',
-                                borderRadius: 'var(--radius-full)',
-                                fontSize: 'var(--label-md)',
-                                fontWeight: 'var(--font-medium)',
-                                background: ds.bg,
-                                color: ds.color,
-                                whiteSpace: 'nowrap'
-                              }}>
-                                <span style={{
-                                  width: '5px', height: '5px',
-                                  borderRadius: 'var(--radius-full)',
-                                  background: ds.dot
-                                }} />
-                                {ds.label}
-                              </span>
-                            </td>
-                            <td style={{
-                              padding: 'var(--space-2) var(--space-4)',
-                              textAlign: 'right',
-                              fontSize: 'var(--body-md)',
-                              color: 'var(--on-surface-variant)',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('pt-PT', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              }) : '—'}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Sem documentos */}
-              {docs.length === 0 && (
-                <div style={{
-                  textAlign: 'center',
-                  padding: 'var(--space-4) var(--space-3)',
-                  color: 'var(--on-surface-variant)',
-                  fontSize: 'var(--body-md)'
-                }}>
-                  <span className="material-symbols-outlined" style={{
-                    fontSize: '24px',
-                    marginBottom: 'var(--space-1)',
-                    display: 'block'
-                  }}>
-                    folder_off
-                  </span>
-                  Nenhum documento anexado a este protocolo.
-                </div>
-              )}
+      {protocols.length === 0 ? topicDocuments.length === 0 ? (
+        <div className="student-empty-state"><span className="material-symbols-outlined" aria-hidden="true">folder_open</span><strong>Não há documentos para apresentar</strong><span>Os documentos dos temas e protocolos aparecerão aqui após a submissão.</span></div>
+      ) : (
+        <section className="student-document-panel" aria-labelledby="topic-documents-heading">
+          <header className="student-document-panel__header">
+            <div>
+              <span className="student-document-panel__eyebrow">Tema submetido</span>
+              <h2 id="topic-documents-heading" className="student-document-panel__title">Documentos dos temas</h2>
             </div>
-          )
-        })}
-      </div>
+          </header>
+          {topicDocuments.map(topic => (
+            <TopicDocumentRow
+              key={topic.id}
+              topic={topic}
+              onView={() => setTopicViewer(topic)}
+              onDownload={() => void download(
+                topicService.downloadDocument(topic.id),
+                topic.document_name || `tema-${topic.id}.docx`,
+              )}
+            />
+          ))}
+        </section>
+      ) : selectedProtocol && (
+        <div className="student-document-list">
+          <aside className="student-protocol-list" aria-label="Protocolos">
+            {protocols.map(protocol => <button key={protocol.id} type="button" className={`student-protocol-list__item${protocol.id === selectedProtocol.id ? ' is-active' : ''}`} onClick={() => setSelectedProtocolId(protocol.id)}>
+              <span className="student-protocol-list__code">{protocol.code}</span>
+              <span className="student-protocol-list__title">{protocol.topic?.title || 'Protocolo sem tema associado'}</span>
+            </button>)}
+          </aside>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <section className="student-document-panel" aria-live="polite">
+            <header className="student-document-panel__header">
+              <div><span className="student-document-panel__eyebrow">{selectedProtocol.code} · {selectedProtocol.status_label}</span><h2 className="student-document-panel__title">{selectedProtocol.topic?.title || 'Protocolo sem tema associado'}</h2></div>
+              <span className="student-document-row__meta">{documents.length} ficheiro(s)</span>
+            </header>
+
+            <section className="student-document-section" aria-labelledby="protocol-documents-heading">
+              <h3 id="protocol-documents-heading" className="student-document-section__label">Documentos do protocolo</h3>
+              {documents.length === 0 ? <p className="student-document-row__meta">Ainda não há ficheiros submetidos neste protocolo.</p> : documents.map(document => <DocumentRow key={document.id} document={document} onPreview={() => document.download_url && setPreview({ url: document.download_url, title: document.file_name, filename: document.file_name })} onDownload={() => void download(document.download_url, document.file_name)} />)}
+            </section>
+
+            {topicDocument && (
+              <section className="student-document-section" aria-labelledby="topic-document-heading">
+                <h3 id="topic-document-heading" className="student-document-section__label">Documento do tema</h3>
+                <TopicDocumentRow
+                  topic={topicDocument}
+                  onView={() => setTopicViewer(topicDocument)}
+                  onDownload={() => void download(
+                    topicService.downloadDocument(topicDocument.id),
+                    topicDocument.document_name || `tema-${topicDocument.id}.docx`,
+                  )}
+                />
+              </section>
+            )}
+
+            <section className="student-document-section" aria-labelledby="opinions-heading">
+              <h3 id="opinions-heading" className="student-document-section__label">Pareceres emitidos</h3>
+              {protocolOpinions.length === 0 ? <p className="student-document-row__meta">Ainda não há pareceres disponíveis.</p> : protocolOpinions.map(opinion => <article key={opinion.id} className="student-opinion-row"><div><strong>{opinion.organ} · {opinion.decision === 'approved' ? 'Aprovado' : 'Não aprovado'}</strong><p className="student-document-row__meta">Versão {opinion.version} · Emitido em {formatDate(opinion.issued_at)}</p></div><div className="student-document-row__actions">{opinion.is_signed && opinion.signed_download_url && <><button type="button" className="btn btn-small" onClick={() => setPreview({ url: opinion.signed_download_url!, title: `Parecer assinado ${selectedProtocol.code}`, filename: `parecer-assinado-${selectedProtocol.code}.pdf` })}><span className="material-symbols-outlined" aria-hidden="true">visibility</span>Ver</button><button type="button" className="btn btn-small" onClick={() => void download(opinion.signed_download_url, `parecer-assinado-${selectedProtocol.code}.pdf`)}><span className="material-symbols-outlined" aria-hidden="true">download</span>Baixar</button></>}</div></article>)}
+            </section>
+          </section>
+        </div>
+      )}
+
+      {preview && <PdfPreviewModal url={preview.url} title={preview.title} filename={preview.filename} onClose={() => setPreview(null)} />}
+      {topicViewer && (
+        <TopicDocumentViewer
+          topic={topicViewer}
+          onClose={() => setTopicViewer(null)}
+          onDownload={() => void download(
+            topicService.downloadDocument(topicViewer.id),
+            topicViewer.document_name || `tema-${topicViewer.id}.docx`,
+          )}
+        />
+      )}
+    </main>
+  )
+}
+
+function TopicDocumentRow({ topic, onView, onDownload }: { topic: Topic; onView: () => void; onDownload: () => void }) {
+  return (
+    <article className="student-document-row">
+      <div className="student-document-row__main">
+        <span className="material-symbols-outlined" aria-hidden="true">article</span>
+        <div>
+          <div className="student-document-row__name">{topic.document_name || 'Documento do tema'}</div>
+          <div className="student-document-row__meta">Formato DOCX · Submetido em {formatDate(topic.submitted_at)}</div>
+        </div>
+      </div>
+      <div className="student-document-row__actions">
+        <button type="button" className="btn btn-small" onClick={onView}>
+          <span className="material-symbols-outlined" aria-hidden="true">visibility</span>
+          Ver DOCX
+        </button>
+        <button type="button" className="btn btn-small" onClick={onDownload}>
+          <span className="material-symbols-outlined" aria-hidden="true">download</span>
+          Baixar
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function TopicDocumentViewer({ topic, onClose, onDownload }: { topic: Topic; onClose: () => void; onDownload: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    dialogRef.current?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  return (
+    <div
+      ref={dialogRef}
+      className="student-topic-viewer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Visualização do documento do tema"
+      tabIndex={-1}
+    >
+      <header className="student-topic-viewer__header">
+        <div>
+          <strong>{topic.document_name || 'Documento do tema'}</strong>
+          <p className="student-document-row__meta">Visualização em modo de leitura</p>
+        </div>
+        <div className="student-document-row__actions">
+          <button type="button" className="btn btn-small" onClick={onDownload}>
+            <span className="material-symbols-outlined" aria-hidden="true">download</span>
+            Baixar
+          </button>
+          <button type="button" className="btn btn-small" onClick={onClose}>
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
+            Fechar
+          </button>
+        </div>
+      </header>
+      <div className="student-topic-viewer__content">
+        <OnlyOfficeEditor topicId={topic.id} height="100%" />
+      </div>
     </div>
   )
+}
+
+function DocumentRow({ document, onPreview, onDownload }: { document: Document; onPreview: () => void; onDownload: () => void }) {
+  return <article className="student-document-row"><div className="student-document-row__main"><span className="material-symbols-outlined" aria-hidden="true">description</span><div><div className="student-document-row__name">{document.file_name}</div><div className="student-document-row__meta">{documentLabel(document)} · {formatDate(document.submitted_at)}</div></div></div><div className="student-document-row__actions"><button type="button" className="btn btn-small" onClick={onPreview}><span className="material-symbols-outlined" aria-hidden="true">visibility</span>Ver</button><button type="button" className="btn btn-small" onClick={onDownload}><span className="material-symbols-outlined" aria-hidden="true">download</span>Baixar</button></div></article>
 }

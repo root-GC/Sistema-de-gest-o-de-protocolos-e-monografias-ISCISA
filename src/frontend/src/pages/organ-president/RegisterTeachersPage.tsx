@@ -103,7 +103,7 @@ export default function RegisterTeachersPage() {
       console.log('✅ Docente criado:', response)
 
       setSuccessMessage(
-        'Docente registado com sucesso! Email de convite enviado.'
+        'Docente adicionado com sucesso! Email enviado.'
       )
 
       setFormData({

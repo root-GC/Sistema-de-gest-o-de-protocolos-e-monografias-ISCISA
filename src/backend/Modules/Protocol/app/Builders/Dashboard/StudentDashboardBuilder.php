@@ -10,14 +10,14 @@ use Modules\User\app\Models\User;
 class StudentDashboardBuilder implements DashboardBuilder
 {
     /**
-     * Sequência feliz do Protocol através dos 3 órgãos.
+     * Sequência feliz do protocolo. Os Núcleos tratam somente temas;
+     * protocolos seguem do supervisor para o Comité Científico e CIBS.
      * Não inclui os estados "rejected_*" — esses são tratados à parte,
      * como um desvio da linha, não como um passo dela.
      */
     private const PROTOCOL_FLOW = [
         Protocol::STATUS_PENDING_SUPERVISOR       => 'Aguardando aprovação do supervisor',
-        Protocol::STATUS_PENDING_NUCLEO           => 'Encaminhado ao Núcleo Científico',
-        Protocol::STATUS_IN_REVIEW_NUCLEO         => 'Em avaliação — Núcleo Científico',
+        Protocol::STATUS_DOCUMENTS_PENDING_CC     => 'Validação documental — Comité Científico',
         Protocol::STATUS_PENDING_COMITE_CIENTIFICO    => 'Encaminhado ao Comité Científico',
         Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO  => 'Em avaliação — Comité Científico',
         Protocol::STATUS_DOCUMENTS_PENDING_CIBS        => 'Validação documental — Comité de Bioética',
@@ -98,10 +98,9 @@ class StudentDashboardBuilder implements DashboardBuilder
     {
         return match ($status) {
             Protocol::STATUS_PENDING_SUPERVISOR      => 'Aguardando aprovação do teu supervisor.',
-            Protocol::STATUS_PENDING_NUCLEO,
+            Protocol::STATUS_DOCUMENTS_PENDING_CC,
             Protocol::STATUS_PENDING_COMITE_CIENTIFICO,
             Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Aguardando atribuição de avaliadores.',
-            Protocol::STATUS_IN_REVIEW_NUCLEO,
             Protocol::STATUS_IN_REVIEW_COMITE_CIENTIFICO,
             Protocol::STATUS_IN_REVIEW_COMITE_BIOETICA => 'Aguardando parecer dos avaliadores.',
             default => null,

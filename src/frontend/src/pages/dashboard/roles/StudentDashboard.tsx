@@ -3,7 +3,6 @@ import { useRoleDashboard } from '../../../hooks/useRoleDashboard';
 import type { StudentDashboardPayload } from '../../../types/dashboard';
 import { ProtocolTimeline } from '../components/ProtocolTimeline';
 import { NotificationsPanel } from '../components/NotificationsPanel';
-import { LoadingSpinner } from '../../../components/LoadingSpinner';
 
 export function StudentDashboard() {
   const { data, isLoading, error } = useRoleDashboard<StudentDashboardPayload>();

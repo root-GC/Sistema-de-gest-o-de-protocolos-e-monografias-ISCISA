@@ -49,7 +49,9 @@ Route::prefix('api')->middleware(['api'])->group(function () {
 
 ### 2.4 Variáveis de ambiente (Docker)
 ```env
-ONLYOFFICE_DOCUMENT_URL=http://host.docker.internal:8000
+ONLYOFFICE_DOCUMENT_URL=http://127.0.0.1:8000
+ONLYOFFICE_URL=http://127.0.0.1:8088
+ONLYOFFICE_BACKEND_PORT=8000
 ONLYOFFICE_URL=http://localhost
 ONLYOFFICE_JWT_SECRET=iscisa_secret_2026453456534563563463546545635463456345643564356
 FILESYSTEM_DISK=public

@@ -5,6 +5,7 @@ import { ProtectedRoute } from './guards/ProtectedRoute.tsx'
 import { AppLayout } from './components/layout/AppLayout.tsx'
 import { GlobalLoader } from './components/GlobalLoader'
 import { lazy } from 'react'
+import './pages/teacher/teacherWorkspace.css'
 
 // Páginas públicas
 import LoginPage from './pages/LoginPage.tsx'
@@ -50,8 +51,10 @@ const SecretaryProtocolsPage = lazy(() => import('./pages/shared/SecretaryProtoc
 const AgendaPage = lazy(() => import('./pages/shared/AgendaPage'))
 
 // 🆕 NOVAS PÁGINAS DA SECRETÁRIA
-const MeetingPage = lazy(() => import('./pages/shared/secretary/MeetingPage'))
 const SpreadsheetPage = lazy(() => import('./pages/shared/secretary/SpreadsheetPage'))
+const HistoryPage = lazy(() => import('./pages/shared/secretary/HistoryPage'))
+const MeetingPage = lazy(() => import('./pages/shared/secretary/MeetingPage'))
+const SignaturePage = lazy(() => import('./pages/shared/secretary/SignaturePage'))
 
 // Admin
 const AdminUsersPage = lazy(() => import('./pages/system-admin/AdminUsersPage'))
@@ -105,20 +108,20 @@ export default function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
 
               {/* ── Student ─────────────────────────────────── */}
-              <Route element={<ProtectedRoute permission="topic.create" />}>
+              <Route element={<ProtectedRoute permission="topic.create" roles={['student']} />}>
                 <Route path="/topic" element={<TopicPage />} />
               </Route>
-              <Route element={<ProtectedRoute permission="protocol.create" />}>
+              <Route element={<ProtectedRoute permission="protocol.create" roles={['student']} />}>
                 <Route path="/protocol/mine" element={<ProtocolPage />} />
                 <Route path="/protocol/submit" element={<ProtocolPage />} />
                 <Route path="/protocol/documents" element={<DocumentsPage />} />
               </Route>
-              <Route element={<ProtectedRoute permission="monograph.submit" />}>
+              <Route element={<ProtectedRoute permission="monograph.submit" roles={['student']} />}>
                 <Route path="/monograph" element={<MonographPage />} />
               </Route>
 
               {/* ── Supervisor ──────────────────────────────── */}
-              <Route element={<ProtectedRoute permission="supervision.view" />}>
+              <Route element={<ProtectedRoute permission="supervision.view" roles={['teacher', 'supervisor', 'reviewer']} />}>
                 <Route path="/supervision" element={<SupervisionPage />} />
                 <Route path="/supervision/list" element={<SupervisionPage />} />
                 <Route path="/supervision/pending" element={<ValidationPage />} />
@@ -126,16 +129,16 @@ export default function App() {
               </Route>
 
               {/* Rotas do Supervisor (protocolos) */}
-              <Route element={<ProtectedRoute roles={['supervisor']} />}>
+              <Route element={<ProtectedRoute roles={['teacher', 'supervisor', 'reviewer']} permission="supervision.view" />}>
                 <Route path="/supervisor" element={<SupervisorProtocolsPage />} />
                 <Route path="/supervisor/protocols/:protocolId" element={<SupervisorProtocolDetailPage />} />
               </Route>
 
               {/* ── Teacher / Reviewer ──────────────────────── */}
-              <Route element={<ProtectedRoute permission="workload.view" />}>
+              <Route element={<ProtectedRoute permission="workload.view" roles={['teacher', 'supervisor', 'reviewer']} />}>
                 <Route path="/workload" element={<WorkloadPage />} />
               </Route>
-              <Route element={<ProtectedRoute permission="protocol.evaluate" />}>
+              <Route element={<ProtectedRoute permission="protocol.evaluate" roles={['teacher', 'supervisor', 'reviewer']} />}>
                 {/* Reuniões - específicas primeiro */}
                 <Route path="/reviewer/meetings/:protocolId" element={<ReviewerMeetingsPage />} />
                 <Route path="/reviewer/meetings" element={<ReviewerMeetingsListPage />} />
@@ -147,55 +150,64 @@ export default function App() {
                 {/* Reviews - específicas primeiro */}
                 <Route path="/reviews/protocols/:protocolId" element={<EvaluationPage />} />
                 <Route path="/reviews/topics/:topicId" element={<EvaluationPage />} />
-                <Route path="/reviews/assigned" element={<ReviewsPage />} />
-                <Route path="/reviews/done" element={<ReviewsPage />} />
+                <Route path="/reviews/assigned" element={<Navigate to="/reviews" replace />} />
+                <Route path="/reviews/done" element={<Navigate to="/reviews/history" replace />} />
+                <Route path="/reviews/history" element={<ReviewsPage />} />
                 <Route path="/reviews/:topicId" element={<EvaluationPage />} />
                 <Route path="/reviews" element={<ReviewsPage />} />
               </Route>
 
               {/* ── Coordinator ─────────────────────────────── */}
-              <Route element={<ProtectedRoute permission="protocol.assign" />}>
+              <Route element={<ProtectedRoute permission="protocol.assign" roles={['coordinator', 'secretary']} />}>
                 <Route path="/protocols" element={<ProtocolsOverviewPage />} />
                 <Route path="/protocols/assign" element={<AssignPage />} />
               </Route>
-              <Route element={<ProtectedRoute permission="defense.schedule" />}>
+              <Route element={<ProtectedRoute permission="defense.schedule" roles={['coordinator', 'secretary']} />}>
                 <Route path="/defense" element={<DefensePage />} />
                 <Route path="/defense/schedule" element={<DefensePage />} />
               </Route>
-              <Route element={<ProtectedRoute permission="reports.view" />}>
+              <Route element={<ProtectedRoute permission="reports.view" roles={['coordinator']} />}>
                 <Route path="/reports" element={<ReportsPage />} />
               </Route>
 
               {/* ── Agenda (shared) ──────────────────────────── */}
-              <Route path="/agenda" element={<AgendaPage />} />
+              <Route element={<ProtectedRoute roles={['teacher', 'supervisor', 'reviewer', 'secretary', 'coordinator', 'admin']} />}>
+                <Route path="/agenda" element={<AgendaPage />} />
+              </Route>
 
               {/* ── Secretary ───────────────────────────────── */}
-              <Route element={<ProtectedRoute permission="protocol.triage" />}>
+              <Route element={<ProtectedRoute permission="protocol.triage" roles={['secretary']} />}>
                 <Route path="/secretary/protocols" element={<SecretaryProtocolsPage />} />
-                <Route path="/secretary/meeting" element={<MeetingPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission="protocol.triage" roles={['secretary']} organTypes={['nucleus', 'scientific_committee', 'bioethics_committee']} />}>
                 <Route path="/secretary/spreadsheet" element={<SpreadsheetPage />} />
+                <Route path="/secretary/history" element={<HistoryPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission="protocol.assign" roles={['secretary']} organTypes={['scientific_committee', 'bioethics_committee']} />}>
+                <Route path="/secretary/meeting" element={<MeetingPage />} />
+                <Route path="/secretary/signatures" element={<SignaturePage />} />
               </Route>
 
               {/* ── Admin ───────────────────────────────────── */}
-              <Route element={<ProtectedRoute permission="admin.users" />}>
+              <Route element={<ProtectedRoute permission="admin.users" roles={['admin']} adminScope="global" />}>
                 <Route path="/admin/users" element={<AdminUsersPage />} />
               </Route>
-              <Route element={<ProtectedRoute permission="admin.organs" />}>
+              <Route element={<ProtectedRoute permission="admin.organs" roles={['admin']} adminScope="global" />}>
                 <Route path="/admin/organs" element={<AdminOrgansPage />} />
               </Route>
-              <Route element={<ProtectedRoute permission="admin.settings" />}>
+              <Route element={<ProtectedRoute permission="admin.settings" roles={['admin']} adminScope="global" />}>
                 <Route path="/admin/system-status" element={<SystemStatusPage />} />
               </Route>
 
               {/* ── General Admin / Direção Científica ──────── */}
-              <Route element={<ProtectedRoute permission="admin.organs" />}>
+              <Route element={<ProtectedRoute permission="admin.organs" roles={['admin']} adminScope="organ" organTypes={['scientific_direction']} />}>
                 <Route path="/general-admin" element={<GeneralAdminDashboard />} />
                 <Route path="/general-admin/personnel" element={<ManagePersonnelPage />} />
                 <Route path="/general-admin/courses" element={<CoursesManagementPage />} />
               </Route>
 
               {/* ── Organ President ─────────────────────────── */}
-              <Route element={<ProtectedRoute permission="admin.organs" />}>
+              <Route element={<ProtectedRoute roles={['admin']} adminScope="organ" organTypes={['nucleus', 'scientific_committee', 'bioethics_committee']} />}>
                 <Route path="/organ-president" element={<OrganPresidentDashboard />} />
                 <Route path="/organ-president/members" element={<ManageOrganMembersPage />} />
                 <Route path="/organ-president/reviewers" element={<InviteReviewersPage />} />

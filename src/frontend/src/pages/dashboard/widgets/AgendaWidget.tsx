@@ -42,7 +42,13 @@ export function AgendaWidget({ isLoading: externalLoading }: WidgetProps) {
               <div
                 key={event.id}
                 className="notification-item"
-                style={{ cursor: 'default' }}
+                style={{ cursor: event.link ? 'pointer' : 'default' }}
+                role={event.link ? 'link' : undefined}
+                tabIndex={event.link ? 0 : undefined}
+                onClick={() => event.link && navigate(event.link)}
+                onKeyDown={keyEvent => {
+                  if (event.link && (keyEvent.key === 'Enter' || keyEvent.key === ' ')) navigate(event.link)
+                }}
               >
                 <span className="material-symbols-outlined notification-icon" style={{ color: meta.color }}>
                   {meta.icon}

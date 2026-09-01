@@ -1,6 +1,8 @@
 // src/hooks/useRoleDashboard.ts
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import type { Role } from '../context/AuthContext';
+import { req } from '../services/apiClient';
 
 interface RoleDashboardState<T> {
   data: T | null;
@@ -12,30 +14,34 @@ interface RoleDashboardState<T> {
  * Substitui o useDashboardData genérico (que fazia N pedidos, um por widget).
  * Agora é 1 pedido, moldado ao role activo, resposta já pronta a renderizar.
  */
-export function useRoleDashboard<T>(): RoleDashboardState<T> {
+export function useRoleDashboard<T>(roleOverride?: Role, enabled = true): RoleDashboardState<T> {
   const { activeRole } = useAuth();
+  const requestedRole = roleOverride ?? activeRole;
   const [state, setState] = useState<RoleDashboardState<T>>({
     data: null,
-    isLoading: true,
+    isLoading: enabled,
     error: null,
   });
 
   useEffect(() => {
-    if (!activeRole) return;
     let cancelled = false;
 
-    setState(s => ({ ...s, isLoading: true, error: null }));
+    if (!enabled || !requestedRole) {
+      const resetId = window.setTimeout(() => {
+        if (!cancelled) setState({ data: null, isLoading: false, error: null });
+      }, 0);
 
-    fetch(`/api/v1/dashboard?role=${activeRole}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('sgpmc_token')}`,
-        Accept: 'application/json',
-      },
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Não foi possível carregar o dashboard.');
-        return res.json();
-      })
+      return () => {
+        cancelled = true;
+        window.clearTimeout(resetId);
+      };
+    }
+
+    const loadingId = window.setTimeout(() => {
+      if (!cancelled) setState(s => ({ ...s, isLoading: true, error: null }));
+    }, 0);
+
+    req<T>('GET', '/api/v1/dashboard', { role: requestedRole })
       .then(json => {
         if (!cancelled) setState({ data: json, isLoading: false, error: null });
       })
@@ -45,8 +51,9 @@ export function useRoleDashboard<T>(): RoleDashboardState<T> {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(loadingId);
     };
-  }, [activeRole]);
+  }, [enabled, requestedRole]);
 
   return state;
 }

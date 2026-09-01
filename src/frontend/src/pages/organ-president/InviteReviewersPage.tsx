@@ -2,7 +2,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { organPresidentService } from '../../services/organPresidentService'
-import { getOrganConfig } from './organPresidentConfig'
 import '../../styles/global.css'
 
 interface Teacher {
@@ -100,7 +99,6 @@ export default function InviteReviewersPage() {
   const [currentPage, setCurrentPage] = useState(1)
 
   const organType = (profiles?.admin?.organ?.type as OrganType) || 'scientific_committee'
-  const config = getOrganConfig(organType)
   
   // Verificar se é um núcleo (gestão automática)
   const isNucleus = organType === 'nucleus'
@@ -143,7 +141,7 @@ export default function InviteReviewersPage() {
     }
   }
 
-  async function loadAvailableTeachers(page: number = 1, search: string = '') {
+  async function loadAvailableTeachers(page: number = 1, _search: string = '') {
     setError(null)
     try {
       const teachersRes = await organPresidentService.listAvailableTeachers()
@@ -175,12 +173,12 @@ export default function InviteReviewersPage() {
     setSuccessMessage(null)
     try {
       const response = await organPresidentService.inviteReviewer(teacherId)
-      const message = (response as any)?.message || 'Docente convidado como revisor!'
+      const message = (response as any)?.message || 'Docente adicionado como revisor!'
       setSuccessMessage(message)
       await loadData()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (e: any) {
-      const errorMessage = e?.response?.data?.message || e?.message || 'Erro ao convidar docente.'
+      const errorMessage = e?.response?.data?.message || e?.message || 'Erro ao adicionar docente.'
       setError(errorMessage)
     } finally {
       setIsInviting(null)
@@ -254,7 +252,7 @@ export default function InviteReviewersPage() {
         <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
           {isNucleus 
             ? 'Os revisores são geridos automaticamente pelo sistema'
-            : `Convide docentes de todos os Núcleos para serem revisores no ${ORGAN_TYPE_LABELS[organType]}`
+            : `Adicione docentes de todos os Núcleos como revisores no ${ORGAN_TYPE_LABELS[organType]}`
           }
         </p>
       </div>
@@ -443,7 +441,7 @@ export default function InviteReviewersPage() {
         )}
       </section>
 
-      {/* Secção de convite - apenas para comités e direção científica */}
+      {/* Secção de adição - apenas para comités e direção científica */}
       {canManageReviewers ? (
         <section>
           <div style={{
@@ -635,12 +633,12 @@ export default function InviteReviewersPage() {
                             borderRadius: '50%',
                             animation: 'spin 0.8s linear infinite'
                           }} />
-                          A convidar...
+                          A adicionar...
                         </>
                       ) : (
                         <>
                           <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person_add</span>
-                          Convidar como Revisor
+                          Adicionar como Revisor
                         </>
                       )}
                     </button>
@@ -732,7 +730,7 @@ export default function InviteReviewersPage() {
               margin: '0 auto'
             }}>
               No Núcleo, os revisores são adicionados automaticamente quando são 
-              atribuídos a revisões de protocolos. Não é necessário convidar 
+              atribuídos a revisões de protocolos. Não é necessário adicionar
               manualmente os docentes.
             </p>
             <div style={{

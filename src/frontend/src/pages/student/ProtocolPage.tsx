@@ -18,6 +18,7 @@ import {
 import { topicService, type ApprovedTopic } from '../../services/topicService'
 import { TopicJustificationToggle } from '../../components/TopicJustification'
 import PdfPreviewModal from '../../components/PdfPreviewModal'
+import { StudentWorkspaceNav } from '../../components/student/StudentWorkspaceNav'
 import '../../styles/global.css'
 
 // ============================================================
@@ -621,7 +622,9 @@ export default function ProtocolPage() {
   // RENDER
   // ============================================================
   return (
-    <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
+    <main className="student-workspace" style={{ width: '100%' }}>
+
+      <StudentWorkspaceNav />
 
       {/* Cabeçalho */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
@@ -655,6 +658,17 @@ export default function ProtocolPage() {
         </div>
       )}
 
+      {protocols.length > 1 && (
+        <nav className="student-protocol-jump" aria-label="Ir para protocolo submetido">
+          {protocols.map(protocol => (
+            <a key={protocol.id} className="student-protocol-jump__item" href={`#protocol-${protocol.id}`}>
+              <span className="student-protocol-jump__code">{protocol.code}</span>
+              <span className="student-protocol-jump__title">{protocol.topic?.title || `Submissão ${protocol.submission_number}`}</span>
+            </a>
+          ))}
+        </nav>
+      )}
+
       {/* Lista de protocolos */}
       {protocols.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
@@ -671,7 +685,7 @@ export default function ProtocolPage() {
             }, {} as Record<string, ProtocolOpinion>)
 
             return (
-              <div key={p.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              <div id={`protocol-${p.id}`} key={p.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '6px', flexWrap: 'wrap' }}>
@@ -1380,6 +1394,6 @@ export default function ProtocolPage() {
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+    </main>
   )
 }

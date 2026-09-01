@@ -157,35 +157,29 @@ export function RequiredDocumentsReviewPanel({
 
   const activeRequirementId = selectedRequirementId ?? requirements[0]?.id ?? null
   const selectedRequirement = requirements.find(item => item.id === activeRequirementId) ?? null
-  const selectedPreviewTarget = useMemo<PreviewTarget | null>(() => {
-    if (selectedRequirement) {
+  const selectedPreviewTarget: PreviewTarget | null = (() => {
+    if (selectedRequirement?.download_url) {
       return {
         id: `requirement-${selectedRequirement.id}`,
         label: selectedRequirement.nome,
-        url: selectedRequirement.download_url || selectedRequirement.file_url,
+        url: selectedRequirement.download_url,
         filename: selectedRequirement.file_name || selectedRequirement.nome,
         description: selectedRequirement.status_label || (selectedRequirement.enviado ? 'Documento enviado' : 'Ainda não enviado'),
       }
     }
 
-    if (protocol.latest_document?.download_url || protocol.latest_document?.file_url) {
+    if (protocol.latest_document?.download_url) {
       return {
         id: 'protocol',
         label: 'Protocolo',
-        url: protocol.latest_document.download_url || protocol.latest_document.file_url,
+        url: protocol.latest_document.download_url,
         filename: protocol.latest_document.file_name || `protocolo-${protocol.code}.pdf`,
         description: 'Pré-visualização do documento principal submetido.',
       }
     }
 
     return null
-  }, [
-    protocol.code,
-    protocol.latest_document?.download_url,
-    protocol.latest_document?.file_name,
-    protocol.latest_document?.file_url,
-    selectedRequirement,
-  ])
+  })()
 
   const isAutoParecerSelected = selectedRequirement ? isAutoParecer(selectedRequirement) : false
 

@@ -18,9 +18,7 @@ function formatDate(dateStr?: string | null): string {
 }
 
 function organForEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): EvaluationOrgan {
-  if (form?.organ === 'comite_cientifico') return 'comite-cientifico'
-  if (form?.organ === 'comite_bioetica') return 'comite-bioetica'
-  return 'nucleo'
+  return form?.organ === 'comite_bioetica' ? 'comite-bioetica' : 'comite-cientifico'
 }
 
 function isSharedCommitteeEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
@@ -157,7 +155,7 @@ export default function FinalDecisionDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const { evaluation_form } = await evaluationService.getForm(id)
+      const { evaluation_form } = await evaluationService.getFormAcrossCommittees(id)
       setForm(evaluation_form)
 
       // Carregar protocolo
@@ -338,7 +336,7 @@ export default function FinalDecisionDetailPage() {
       )}
 
       {/* ── SPLIT VIEW ── */}
-      <div className={`evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
+      <div className={`teacher-workspace evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
 
         {/* LEFT: ONLYOFFICE EDITOR */}
         <section className="doc-viewer-pane" style={{

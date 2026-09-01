@@ -4,7 +4,6 @@ namespace Modules\Protocol\app\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 class ProtocolResource extends JsonResource
 {
@@ -61,9 +60,7 @@ class ProtocolResource extends JsonResource
                 'id' => $doc->id,
                 'document_type' => $doc->document_type,
                 'file_name' => $doc->file_name,
-                'file_path' => $doc->file_path,
-                'file_url' => Storage::disk('public')->url($doc->file_path),
-                'download_url' => url("api/v1/protocols/{$this->id}/download"),
+                'download_url' => url("api/v1/protocols/{$this->id}/documents/{$doc->id}/download"),
                 'pages' => $doc->pages,
                 'version' => $doc->version,
                 'version_label' => $doc->version_label,

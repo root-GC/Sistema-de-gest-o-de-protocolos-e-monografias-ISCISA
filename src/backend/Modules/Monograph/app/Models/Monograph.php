@@ -33,9 +33,19 @@ class Monograph extends Model
     }
 
     public function supervisor(): BelongsTo
-{
-    return $this->belongsTo(\Modules\User\app\Models\TeacherProfile::class, 'supervisor_id');
-}
+    {
+        return $this->belongsTo(\Modules\User\app\Models\TeacherProfile::class, 'supervisor_id');
+    }
+
+    public function protocol(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\Protocol\app\Models\Protocol::class);
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(\App\Models\MonographDocument::class);
+    }
 
     public function submissions(): HasMany
     {

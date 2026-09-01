@@ -86,11 +86,19 @@ class EvaluationFormController extends Controller
         return Protocol::ORGAN_NUCLEO;
     }
 
-    public function show(EvaluationForm $form)
+    private function ensureRouteMatchesForm(Request $request, EvaluationForm $form): void
     {
+        if ($form->organ !== $this->routeFormOrgan($request)) {
+            abort(404);
+        }
+    }
+
+    public function show(Request $request, EvaluationForm $form)
+    {
+        $this->ensureRouteMatchesForm($request, $form);
         $this->authorize('view', $form);
 
-        $user = request()->user();
+        $user = $request->user();
 
         return response()->json([
             'evaluation_form' => EvaluationFormResource::make(
@@ -104,6 +112,7 @@ class EvaluationFormController extends Controller
         EvaluationForm $form,
         EvaluationFormCriterion $formCriterion
     ) {
+        $this->ensureRouteMatchesForm($request, $form);
         $this->authorize('submitEvaluation', $form);
 
         if ((int) $formCriterion->evaluation_form_id !== (int) $form->id) {
@@ -125,6 +134,7 @@ class EvaluationFormController extends Controller
 
     public function submit(SubmitEvaluationRequest $request, EvaluationForm $form)
     {
+        $this->ensureRouteMatchesForm($request, $form);
         $this->authorize('submitEvaluation', $form);
 
         $result = $this->evaluationService->submitEvaluation(
@@ -170,7 +180,6 @@ class EvaluationFormController extends Controller
                 'version' => $opinion->effectiveVersion(),
                 'decision' => $opinion->decision,
                 'issued_at' => $opinion->issued_at,
-                'document_url' => Storage::disk('public')->url($path),
                 'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
                 'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
             ];
@@ -181,6 +190,7 @@ class EvaluationFormController extends Controller
 
     public function markEvaluated(SubmitEvaluationRequest $request, EvaluationForm $form)
     {
+        $this->ensureRouteMatchesForm($request, $form);
         $this->authorize('submitEvaluation', $form);
 
         if (! in_array($form->organ, [Protocol::ORGAN_COMITE_CIENTIFICO, Protocol::ORGAN_COMITE_BIOETICA], true)) {
@@ -210,6 +220,7 @@ class EvaluationFormController extends Controller
 
     public function scheduleDeliberation(Request $request, EvaluationForm $form)
     {
+        $this->ensureRouteMatchesForm($request, $form);
         $user = $request->user();
 
         if (! $user->hasPermission('protocol.assign')) {
@@ -245,6 +256,7 @@ class EvaluationFormController extends Controller
 
     public function submitDeliberation(Request $request, EvaluationForm $form)
     {
+        $this->ensureRouteMatchesForm($request, $form);
         $this->authorize('submitEvaluation', $form);
 
         $validated = $request->validate([
@@ -291,7 +303,6 @@ class EvaluationFormController extends Controller
                 'version' => $opinion->effectiveVersion(),
                 'decision' => $opinion->decision,
                 'issued_at' => $opinion->issued_at,
-                'document_url' => Storage::disk('public')->url($path),
                 'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
                 'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
             ],
@@ -303,6 +314,7 @@ class EvaluationFormController extends Controller
         EvaluationForm $form,
         DocumentGenerationService $documentService
     ) {
+        $this->ensureRouteMatchesForm($request, $form);
         $this->authorize('decide', $form);
 
         $result = $this->evaluationService->decide(
@@ -335,7 +347,6 @@ class EvaluationFormController extends Controller
                 'id' => $opinion->id,
                 'decision' => $opinion->decision,
                 'issued_at' => $opinion->issued_at,
-                'document_url' => Storage::disk('public')->url($path),
                 'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
                 'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
             ],
@@ -444,9 +455,13 @@ class EvaluationFormController extends Controller
             ], 403);
         }
 
+        $formOrgan = $this->routeFormOrgan($request);
+
         return response()->json([
             'evaluation_forms' => EvaluationFormResource::collection(
                 $this->evaluationService->listForReviewer($user)
+                    ->where('organ', $formOrgan)
+                    ->values()
             ),
         ]);
     }
@@ -456,6 +471,11 @@ class EvaluationFormController extends Controller
         $user = $request->user();
 
         if (! $user->hasPermission('protocol.assign')) {
+            abort(403);
+        }
+
+        $secretaryOrgan = $user->secretaryProfile?->organ?->type;
+        if (Protocol::formOrganFromOrganType($secretaryOrgan) !== $this->routeFormOrgan($request)) {
             abort(403);
         }
 
@@ -492,7 +512,6 @@ class EvaluationFormController extends Controller
                     'id' => $o->issuedBy->id,
                     'name' => $o->issuedBy->name,
                 ] : null,
-                'document_url' => $o->document_path ? Storage::disk('public')->url($o->document_path) : null,
                 'download_url' => url("api/v1/opinions/{$o->id}/download"),
                 'evaluation_form_download_url' => $o->evaluation_form_id
                     ? url("api/v1/evaluation-forms/{$o->evaluation_form_id}/download")
@@ -516,6 +535,7 @@ class EvaluationFormController extends Controller
 // Function to close the deliberation meeting, setting the status to either deliberated or not deliberated based on the outcome
     public function closeMeeting(Request $request, EvaluationForm $form)
 {
+    $this->ensureRouteMatchesForm($request, $form);
     $this->authorize('submitEvaluation', $form);
 
     $validated = $request->validate([

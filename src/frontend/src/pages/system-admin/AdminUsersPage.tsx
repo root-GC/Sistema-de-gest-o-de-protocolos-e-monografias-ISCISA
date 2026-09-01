@@ -115,7 +115,7 @@ export default function AdminUsersPage() {
           email: formEmail,
           organ_id: formOrganId
         })
-        setSuccessMessage('Administrador/a criado/a e convite enviado com sucesso!')
+        setSuccessMessage('Administrador/a adicionado/a com sucesso! Email enviado.')
       }
       setShowForm(false)
       loadData()
@@ -278,7 +278,7 @@ export default function AdminUsersPage() {
           </div>
           <button onClick={openCreateUser} disabled={isSubmitting} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '10px 16px', background: 'var(--primary)', color: 'var(--on-primary)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: isSubmitting ? 'not-allowed' : 'pointer', fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', fontFamily: 'var(--font-family)', whiteSpace: 'nowrap', opacity: isSubmitting ? 0.7 : 1, transition: 'all 0.2s' }}>
             <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>person_add</span>
-            Convidar Admin
+            Adicionar Admin
           </button>
         </div>
       )}
@@ -414,7 +414,7 @@ export default function AdminUsersPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-3)' }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-4)', width: '100%', maxWidth: '500px', maxHeight: '80vh', overflow: 'auto' }}>
             <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)' }}>
-              {editingId ? 'Editar' : 'Convidar'} Administrador/a
+              {editingId ? 'Editar' : 'Adicionar'} Administrador/a
             </h2>
             <form onSubmit={activeTab === 'users' ? handleUserSubmit : handleRoleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
 
@@ -461,7 +461,7 @@ export default function AdminUsersPage() {
                 <button type="button" onClick={() => setShowForm(false)} className="btn">Cancelar</button>
                 <button type="submit" className="btn btn-primary" disabled={isSubmitting} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', opacity: isSubmitting ? 0.7 : 1 }}>
                   {isSubmitting && <span style={{ width: '16px', height: '16px', border: '2px solid var(--on-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
-                  {isSubmitting ? 'A processar...' : editingId ? 'Atualizar' : 'Convidar'}
+                  {isSubmitting ? 'A processar...' : editingId ? 'Atualizar' : 'Adicionar'}
                 </button>
               </div>
             </form>

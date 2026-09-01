@@ -4,28 +4,28 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { StudentDashboard } from './roles/StudentDashboard';
 import { SecretaryDashboard } from './roles/SecretaryDashboard';
-import { ReviewerDashboard } from './roles/ReviewerDashboard';
 import { SupervisorDashboard } from './roles/SupervisorDashboard';
 import { StatsDashboard } from './roles/StatsDashboard';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import '../../styles/dashboard.css';
 
 // 🔑 Helper para normalizar role
-function normalizeRole(role: any): string {
+function normalizeRole(role: unknown): string {
   if (typeof role === 'string') {
     return role;
   }
   
   if (role && typeof role === 'object') {
+    const record = role as Record<string, unknown>
     // Tenta extrair o nome do role
-    if (role.name && typeof role.name === 'string') {
-      return role.name;
+    if (typeof record.name === 'string') {
+      return record.name;
     }
-    if (role.slug && typeof role.slug === 'string') {
-      return role.slug;
+    if (typeof record.slug === 'string') {
+      return record.slug;
     }
-    if (role.role && typeof role.role === 'string') {
-      return role.role;
+    if (typeof record.role === 'string') {
+      return record.role;
     }
   }
   
@@ -42,7 +42,6 @@ export default function DashboardPage() {
   // 🆕 Verificar perfil incompleto e redirecionar
   useEffect(() => {
     if (!loading && isProfileIncomplete) {
-      console.log('📋 Perfil incompleto, redirecionando para /complete-profile');
       navigate('/complete-profile', { replace: true });
     }
   }, [loading, isProfileIncomplete, navigate]);
@@ -79,8 +78,8 @@ export default function DashboardPage() {
       return <StudentDashboard />;
     case 'secretary':
       return <SecretaryDashboard />;
+    case 'teacher':
     case 'reviewer':
-      return <ReviewerDashboard />;
     case 'supervisor':
       return <SupervisorDashboard />;
     case 'coordinator':

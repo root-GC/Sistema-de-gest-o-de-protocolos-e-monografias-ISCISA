@@ -17,11 +17,11 @@ class MonographDocument extends Model
 
     public function monograph(): BelongsTo
     {
-        return $this->belongsTo(\Modules\Monograph\Models\Monograph::class);
+        return $this->belongsTo(\Modules\Monograph\app\Models\Monograph::class);
     }
 
     public function submittedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'submitted_by');
+        return $this->belongsTo(\Modules\User\app\Models\User::class, 'submitted_by');
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Modules\Protocol\app\Services;
 
+use App\Services\DocumentTraceService;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -155,32 +156,15 @@ class ProtocolService
                 $protocol->update(['code' => $code]);
             }
 
-            Log::info('Upload recebido', [
-                'original_name' => $document->getClientOriginalName(),
-                'mime' => $document->getMimeType(),
-                'size' => $document->getSize(),
-                'valid' => $document->isValid(),
-                'error' => $document->getError(),
-            ]);
-
-            Log::info('Storage check', [
-                'disk_root' => storage_path('app/public'),
-                'exists' => Storage::disk('public')->exists('protocols'),
-            ]);
-
-
             // Guardar ficheiro e gerar caminho (uma pasta por protocolo, nome por submissao)
             $submissionNumber = (int) $protocol->submission_number;
             try {
                 $path = $document->storeAs(
                     'protocols/' . $protocol->id,
-                    'protocol-' . $protocol->id . '-S' . $submissionNumber . '.docx',
+                    'protocol-S' . $submissionNumber . '-' . Str::uuid() . '.docx',
                     'public'
                 );
 
-                Log::info('Store result', [
-                    'path' => $path,
-                ]);
             } catch (\Throwable $e) {
                 Log::error('Erro no storeAs', [
                     'message' => $e->getMessage(),
@@ -190,7 +174,7 @@ class ProtocolService
             }
 
             // Criar documento na tabela documents (versionado por submissao)
-            Document::create([
+            $protocolDocument = Document::create([
                 'submited_by' => $user->id,
                 'protocol_id' => $protocol->id,
                 'document_type' => $protocolType,
@@ -201,6 +185,18 @@ class ProtocolService
                 'version_label' => Protocol::submissionVersionLabel($submissionNumber),
                 'status' => Document::STATUS_ACTIVE,
             ]);
+
+            app(DocumentTraceService::class)->capture(
+                $protocol,
+                'documents',
+                $protocolDocument->id,
+                $protocolDocument->file_name,
+                $protocolDocument->file_path,
+                $submissionNumber,
+                $protocolDocument->document_type,
+                $user,
+                $protocol->current_organ_id,
+            );
 
             $storedRequiredDocuments = $this->storeCCRequiredDocuments(
                 $protocol,
@@ -220,6 +216,24 @@ class ProtocolService
                 $otherDocumentNames,
                 $previousOtherDocuments
             );
+
+            $protocol->protocolDocumentRequirements()
+                ->whereNull('archived_at')
+                ->whereNotNull('file_path')
+                ->get()
+                ->each(function (ProtocolDocumentRequirement $requirement) use ($protocol, $user): void {
+                    app(DocumentTraceService::class)->capture(
+                        $protocol,
+                        'protocol_document_requirements',
+                        $requirement->id,
+                        $requirement->file_name ?: $requirement->nome,
+                        $requirement->file_path,
+                        $requirement->submission_number,
+                        $requirement->document_key,
+                        $user,
+                        $protocol->current_organ_id,
+                    );
+                });
 
     //  $createdDocument = Document::create([
     //     'submited_by' => $user->id,
@@ -290,7 +304,7 @@ class ProtocolService
                 $extension = $file->getClientOriginalExtension() ?: 'pdf';
                 $path = $file->storeAs(
                     "protocols/{$protocol->id}/required-documents/S{$submissionNumber}",
-                    "{$safeKey}.{$extension}",
+                    "{$safeKey}-" . Str::uuid() . ".{$extension}",
                     'public'
                 );
                 $fileName = $file->getClientOriginalName();
@@ -362,7 +376,7 @@ class ProtocolService
                 $extension = $file->getClientOriginalExtension() ?: 'pdf';
                 $path = $file->storeAs(
                     "protocols/{$protocol->id}/required-documents/S{$submissionNumber}",
-                    "{$safeKey}.{$extension}",
+                    "{$safeKey}-" . Str::uuid() . ".{$extension}",
                     'public'
                 );
                 $fileName = $file->getClientOriginalName();
@@ -444,7 +458,7 @@ class ProtocolService
             $extension = $file->getClientOriginalExtension() ?: 'pdf';
             $path = $file->storeAs(
                 "protocols/{$protocol->id}/required-documents/S{$submissionNumber}",
-                "{$documentKey}.{$extension}",
+                "{$documentKey}-" . Str::uuid() . ".{$extension}",
                 'public'
             );
 
@@ -543,7 +557,7 @@ class ProtocolService
             $safeKey = preg_replace('/[^a-z0-9_\\-]/i', '_', $requirement->document_key);
             $path = $file->storeAs(
                 "protocols/{$protocol->id}/required-documents/S{$protocol->submission_number}",
-                "{$safeKey}.{$extension}",
+                "{$safeKey}-" . Str::uuid() . ".{$extension}",
                 'public'
             );
 
@@ -556,6 +570,18 @@ class ProtocolService
                 'reviewed_by' => null,
                 'reviewed_at' => null,
             ]);
+
+            app(DocumentTraceService::class)->captureReplacement(
+                $protocol,
+                'protocol_document_requirements',
+                $requirement->id,
+                $requirement->file_name ?: $requirement->nome,
+                $requirement->file_path,
+                $requirement->submission_number,
+                $requirement->document_key,
+                $user,
+                $protocol->current_organ_id,
+            );
 
             app(ProtocolHistoryService::class)->record(
                 $protocol,
@@ -1073,6 +1099,18 @@ class ProtocolService
                 'signed_at' => now(),
             ]);
 
+            app(DocumentTraceService::class)->capture(
+                $protocol,
+                'opinions',
+                $opinion->id,
+                $opinion->signed_file_name,
+                $opinion->signed_document_path,
+                (int) ($protocol->submission_number ?: 1),
+                'signed_opinion_' . $opinion->organ,
+                $user,
+                $organ->id,
+            );
+
             $oldStatus = $protocol->status;
 
             app(ProtocolHistoryService::class)->record(
@@ -1409,7 +1447,11 @@ class ProtocolService
     {
         if ($expectedOrganType === Protocol::ORGAN_TYPE_NUCLEUS) {
             throw new HttpResponseException(
-                response()->json(['message' => 'Os Núcleos Científicos não atribuem revisores a protocolos.'], 422)
+                response()->json([
+                    'message' => 'Os Núcleos Científicos não atribuem revisores a protocolos. Continue no Comité Científico.',
+                    'code' => 'nucleus_protocol_flow_retired',
+                    'replacement' => '/api/v1/comite-cientifico/secretary/protocols',
+                ], 410)
             );
         }
 

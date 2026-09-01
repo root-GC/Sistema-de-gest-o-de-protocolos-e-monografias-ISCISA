@@ -1,5 +1,6 @@
 //components/auth/RoleSwitcher.tsx
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const ROLE_LABELS: Record<string, string> = {
   student:     'Estudante',
@@ -13,24 +14,33 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function RoleSwitcher() {
   const { roles, activeRole, switchRole } = useAuth();
+  const navigate = useNavigate();
 
-  if (roles.length <= 1) return null;
+  if (!activeRole || roles.length === 0) return null;
+
+  function handleChange(role: typeof activeRole) {
+    if (!role || role === activeRole) return
+
+    switchRole(role)
+    navigate('/dashboard')
+  }
 
   return (
-    <div className="role-switcher">
-      <span className="role-switcher__label">Perfil activo</span>
-      <div className="role-switcher__options">
+    <label className="role-switcher">
+      <span className="role-switcher__label">Perfil</span>
+      <select
+        className="role-switcher__select"
+        value={activeRole}
+        onChange={event => handleChange(event.target.value as typeof activeRole)}
+        aria-label="Perfil ativo"
+        disabled={roles.length === 1}
+      >
         {roles.map(role => (
-          <button
-            key={role}
-            className={`role-chip${activeRole === role ? ' role-chip--active' : ''}`}
-            onClick={() => switchRole(role)}
-            aria-pressed={activeRole === role}
-          >
+          <option key={role} value={role}>
             {ROLE_LABELS[role] ?? role}
-          </button>
+          </option>
         ))}
-      </div>
-    </div>
+      </select>
+    </label>
   );
 }

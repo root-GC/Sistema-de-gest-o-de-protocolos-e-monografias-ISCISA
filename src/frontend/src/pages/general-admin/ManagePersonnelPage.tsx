@@ -287,7 +287,7 @@ export default function ManagePersonnelPage() {
             course_id: formCourseId!,
             office: formOffice || undefined,
           })
-          setSuccessMessage('Coordenador criado! Convite enviado.')
+          setSuccessMessage('Coordenador adicionado! Email enviado.')
         }
       } else if (activeTab === 'secretaries') {
         if (editingId) {
@@ -303,7 +303,7 @@ export default function ManagePersonnelPage() {
             scientific_area_id: formAreaId || null,
             office: formOffice || undefined,
           })
-          setSuccessMessage('Secretário criado! Convite enviado.')
+          setSuccessMessage('Secretário adicionado! Email enviado.')
         }
       } else if (activeTab === 'presidents') {
         if (editingId) {
@@ -321,7 +321,7 @@ export default function ManagePersonnelPage() {
             email: formEmail,
             organ_id: formOrganId!,
           })
-          setSuccessMessage('Presidente criado! Convite enviado.')
+          setSuccessMessage('Presidente adicionado! Email enviado.')
         }
       }
       setShowForm(false)

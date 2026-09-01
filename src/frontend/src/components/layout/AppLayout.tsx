@@ -15,9 +15,13 @@ export function AppLayout() {
 
   // Detecta mudanças de rota para mostrar barra de progresso
   useEffect(() => {
-    setNavigating(true)
-    const timer = setTimeout(() => setNavigating(false), 400)
-    return () => clearTimeout(timer)
+    const startTimer = window.setTimeout(() => setNavigating(true), 0)
+    const endTimer = window.setTimeout(() => setNavigating(false), 400)
+
+    return () => {
+      window.clearTimeout(startTimer)
+      window.clearTimeout(endTimer)
+    }
   }, [location.pathname])
 
   useEffect(() => {
@@ -65,7 +69,8 @@ export function AppLayout() {
       />
 
       <div style={{
-        flex: 1,
+        flex: '0 0 auto',
+        width: isMobile ? '100%' : `calc(100% - ${sidebarWidth})`,
         display: 'flex',
         flexDirection: 'column',
         minWidth: 0,

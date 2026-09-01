@@ -6,15 +6,15 @@ import {
   type Topic, 
   type SimilarTopicsWarning,
 } from '../../services/topicService'
-import { TopicJustificationToggle } from '../../components/TopicJustification'
 import '../../styles/global.css'
+import { StudentWorkspaceNav } from '../../components/student/StudentWorkspaceNav'
+import { downloadApiFile } from '../../services/apiClient'
 
 export default function TopicPage() {
   const { user, profiles } = useAuth()
   
   const [topics, setTopics] = useState<Topic[]>([])
   const [title, setTitle] = useState('')
-  const [justification, setJustification] = useState('')
   const [documentFile, setDocumentFile] = useState<File | null>(null)
   const [warning, setWarning] = useState<SimilarTopicsWarning | null>(null)
   const [loading, setLoading] = useState(true)
@@ -114,7 +114,6 @@ export default function TopicPage() {
         title,
         scientific_area_id: studentScientificArea.id,
         course_id: studentCourse.id,
-        justification: justification.trim() || null,
         document: documentFile || undefined
       })
       
@@ -123,7 +122,6 @@ export default function TopicPage() {
       }
       
       setTitle('')
-      setJustification('')
       setDocumentFile(null)
       
       await loadTopics()
@@ -131,6 +129,14 @@ export default function TopicPage() {
       setError((e as Error).message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function downloadTopicDocument(topic: Topic) {
+    try {
+      await downloadApiFile(topicService.downloadDocument(topic.id), topic.document_name || `tema-${topic.id}.docx`)
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Não foi possível descarregar o documento do tema.')
     }
   }
 
@@ -257,12 +263,13 @@ export default function TopicPage() {
   }
 
   return (
-    <div style={{
+    <main className="student-workspace" style={{
       width: '100%',
       fontFamily: 'var(--font-family)',
       color: 'var(--on-background)'
     }}>
 
+      <StudentWorkspaceNav />
       {/* Cabeçalho */}
       <div style={{
         display: 'flex',
@@ -482,8 +489,8 @@ export default function TopicPage() {
                           {t.course.name}
                         </span>
                       )}
-                      {t.document_path && (
-                        <span style={{
+                      {t.has_document && (
+                        <button type="button" onClick={() => void downloadTopicDocument(t)} style={{
                           fontSize: 'var(--label-sm)',
                           color: 'var(--primary)',
                           background: 'var(--primary-container)',
@@ -491,11 +498,13 @@ export default function TopicPage() {
                           borderRadius: 'var(--radius-full)',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px'
+                          gap: '4px',
+                          border: 0,
+                          cursor: 'pointer',
                         }}>
                           <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>description</span>
-                          Documento anexado
-                        </span>
+                          Baixar DOCX
+                        </button>
                       )}
                     </div>
 
@@ -540,9 +549,6 @@ export default function TopicPage() {
                     </div>
                   </div>
                 </div>
-
-                <TopicJustificationToggle justification={t.justification} showEmpty compact />
-
                 {/* Mensagem para aprovado */}
                 {isApproved && (
                   <div style={{
@@ -783,56 +789,6 @@ export default function TopicPage() {
                 }}
               />
             </div>
-          </div>
-
-          {/* Campo: Justificação */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-            <label htmlFor="justification" style={{
-              fontSize: 'var(--label-md)',
-              fontWeight: 'var(--font-medium)',
-              color: 'var(--on-surface-variant)'
-            }}>
-              Justificação do tema
-            </label>
-            <textarea
-              id="justification"
-              value={justification}
-              onChange={e => setJustification(e.target.value)}
-              placeholder="Explique brevemente a relevância do tema proposto, objetivos e contribuição esperada para a área científica."
-              rows={5}
-              maxLength={5000}
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                background: 'var(--surface-container-lowest)',
-                border: '1px solid var(--outline-variant)',
-                borderRadius: 'var(--radius-lg)',
-                fontSize: 'var(--body-md)',
-                fontFamily: 'var(--font-family)',
-                color: 'var(--on-surface)',
-                outline: 'none',
-                transition: 'all 0.2s ease',
-                boxSizing: 'border-box',
-                resize: 'vertical',
-                minHeight: '120px',
-                lineHeight: 1.6
-              }}
-              onFocus={e => {
-                e.target.style.borderColor = 'var(--primary)'
-                e.target.style.boxShadow = '0 0 0 2px rgba(0,105,51,0.15)'
-              }}
-              onBlur={e => {
-                e.target.style.borderColor = 'var(--outline-variant)'
-                e.target.style.boxShadow = 'none'
-              }}
-            />
-            <span style={{
-              fontSize: 'var(--label-md)',
-              color: 'var(--outline)',
-              textAlign: 'right'
-            }}>
-              {justification.length}/5000 caracteres
-            </span>
           </div>
 
           {/* Campo: Upload de Documento */}
@@ -1078,6 +1034,6 @@ export default function TopicPage() {
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+    </main>
   )
 }

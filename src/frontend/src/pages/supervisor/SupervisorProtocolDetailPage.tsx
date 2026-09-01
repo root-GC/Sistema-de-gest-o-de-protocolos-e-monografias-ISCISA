@@ -114,7 +114,7 @@ export default function SupervisorProtocolDetailPage() {
   const isPending = protocol.status === 'protocol_pending_supervisor' || protocol.status === 'protocol_submitted'
 
   return (
-    <div style={{
+    <div className="teacher-workspace" style={{
       width: '100%',
       fontFamily: 'var(--font-family)',
       color: 'var(--on-background)'

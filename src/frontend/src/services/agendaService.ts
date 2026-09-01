@@ -1,54 +1,62 @@
-import { deliberationService, type DeliberationMeeting } from './deliberationService';
-import type { AgendaEvent, AgendaEventType } from '../types/agenda';
+import { req } from './apiClient'
+import type { AgendaEvent } from '../types/agenda'
 
-function meetingToEvent(m: DeliberationMeeting): AgendaEvent {
+interface AgendaApiEvent {
+  id: string
+  type: 'deliberation_meeting'
+  title: string
+  starts_at: string
+  location?: string
+  status?: string
+  meeting_id: number
+  protocol_count: number
+  url?: string
+}
+
+function datePart(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function toAgendaEvent(event: AgendaApiEvent): AgendaEvent {
+  const startsAt = new Date(event.starts_at)
+  const maputoParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Maputo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false, hourCycle: 'h23',
+  }).formatToParts(startsAt)
+  const value = (type: Intl.DateTimeFormatPartTypes) => maputoParts.find(part => part.type === type)?.value || ''
+
   return {
-    id: `delib-${m.id}`,
-    title: `Deliberação — ${m.organ}`,
-    type: 'deliberation' as AgendaEventType,
-    date: m.date,
-    start: m.time,
-    location: m.organ,
-    description: `${m.deliberationForms.length} protocolo(s) · ${m.notes || ''}`,
-    organ: m.organ,
-  };
+    id: event.id,
+    title: event.title,
+    type: 'deliberation',
+    date: `${value('year')}-${value('month')}-${value('day')}`,
+    start: `${value('hour')}:${value('minute')}`,
+    location: event.location,
+    status: event.status,
+    description: `${event.protocol_count} protocolo(s)`,
+    link: event.url,
+  }
+}
+
+async function requestEvents(from: Date, to: Date): Promise<AgendaEvent[]> {
+  const query = new URLSearchParams({ from: datePart(from), to: datePart(to) })
+  const response = await req('GET', `/api/v1/agenda/events?${query.toString()}`) as { events: AgendaApiEvent[] }
+  return response.events.map(toAgendaEvent)
 }
 
 export const agendaService = {
   async loadEvents(): Promise<AgendaEvent[]> {
-    const events: AgendaEvent[] = [];
-
-    const meetings = deliberationService.listScheduledMeetings();
-    for (const m of meetings) {
-      events.push(meetingToEvent(m));
-    }
-
-    return events;
+    const now = new Date()
+    return requestEvents(new Date(now.getFullYear() - 1, 0, 1), new Date(now.getFullYear() + 1, 11, 31))
   },
 
   async loadUpcomingEvents(limit = 5): Promise<AgendaEvent[]> {
-    const events = await this.loadEvents();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return events
-      .filter(e => {
-        const d = new Date(e.date + 'T' + (e.start || '00:00'));
-        return d >= today;
-      })
-      .sort((a, b) => {
-        const da = new Date(a.date + 'T' + (a.start || '00:00')).getTime();
-        const db = new Date(b.date + 'T' + (b.start || '00:00')).getTime();
-        return da - db;
-      })
-      .slice(0, limit);
+    const now = new Date()
+    const events = await requestEvents(now, new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()))
+    return events.sort((a, b) => `${a.date}T${a.start || ''}`.localeCompare(`${b.date}T${b.start || ''}`)).slice(0, limit)
   },
 
   async loadEventsForMonth(year: number, month: number): Promise<AgendaEvent[]> {
-    const events = await this.loadEvents();
-    return events.filter(e => {
-      const [y, m] = e.date.split('-').map(Number);
-      return y === year && m === month + 1;
-    });
+    return requestEvents(new Date(year, month, 1), new Date(year, month + 1, 0))
   },
-};
+}

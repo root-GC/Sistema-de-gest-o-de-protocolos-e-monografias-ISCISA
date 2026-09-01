@@ -28,7 +28,7 @@ class DefenseController extends Controller
             'members.*.jury_role'  => ['required', 'in:presidente,arguente,orientador'],
         ]);
 
-        $d = $this->service->assignJury($defense, $request->input('members'));
+        $d = $this->service->assignJury($defense, $request->input('members'), $request->user());
         return response()->json($d);
     }
 
@@ -45,7 +45,8 @@ class DefenseController extends Controller
             $defense,
             $request->user()->teacherProfile->id,
             $request->input('scheduled_at'),
-            $request->input('location')
+            $request->input('location'),
+            $request->user(),
         );
 
         return response()->json($d);
@@ -73,7 +74,8 @@ class DefenseController extends Controller
             $teacherProfile->id,
             $request->boolean('accepted'),
             $request->input('alternative_datetime'),
-            $request->input('note')
+            $request->input('note'),
+            $request->user(),
         );
 
         return response()->json($d);
@@ -99,7 +101,8 @@ class DefenseController extends Controller
             $defense,
             (float) $request->input('grade'),
             $request->boolean('requires_corrections'),
-            $request->input('notes')
+            $request->input('notes'),
+            $request->user(),
         );
 
         return response()->json($d);
@@ -111,7 +114,7 @@ class DefenseController extends Controller
 
         $request->validate(['file' => ['required', 'file', 'mimes:pdf', 'max:10240']]);
 
-        $d = $this->service->uploadMinutes($defense, $request->file('file'));
+        $d = $this->service->uploadMinutes($defense, $request->file('file'), $request->user());
         return response()->json($d);
     }
 

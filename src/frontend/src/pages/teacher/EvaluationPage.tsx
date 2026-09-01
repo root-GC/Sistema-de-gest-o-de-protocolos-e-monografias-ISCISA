@@ -9,8 +9,10 @@ import {
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { evaluationService, type EvaluationForm, type EvaluationOrgan, type FormCriterion } from '../../services/evaluationService'
 import { useAuth } from '../../context/AuthContext'
-import TopicJustification from '../../components/TopicJustification'
 import OnlyOfficeEditor from '../../components/OnlyOfficeEditor/OnlyOfficeEditor'
+import { ReviewerProtocolAttachmentsDialog } from '../../components/protocol/ReviewerProtocolAttachmentsDialog'
+import { ProtocolReviewContext } from '../../components/protocol/ProtocolReviewContext'
+import { DocumentReviewWorkspace } from '../../components/teacher/DocumentReviewWorkspace'
 import '../../styles/global.css'
 
 // ── Helpers ────────────────────────────────────────────
@@ -37,9 +39,7 @@ function formatFileSize(bytes: number): string {
 }
 
 function organForEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): EvaluationOrgan {
-  if (form?.organ === 'comite_cientifico') return 'comite-cientifico'
-  if (form?.organ === 'comite_bioetica') return 'comite-bioetica'
-  return 'nucleo'
+  return form?.organ === 'comite_bioetica' ? 'comite-bioetica' : 'comite-cientifico'
 }
 
 function isCcEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
@@ -167,7 +167,6 @@ export default function EvaluationPage() {
   // ── Deliberation state ──
   const [deliberationDecision, setDeliberationDecision] = useState<'approved' | 'not_approved' | ''>('')
   const [deliberationSummary, setDeliberationSummary] = useState('')
-  const [isStartingDeliberation, setIsStartingDeliberation] = useState(false)
   const [isSubmittingDeliberation, setIsSubmittingDeliberation] = useState(false)
   const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [deliberationDate, setDeliberationDate] = useState('')
@@ -183,6 +182,7 @@ export default function EvaluationPage() {
   // ── OnlyOffice state ──
   const [onlyOfficeFullscreen, setOnlyOfficeFullscreen] = useState(false)
   const [onlyOfficeKey, setOnlyOfficeKey] = useState(0)
+  const [showAttachments, setShowAttachments] = useState(false)
 
   // ── Imported Document state ──
   const [importedDocument, setImportedDocument] = useState<ImportedDocument | null>(null)
@@ -299,8 +299,7 @@ export default function EvaluationPage() {
     } catch (e: any) { setError(e.message) } finally { setLoading(false) }
   }
 
-  async function addComment(e: React.FormEvent) {
-    e.preventDefault()
+  async function addComment() {
     if (!newComment.trim() || evaluationDone) return
     setSubmitting(true)
     try { await topicService.submitComment(id, newComment); setNewComment(''); await loadTopicEvaluation() } catch (e: any) { setError(e.message) } finally { setSubmitting(false) }
@@ -308,8 +307,17 @@ export default function EvaluationPage() {
 
   async function submitDecision() {
     if (!decision || evaluationDone) return
+    if (decision === 'rejected' && comments.length === 0) {
+      setError('Registe pelo menos um comentário antes de não aprovar o tema.')
+      return
+    }
     setSubmitting(true)
-    try { await topicService.submitEvaluation(id, decision); setEvaluationDone(true); await loadTopicEvaluation() } catch (e: any) { setError(e.message) } finally { setSubmitting(false) }
+    try {
+      const myLatestComment = [...comments].reverse().find(comment => comment.user?.id === Number(user?.id))
+      await topicService.submitEvaluation(id, decision, myLatestComment?.id ?? null)
+      setEvaluationDone(true)
+      await loadTopicEvaluation()
+    } catch (e: any) { setError(e.message) } finally { setSubmitting(false) }
   }
 
   async function loadProtocolEvaluation() {
@@ -322,8 +330,18 @@ export default function EvaluationPage() {
       setProtocol(p)
 
       // 2. Buscar ficha de avaliação
-      const formsData = await evaluationService.listForReviewer()
-      const form = formsData.evaluation_forms.find(f => f.protocol_id === id)
+      const formsData = await evaluationService.listForReviewerAcrossCommittees()
+      const assignmentOrgan = p.my_assignment?.organ?.type === 'scientific_committee'
+        ? 'comite_cientifico'
+        : p.my_assignment?.organ?.type === 'bioethics_committee'
+          ? 'comite_bioetica'
+          : null
+      if (!assignmentOrgan) {
+        setError('Este protocolo não pertence a um comité de avaliação activo.')
+        setLoading(false)
+        return
+      }
+      const form = formsData.evaluation_forms.find(f => f.protocol_id === id && f.organ === assignmentOrgan && f.form_type === 'evaluation')
       if (!form) { setError('Ficha de avaliação não encontrada.'); setLoading(false); return }
 
       // 3. Buscar ficha completa
@@ -439,16 +457,6 @@ export default function EvaluationPage() {
     } catch (e: any) { setError(e.message) } finally { setIsScheduling(false) }
   }
 
-  async function handleStartDeliberation() {
-    if (!evaluationForm) return
-    setIsStartingDeliberation(true)
-    try {
-      await evaluationService.startDeliberation(evaluationForm.id, organForEvaluation(evaluationForm))
-      setSuccess('Reunião de deliberação iniciada. Os comentários são agora partilhados.')
-      await loadProtocolEvaluation()
-    } catch (e: any) { setError(e.message) } finally { setIsStartingDeliberation(false) }
-  }
-
   async function handleSubmitDeliberation() {
     if (!evaluationForm || !deliberationDecision) return
     setIsSubmittingDeliberation(true)
@@ -473,71 +481,25 @@ export default function EvaluationPage() {
   // TOPIC EVALUATION
   // ═══════════════════════════════════════════════
   if (!isProtocol && topic) {
-    return (
-      <div className="evaluation-topic-page">
-        <header className="evaluation-topic-header">
-          <div>
-            <div className="evaluation-title-row">
-              <Link to="/reviews" className="evaluation-back"><span className="material-symbols-outlined">arrow_back</span></Link>
-              <h1>Avaliação do tema #{id}</h1>
-            </div>
-            <p className="evaluation-topic-title">{topic.title}</p>
-            {topic.status_label && (
-              <span className={`badge ${topic.status === 'topic_approved_nucleo' ? 'badge-success' : topic.status === 'topic_rejected_nucleo' ? 'badge-error' : 'badge-warning'}`}>
-                {topic.status_label}
-              </span>
-            )}
-          </div>
-        </header>
-
-        {topic && <TopicJustification justification={topic.justification} showEmpty />}
-
-        {success && <div className="eval-notice eval-notice--success"><span className="material-symbols-outlined">check_circle</span>{success}</div>}
-        {error && <div className="eval-notice eval-notice--error"><span className="material-symbols-outlined">error</span>{error}</div>}
-
-        {evaluationDone && (
-          <div className="evaluation-done-banner">
-            <span className="material-symbols-outlined">task_alt</span>
-            <div><strong>Processo concluído</strong><p>{evaluationStatusMessage(topic)}</p></div>
-          </div>
-        )}
-
-        <section className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          <h2 className="section-title"><span className="material-symbols-outlined">chat</span>Comentários ({comments.length})</h2>
-          {comments.length === 0 ? (
-            <div className="empty-state"><span className="material-symbols-outlined">forum</span>Nenhum comentário ainda.</div>
-          ) : (
-            <div className="comments-list">
-              {comments.map(c => (
-                <div key={c.id} className="comment-item">
-                  <div className="comment-header"><span className="comment-author">{c.user?.name || 'Anónimo'}</span><span className="comment-date">{new Date(c.created_at).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
-                  <p>{c.content}</p>
-                </div>
-              ))}
-            </div>
-          )}
-          {!evaluationDone && (
-            <form onSubmit={addComment} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              <label htmlFor="comment" style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)', color: 'var(--on-surface)' }}>Adicionar comentário</label>
-              <textarea id="comment" value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Escreva o seu comentário técnico-científico..." rows={4} style={{ width: '100%', padding: '12px 14px', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-container-lowest)', color: 'var(--on-surface)', fontFamily: 'var(--font-family)', fontSize: '13px', resize: 'vertical' }} />
-              <button type="submit" className="btn btn-primary" disabled={submitting || !newComment.trim()} style={{ alignSelf: 'flex-end' }}>{submitting ? 'A enviar...' : 'Comentar'}</button>
-            </form>
-          )}
-        </section>
-
-        {!evaluationDone && (
-          <section className="card decision-card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <h2 className="section-title"><span className="material-symbols-outlined">gavel</span>Decisão final</h2>
-            <div className="decision-options" style={{ width: '100%' }}>
-              <label className={`decision-option ${decision === 'approved' ? 'is-approved' : ''}`} style={{ flex: 1 }}><input type="radio" name="decision" checked={decision === 'approved'} onChange={() => setDecision('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovado</label>
-              <label className={`decision-option ${decision === 'rejected' ? 'is-rejected' : ''}`} style={{ flex: 1 }}><input type="radio" name="decision" checked={decision === 'rejected'} onChange={() => setDecision('rejected')} /><span className="material-symbols-outlined">cancel</span>Não Aprovado</label>
-            </div>
-            <button onClick={submitDecision} className="btn btn-primary btn-block" disabled={!decision || submitting}>{submitting ? 'A processar...' : 'Confirmar decisão'}</button>
-          </section>
-        )}
-        {evaluationDone && <Link to="/reviews" className="btn btn-outline back-link"><span className="material-symbols-outlined">arrow_back</span>Voltar para lista de temas</Link>}
-      </div>
-    )
+    return <DocumentReviewWorkspace
+      document={topic.has_document ? { kind: 'topic', id: topic.id, name: topic.document_name } : null}
+      title={topic.title}
+      statusLabel={topic.status_label || evaluationStatusMessage(topic) || 'Em revisão'}
+      statusTone={topic.status.includes('rejected') ? 'rejected' : topic.status.includes('approved') ? 'approved' : 'pending'}
+      comments={comments.map(comment => ({ id: comment.id, content: comment.content, createdAt: comment.created_at, author: comment.user?.name || 'Revisor do Núcleo' }))}
+      commentValue={newComment}
+      onCommentChange={setNewComment}
+      onAddComment={addComment}
+      commentSubmitting={submitting}
+      decision={decision}
+      onDecisionChange={setDecision}
+      onConfirmDecision={submitDecision}
+      decisionSubmitting={submitting}
+      decisionDone={evaluationDone}
+      onDownload={async () => { if (topic.has_document) await protocolService.downloadFile(topicService.downloadDocument(topic.id), topic.document_name || 'tema.docx') }}
+      backLabel="Voltar para revisões"
+      onBack={() => window.history.back()}
+    />
   }
 
   // ═══════════════════════════════════════════════
@@ -597,14 +559,17 @@ export default function EvaluationPage() {
 
     return (
       <>
+        <ProtocolReviewContext protocolId={protocol.id} />
+        <ReviewerProtocolAttachmentsDialog protocol={protocol} open={showAttachments} onClose={() => setShowAttachments(false)} />
+
         {/* ── ONLYOFFICE FULLSCREEN OVERLAY ── */}
         {onlyOfficeFullscreen && (
           <div className="onlyoffice-fullscreen-overlay">
             <div className="onlyoffice-fullscreen-toolbar">
               <div className="onlyoffice-fullscreen-toolbar-left"><span className="onlyoffice-fullscreen-title">{docFileName}</span></div>
               <div className="onlyoffice-fullscreen-toolbar-right">
-                <button className="onlyoffice-fullscreen-btn" onClick={reloadOnlyOffice} title="Recarregar editor"><span className="material-symbols-outlined">refresh</span></button>
-                <button className="onlyoffice-fullscreen-close" onClick={toggleOnlyOfficeFullscreen} title="Sair (Esc)"><span className="material-symbols-outlined">close_fullscreen</span><span>Sair</span></button>
+                <button type="button" className="onlyoffice-fullscreen-btn" onClick={reloadOnlyOffice} aria-label="Recarregar editor" title="Recarregar editor"><span className="material-symbols-outlined" aria-hidden="true">refresh</span></button>
+                <button type="button" className="onlyoffice-fullscreen-close" onClick={toggleOnlyOfficeFullscreen} title="Sair (Esc)"><span className="material-symbols-outlined" aria-hidden="true">close_fullscreen</span><span>Sair</span></button>
               </div>
             </div>
             <div className="onlyoffice-fullscreen-content">
@@ -618,18 +583,19 @@ export default function EvaluationPage() {
         )}
 
         {/* ── SPLIT VIEW ── */}
-        <div className={`evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
+        <div className={`teacher-workspace evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
           {/* LEFT: DOCUMENT VIEWER */}
           <section className="doc-viewer-pane" style={{ width: expandedPanel === 'document' ? '100%' : expandedPanel === 'form' ? '0%' : `${splitPosition}%`, minWidth: expandedPanel === 'document' ? '100%' : expandedPanel === 'form' ? '0px' : `${MIN_PANEL_WIDTH}px`, opacity: expandedPanel === 'form' ? 0 : 1, pointerEvents: expandedPanel === 'form' ? 'none' : 'auto' }}>
             <div className="doc-toolbar">
               <div className="doc-toolbar-left">
-                <button className="panel-toggle-btn" onClick={toggleDocumentFullscreen}><span className="material-symbols-outlined">{expandedPanel === 'document' ? 'collapse_content' : 'expand_content'}</span></button>
+                <button type="button" className="panel-toggle-btn" onClick={toggleDocumentFullscreen} aria-label={expandedPanel === 'document' ? 'Restaurar vista dividida' : 'Expandir documento'}><span className="material-symbols-outlined" aria-hidden="true">{expandedPanel === 'document' ? 'collapse_content' : 'expand_content'}</span></button>
                 <span className="doc-filename">{docFileName}</span><span className="doc-file-type-badge">DOCX</span>
               </div>
               <div className="doc-toolbar-right">
-                <button className="doc-toolbar-btn" onClick={reloadOnlyOffice} title="Recarregar editor"><span className="material-symbols-outlined">refresh</span></button>
-                <button className="doc-toolbar-btn" onClick={toggleOnlyOfficeFullscreen} title="Tela cheia"><span className="material-symbols-outlined">fullscreen</span></button>
-                <button className="doc-toolbar-btn" onClick={() => openFile(protocol.latest_document?.download_url)} title="Abrir em nova aba"><span className="material-symbols-outlined">open_in_new</span></button>
+                <button type="button" className="doc-toolbar-btn" onClick={() => setShowAttachments(true)} aria-label="Ver anexos do protocolo" title="Ver anexos"><span className="material-symbols-outlined" aria-hidden="true">attach_file</span></button>
+                <button type="button" className="doc-toolbar-btn" onClick={reloadOnlyOffice} aria-label="Recarregar editor" title="Recarregar editor"><span className="material-symbols-outlined" aria-hidden="true">refresh</span></button>
+                <button type="button" className="doc-toolbar-btn" onClick={toggleOnlyOfficeFullscreen} aria-label="Abrir editor em tela cheia" title="Tela cheia"><span className="material-symbols-outlined" aria-hidden="true">fullscreen</span></button>
+                <button type="button" className="doc-toolbar-btn" onClick={() => openFile(protocol.latest_document?.download_url)} aria-label="Abrir documento em nova aba" title="Abrir em nova aba"><span className="material-symbols-outlined" aria-hidden="true">open_in_new</span></button>
               </div>
             </div>
             <div className={`doc-content-area ${isDraggingOver ? 'doc-content-area--drag-over' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} ref={dropZoneRef}>
@@ -675,7 +641,7 @@ export default function EvaluationPage() {
             <div className="evaluation-form-header">
               <span className="material-symbols-outlined">fact_check</span>
               <span className="evaluation-form-header-title">Ficha de Avaliação</span>
-              <button className="panel-toggle-btn panel-toggle-btn--form" onClick={toggleFormFullscreen}><span className="material-symbols-outlined">{expandedPanel === 'form' ? 'collapse_content' : 'expand_content'}</span></button>
+              <button type="button" className="panel-toggle-btn panel-toggle-btn--form" onClick={toggleFormFullscreen} aria-label={expandedPanel === 'form' ? 'Restaurar vista dividida' : 'Expandir ficha de avaliação'}><span className="material-symbols-outlined" aria-hidden="true">{expandedPanel === 'form' ? 'collapse_content' : 'expand_content'}</span></button>
             </div>
 
             <div className="evaluation-form-content">
@@ -738,13 +704,7 @@ export default function EvaluationPage() {
                     <strong>Deliberação Agendada</strong>
                     <p>{formatDate(evaluationForm.deliberation_date)} — {evaluationForm.deliberation_location || 'Local não definido'}</p>
                   </div>
-	                  {canStartOrSubmitDeliberation ? (
-	                  <button className="btn btn-primary btn-sm" onClick={handleStartDeliberation} disabled={isStartingDeliberation}>
-	                    {isStartingDeliberation ? 'A iniciar...' : 'Iniciar Deliberação'}
-	                  </button>
-	                  ) : (
-	                    <span className="badge badge-warning">Apenas o revisor principal inicia</span>
-	                  )}
+	                  <span className="badge badge-warning">A Secretaria inicia a reunião no horário marcado</span>
 	                </div>
 	              )}
 

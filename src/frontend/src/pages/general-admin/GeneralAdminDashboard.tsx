@@ -1,7 +1,7 @@
 // src/pages/general-admin/GeneralAdminDashboard.tsx
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import type { DashboardStats } from '../../services/generalAdminService'
+import { generalAdminService, type DashboardStats } from '../../services/generalAdminService'
 import '../../styles/global.css'
 
 export default function GeneralAdminDashboard() {
@@ -10,36 +10,21 @@ export default function GeneralAdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadStats()
-  }, [])
-
-  async function loadStats() {
+  const loadStats = useCallback(async () => {
     setLoading(true)
     try {
-      // ⚠️ Mock data enquanto a API (rota dashboard) não existe
-      setStats({
-        total_coordinators: 4,
-        total_secretaries: 6,
-        total_presidents: 2,
-        total_courses: 10,
-        total_areas: 5,
-        total_organs: 4,
-        total_students: 250,
-        total_teachers: 35,
-        recent_activities: [
-          { id: 1, action: 'coordinator_assigned', description: 'Maria Silva foi nomeada coordenadora de Enfermagem', created_at: new Date(Date.now() - 3600000).toISOString() },
-          { id: 2, action: 'secretary_created', description: 'Novo secretário adicionado ao Núcleo Científico', created_at: new Date(Date.now() - 7200000).toISOString() },
-          { id: 3, action: 'president_appointed', description: 'Dr. João Santos nomeado presidente do Comité Científico', created_at: new Date(Date.now() - 86400000).toISOString() },
-          { id: 4, action: 'course_updated', description: 'Curso de Medicina atualizado', created_at: new Date(Date.now() - 172800000).toISOString() },
-        ],
-      })
+      setStats(await generalAdminService.getDashboard())
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const requestId = window.setTimeout(() => { void loadStats() }, 0)
+    return () => window.clearTimeout(requestId)
+  }, [loadStats])
 
   if (loading) return <Loader />
 

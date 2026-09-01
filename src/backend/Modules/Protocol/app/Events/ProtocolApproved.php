@@ -2,10 +2,11 @@
 
 namespace Modules\Protocol\app\Events;
 
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class ProtocolApproved
+class ProtocolApproved implements ShouldDispatchAfterCommit
 {
     use Dispatchable, SerializesModels;
 

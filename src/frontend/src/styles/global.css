@@ -428,6 +428,65 @@ body {
   height: 100vh;
 }
 
+.role-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--on-surface-variant);
+  font-family: var(--font-family);
+  font-size: var(--label-sm);
+  font-weight: var(--font-semibold);
+}
+
+.role-switcher__select {
+  width: auto;
+  min-width: 128px;
+  max-width: 180px;
+  min-height: 38px;
+  padding: 6px 34px 6px 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.role-switcher__select:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.role-switcher__select:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .role-switcher__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .role-switcher__select {
+    min-width: 112px;
+    max-width: 132px;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar-icon-action {
+    display: none !important;
+  }
+}
+
 .sidebar {
   width: var(--sidebar-width);
   background: var(--surface-container-low);
@@ -5427,4 +5486,9 @@ a:hover {
 .reset-timer-bar-text--urgent {
   color: var(--error);
   font-weight: 500;
+}
+.sidebar-nav-link:focus-visible,
+.sidebar-nav-button:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
 }

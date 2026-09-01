@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__ . '/../routes/api.php',
         health: '/up',
     )
+    ->withCommands([
+        __DIR__ . '/../app/Console/Commands',
+    ])
     ->withMiddleware(function (Middleware $middleware) {
         // Registar alias dos middlewares
         $middleware->alias([

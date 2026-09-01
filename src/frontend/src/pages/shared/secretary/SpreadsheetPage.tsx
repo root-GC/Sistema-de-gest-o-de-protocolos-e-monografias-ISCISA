@@ -1,336 +1,292 @@
-// src/pages/secretary/SpreadsheetPage.tsx
-import { useEffect, useState } from 'react'
-import { protocolService } from '../../../services/protocolService'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth, type SecretaryProfile } from '../../../context/AuthContext'
-import '../../../styles/global.css'
+import { protocolService, type Protocol } from '../../../services/protocolService'
+import { topicService, type Topic } from '../../../services/topicService'
+import { deliberationService, type DeliberationMeeting } from '../../../services/deliberationService'
+import './secretaryWorkspace.css'
 
-interface SpreadsheetRow {
+type StatusFilter = 'all' | 'pending' | 'reviewing' | 'approved' | 'rejected'
+type TrackingItemType = 'topic' | 'protocol'
+
+interface TrackingRow {
   id: number
-  submissionDate: string
+  itemType: TrackingItemType
   code: string
-  studentName: string
-  contact: string
   title: string
-  versionNumber: string
-  meetingDate: string | null
-  status: string
-  statusRaw: string
-  approvalDate: string | null
-  timeSpent: string
+  student: string
+  contact: string
   course: string
-  organ: string
+  version: string
+  meetingAt: string | null
+  status: string
+  category: Exclude<StatusFilter, 'all'>
+  submittedAt: string | null
+  approvedAt: string | null
+  elapsedDays: number | null
+  reviewers: string
 }
 
-const STATUS_MAP: Record<string, string> = {
-  'protocol_pending_supervisor': 'Aguardando Supervisor',
-  'protocol_documents_pending_cc': 'Anexos em Validação (CC)',
-  'protocol_documents_pending_cibs': 'Anexos em Validação (CIBS)',
-  'protocol_pending_nucleo': 'Aguardando Núcleo',
-  'protocol_in_review_nucleo': 'Em Revisão (Núcleo)',
-  'protocol_rejected_nucleo': 'Não Aprovado (Núcleo)',
-  'protocol_pending_comite_cientifico': 'Aguardando CC',
-  'protocol_in_review_comite_cientifico': 'Em Revisão (CC)',
-  'protocol_rejected_cc': 'Não Aprovado (CC)',
-  'protocol_parecer_pending_cc_signature': 'Parecer CC aguardando assinatura',
-  'protocol_pending_comite_bioetica': 'Aguardando Bioética',
-  'protocol_in_review_comite_bioetica': 'Em Revisão (Bioética)',
-  'protocol_rejected_bioetica': 'Não Aprovado (Bioética)',
-  'protocol_parecer_pending_cibs_signature': 'Parecer Bioética aguardando assinatura',
-  'protocol_approved_final': 'Aprovado Final',
-  'protocol_rejected_final': 'Não Aprovado Final',
-  'pending_nucleo': 'Aguardando Núcleo',
-  'in_review_nucleo': 'Em Revisão (Núcleo)',
-  'approved_nucleo': 'Aprovado (Núcleo)',
-  'rejected_nucleo': 'Não Aprovado (Núcleo)',
-  'pending_comite_cientifico': 'Aguardando CC',
-  'in_review_comite_cientifico': 'Em Revisão (CC)',
-  'approved_comite_cientifico': 'Aprovado (CC)',
-  'rejected_cc': 'Não Aprovado (CC)',
-  'pending_comite_bioetica': 'Aguardando Bioética',
-  'in_review_comite_bioetica': 'Em Revisão (Bioética)',
-  'approved_final': 'Aprovado Final',
-  'rejected': 'Não Aprovado',
-  'parecer_emitido_deliberacao': 'Parecer Emitido',
+function classifyStatus(status: string): TrackingRow['category'] {
+  if (status.includes('approved')) return 'approved'
+  if (status.includes('rejected') || status.includes('not_approved')) return 'rejected'
+  if (status.includes('review') || status.includes('assigned')) return 'reviewing'
+  return 'pending'
 }
 
-function getStatusConfig(status: string) {
-  if (status === 'Parecer Emitido') return { dot: '#6a1b9a', bg: '#f3e5f5', text: '#4a148c' }
-  if (status.includes('Aprovado')) return { dot: '#5d4037', bg: '#efebe9', text: '#3e2723' }
-  if (status.includes('Não Aprovado')) return { dot: '#b71c1c', bg: '#fce4ec', text: '#7f0000' }
-  if (status.includes('Revisão')) return { dot: 'var(--tertiary)', bg: 'var(--tertiary-container)', text: 'var(--on-tertiary-container)' }
-  if (status.includes('Aguardando')) return { dot: 'var(--outline)', bg: 'var(--surface-container-high)', text: 'var(--on-surface-variant)' }
-  return { dot: 'var(--outline)', bg: 'var(--surface-container)', text: 'var(--on-surface-variant)' }
+function formatDate(value: string | null) {
+  return value ? new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value)) : '-'
 }
 
-function getOrganFromStatus(status: string): string {
-  if (status.includes('nucleo')) return 'Núcleo Científico'
-  if (status.includes('comite_cientifico') || status.includes('cc')) return 'Comité Científico'
-  if (status.includes('bioetica')) return 'Comité de Bioética'
-  return '—'
+function approvedAtFromHistory(histories: Array<{ new_status?: string | null; occurred_at: string }> | undefined) {
+  const approvals = histories?.filter(history => history.new_status?.includes('approved')) ?? []
+  return approvals[approvals.length - 1]?.occurred_at ?? null
 }
 
-function getProtocolListForOrgan(organType?: string) {
+function protocolReviewers(protocol: Protocol) {
+  const names = (protocol.review_assignments ?? []).flatMap(assignment => [
+    assignment.reviewer_one?.name,
+    assignment.reviewer_two?.name,
+  ]).filter((name): name is string => Boolean(name))
+
+  return [...new Set(names)].join(', ') || '-'
+}
+
+function topicReviewers(topic: Topic) {
+  const names = (topic.review_assignments ?? [])
+    .map(assignment => assignment.reviewer?.name)
+    .filter((name): name is string => Boolean(name))
+
+  return [...new Set(names)].join(', ') || '-'
+}
+
+function getProtocolList(organType?: string) {
   if (organType === 'scientific_committee') return protocolService.listForSecretaryCC
   if (organType === 'bioethics_committee') return protocolService.listForSecretaryBioetica
-  return protocolService.listForSecretary
-}
-
-function formatDate(value: string | null | undefined): string {
-  return value ? new Date(value).toLocaleDateString('pt-PT') : '—'
-}
-
-function formatVersionLabel(version: string): string {
-  return /^([A-Z]+_)?V\d+$/i.test(version) ? version : `v${version}`
+  return null
 }
 
 export default function SpreadsheetPage() {
   const { activeProfile } = useAuth()
-  const secretaryProfile = activeProfile as SecretaryProfile | null
-  const organType = secretaryProfile?.organ?.type
-
-  const [rows, setRows] = useState<SpreadsheetRow[]>([])
+  const secretary = activeProfile as SecretaryProfile | null
+  const organType = secretary?.organ?.type
+  const isNucleus = organType === 'nucleus'
+  const itemPlural = isNucleus ? 'temas' : 'protocolos'
+  const itemPluralTitle = isNucleus ? 'Temas' : 'Protocolos'
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [protocols, setProtocols] = useState<Protocol[]>([])
+  const [topics, setTopics] = useState<Topic[]>([])
+  const [meetings, setMeetings] = useState<DeliberationMeeting[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [selectedCourse, setSelectedCourse] = useState('all')
-  const [courses, setCourses] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => { loadData() }, [organType])
+  const query = searchParams.get('q') ?? ''
+  const requestedStatus = searchParams.get('status') as StatusFilter | null
+  const status = requestedStatus && ['all', 'pending', 'reviewing', 'approved', 'rejected'].includes(requestedStatus) ? requestedStatus : 'all'
+  const course = searchParams.get('course') ?? 'all'
+  const updateSearch = useCallback((changes: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(changes).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key))
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
-  async function loadData() {
+  const load = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
-      const data = await getProtocolListForOrgan(organType)()
-      const mapped: SpreadsheetRow[] = data.protocols.map(p => {
-        const submitted = p.submitted_at ? new Date(p.submitted_at) : null
-        const tracking = p.organ_tracking
-        const finalDate = tracking?.latest_action_at || tracking?.approved_at || tracking?.rejected_at || null
-        const approvedDate = tracking?.approved_at || (p.status === 'protocol_approved_final' ? finalDate : null)
-        const end = finalDate ? new Date(finalDate).getTime() : Date.now()
-        const days = submitted ? Math.floor((end - submitted.getTime()) / (1000 * 60 * 60 * 24)) : 0
+      if (isNucleus) {
+        const response = await topicService.listForSecretary()
+        setTopics(response.topics)
+        setProtocols([])
+        setMeetings([])
+        return
+      }
 
-        return {
-          id: p.id,
-          submissionDate: formatDate(p.submitted_at),
-          code: p.code || `PTM${String(p.id).padStart(4, '0')}E`,
-          studentName: p.student?.name || '—',
-          contact: p.student?.email || '—',
-          title: p.topic?.title || '—',
-          versionNumber: tracking?.latest_opinion?.version || p.version || '1',
-          meetingDate: null,
-          status: tracking?.status_label || STATUS_MAP[p.status] || p.status_label || p.status,
-          statusRaw: tracking?.latest_action || p.status,
-          approvalDate: approvedDate ? formatDate(approvedDate) : null,
-          timeSpent: submitted ? `${days} dias` : '—',
-          course: (p.topic as any)?.course?.name || '—',
-          organ: tracking?.organ_name || getOrganFromStatus(p.status),
-        }
-      })
-      const uniqueCourses = [...new Set(mapped.map(r => r.course))].filter(Boolean)
-      setCourses(uniqueCourses)
-      setRows(mapped)
-    } catch {
-      setRows(getMockData())
-      setCourses(['Mestrado em Saúde e Segurança no Trabalho', 'Mestrado em Saúde Pública', 'Licenciatura em Enfermagem'])
+      const listProtocols = getProtocolList(organType)
+      if (!listProtocols) throw new Error('O órgão activo não trata protocolos.')
+
+      const [response, meetingsResponse] = await Promise.all([
+        listProtocols(),
+        deliberationService.listMeetings(),
+      ])
+      setProtocols(response.protocols)
+      setTopics([])
+      setMeetings(meetingsResponse.meetings)
+    } catch (requestError) {
+      setProtocols([])
+      setTopics([])
+      setMeetings([])
+      setError(requestError instanceof Error ? requestError.message : `Não foi possível carregar os ${itemPlural}. Tenta novamente.`)
     } finally {
       setLoading(false)
     }
-  }
+  }, [isNucleus, itemPlural, organType])
 
-  const filtered = rows.filter(r => {
-    if (searchTerm) {
-      const t = searchTerm.toLowerCase()
-      if (!r.title.toLowerCase().includes(t) && !r.studentName.toLowerCase().includes(t) && !r.code.toLowerCase().includes(t)) return false
+  useEffect(() => {
+    const requestId = window.setTimeout(() => { void load() }, 0)
+    return () => window.clearTimeout(requestId)
+  }, [load])
+
+  const topicRows = useMemo<TrackingRow[]>(() => topics.map(topic => {
+    const latestHistory = topic.histories?.[topic.histories.length - 1]
+    const submitted = topic.submitted_at ? new Date(topic.submitted_at) : null
+    const latest = latestHistory?.occurred_at ? new Date(latestHistory.occurred_at) : new Date()
+
+    return {
+      id: topic.id,
+      itemType: 'topic',
+      code: topic.course?.code ? `${topic.course.code}-${topic.id}` : `Tema #${topic.id}`,
+      title: topic.title,
+      student: 'Revisão cega',
+      contact: '-',
+      course: topic.course?.name || topic.scientific_area?.name || 'Sem curso',
+      version: '-',
+      meetingAt: null,
+      status: topic.status_label || topic.status,
+      category: classifyStatus(topic.status),
+      submittedAt: topic.submitted_at,
+      approvedAt: approvedAtFromHistory(topic.histories),
+      elapsedDays: submitted ? Math.max(0, Math.floor((latest.getTime() - submitted.getTime()) / 86400000)) : null,
+      reviewers: topicReviewers(topic),
     }
-    if (filterStatus === 'approved' && !r.status.includes('Aprovado') && r.status !== 'Parecer Emitido') return false
-    if (filterStatus === 'rejected' && !r.status.includes('Não Aprovado')) return false
-    if (filterStatus === 'reviewing' && !r.status.includes('Revisão') && !r.status.includes('Aguardando')) return false
-    if (selectedCourse !== 'all' && r.course !== selectedCourse) return false
-    return true
-  })
+  }), [topics])
 
-  const approved = rows.filter(r => r.status.includes('Aprovado') || r.status === 'Parecer Emitido').length
-  const reviewing = rows.filter(r => r.status.includes('Revisão') || r.status.includes('Aguardando')).length
-  const rejected = rows.filter(r => r.status.includes('Não Aprovado')).length
+  const meetingDatesByProtocol = useMemo(() => {
+    const dates = new Map<number, string>()
+    const orderedMeetings = [...meetings]
+      .filter(meeting => meeting.status !== 'cancelled')
+      .sort((left, right) => new Date(right.scheduled_at).getTime() - new Date(left.scheduled_at).getTime())
 
-  if (loading) {
-    return (
-      <div className="page-loader">
-        <div className="page-loader__spinner" />
-        <span className="page-loader__text">A carregar planilha...</span>
-      </div>
-    )
+    orderedMeetings.forEach(meeting => {
+      meeting.items.forEach(item => {
+        if (!dates.has(item.protocol.id)) dates.set(item.protocol.id, meeting.scheduled_at)
+      })
+    })
+
+    return dates
+  }, [meetings])
+
+  const protocolRows = useMemo<TrackingRow[]>(() => protocols.map(protocol => {
+    const effectiveStatus = protocol.organ_tracking?.status_label || protocol.status_label || protocol.status
+    const rawStatus = protocol.organ_tracking?.latest_action || protocol.status
+    const submitted = protocol.submitted_at ? new Date(protocol.submitted_at) : null
+    const latest = protocol.organ_tracking?.latest_action_at ? new Date(protocol.organ_tracking.latest_action_at) : new Date()
+
+    return {
+      id: protocol.id,
+      itemType: 'protocol',
+      code: protocol.code || `Protocolo #${protocol.id}`,
+      title: protocol.topic?.title || 'Protocolo sem tema associado',
+      student: protocol.student?.name || '-',
+      contact: protocol.student?.email || '-',
+      course: (protocol.topic as { course?: { name?: string } } | undefined)?.course?.name || 'Sem curso',
+      version: protocol.version || '-',
+      meetingAt: meetingDatesByProtocol.get(protocol.id) ?? null,
+      status: effectiveStatus,
+      category: classifyStatus(rawStatus),
+      submittedAt: protocol.submitted_at,
+      approvedAt: protocol.organ_tracking?.approved_at || approvedAtFromHistory(protocol.histories),
+      elapsedDays: submitted ? Math.max(0, Math.floor((latest.getTime() - submitted.getTime()) / 86400000)) : null,
+      reviewers: protocolReviewers(protocol),
+    }
+  }), [meetingDatesByProtocol, protocols])
+
+  const rows = isNucleus ? topicRows : protocolRows
+  const courses = useMemo(() => [...new Set(rows.map(row => row.course))].sort((a, b) => a.localeCompare(b, 'pt-PT')), [rows])
+  const filtered = useMemo(() => rows.filter(row => {
+    const text = query.trim().toLocaleLowerCase('pt-PT')
+    const matchesQuery = !text || [row.code, row.title, row.student].some(value => value.toLocaleLowerCase('pt-PT').includes(text))
+    return matchesQuery && (status === 'all' || row.category === status) && (course === 'all' || row.course === course)
+  }), [course, query, rows, status])
+  const totals = useMemo(() => ({
+    total: rows.length,
+    pending: rows.filter(row => row.category === 'pending').length,
+    reviewing: rows.filter(row => row.category === 'reviewing').length,
+  }), [rows])
+
+  function exportCsv() {
+    const headers = ['ID', 'Data da submissão', 'Código', 'Nome do estudante', 'Contacto/e-mail', 'Título do trabalho', 'Número da versão', 'Data da reunião', 'Ponto de situação', 'Data da aprovação', 'Tempo gasto', 'Avaliadores']
+    const csv = [headers, ...filtered.map(row => [row.id, formatDate(row.submittedAt), row.code, row.student, row.contact, row.title, row.version, formatDate(row.meetingAt), row.status, formatDate(row.approvedAt), row.elapsedDays === null ? '' : `${row.elapsedDays} dias`, row.reviewers])]
+      .map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = isNucleus ? 'planilha-temas.csv' : 'planilha-protocolos.csv'
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
-    <div style={{ width: '100%', maxWidth: '1400px', margin: '0 auto', fontFamily: 'var(--font-family)', color: 'var(--on-background)', padding: 'var(--space-4) var(--gutter)' }}>
-
-      <div style={{ marginBottom: 'var(--space-4)' }}>
-        <h1 style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', margin: '0 0 6px', letterSpacing: '-0.5px' }}>
-          <span className="material-symbols-outlined" style={{ verticalAlign: 'middle', marginRight: 'var(--space-2)', color: 'var(--primary)', fontSize: '30px' }}>table</span>
-          Planilha de Protocolos
-        </h1>
-        <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', margin: 0 }}>
-          {rows.length} protocolos · {approved} aprovados · {reviewing} em revisão · {rejected} não aprovados
-        </p>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-        <StatCard icon="inventory_2" label="Total" value={rows.length} color="var(--primary)" bg="var(--primary-container)" />
-        <StatCard icon="hourglass_top" label="Em Revisão" value={reviewing} color="var(--tertiary)" bg="var(--tertiary-container)" />
-        <StatCard icon="verified" label="Aprovados" value={approved} color="#5d4037" bg="#efebe9" />
-      </div>
-
-      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
-          <span className="material-symbols-outlined" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px', color: 'var(--outline)' }}>search</span>
-          <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Pesquisar..."
-            style={{ width: '100%', padding: '10px 14px 10px 38px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: '13px', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', outline: 'none', boxSizing: 'border-box' }} />
+    <main className="secretary-workspace" aria-labelledby="spreadsheet-title">
+      <header className="secretary-page-header">
+        <div>
+          <h1 id="spreadsheet-title" className="secretary-page-header__title">Acompanhamento de {itemPluralTitle}</h1>
+          <p className="secretary-page-header__description">Consulta o estado e o tempo de permanência dos {itemPlural} no teu órgão.</p>
         </div>
-        <select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)} style={selectStyle}>
-          <option value="all">Todos os cursos</option>
-          {courses.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        {['all', 'reviewing', 'approved', 'rejected'].map(f => (
-          <button key={f} onClick={() => setFilterStatus(f)} style={{
-            padding: '9px 18px', borderRadius: 'var(--radius-lg)',
-            border: filterStatus === f ? '2px solid var(--primary)' : '1px solid var(--outline-variant)',
-            background: filterStatus === f ? 'var(--primary-container)' : 'var(--surface-container-lowest)',
-            color: filterStatus === f ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
-            fontSize: '13px', fontWeight: filterStatus === f ? 'var(--font-semibold)' : 'var(--font-regular)',
-            fontFamily: 'var(--font-family)', cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
-          }}>
-            {f === 'all' ? 'Todos' : f === 'reviewing' ? 'Em revisão' : f === 'approved' ? 'Aprovados' : 'Não Aprovados'}
-          </button>
-        ))}
-        {searchTerm && (
-          <button onClick={() => setSearchTerm('')} style={{ padding: '9px 14px', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-container-lowest)', cursor: 'pointer', color: 'var(--on-surface-variant)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-family)' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span> Limpar
-          </button>
-        )}
-        <button onClick={loadData} className="btn btn-outline btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>refresh</span> Actualizar
-        </button>
-        <button onClick={() => exportToExcel(filtered)} className="btn btn-outline btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>download</span> Exportar
-        </button>
-      </div>
-
-      <div style={{ background: 'var(--surface-container-lowest)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--outline-variant)', overflow: 'hidden', boxShadow: 'var(--elevation-1)' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1300px' }}>
-            <thead>
-              <tr style={{ background: 'var(--surface-container)' }}>
-                <th style={thStyle}>ID</th>
-                <th style={thStyle}>Data Submissão</th>
-                <th style={thStyle}>Código</th>
-                <th style={thStyle}>Nome do Estudante</th>
-                <th style={thStyle}>Contacto/E-mail</th>
-                <th style={thStyle}>Título do Trabalho</th>
-                <th style={thStyle}>Nº Versão</th>
-                <th style={thStyle}>Data Reunião</th>
-                <th style={thStyle}>Ponto de Situação</th>
-                <th style={thStyle}>Data Aprovação</th>
-                <th style={thStyle}>Tempo Gasto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={11} style={{ padding: 'var(--space-5)', textAlign: 'center', color: 'var(--on-surface-variant)', fontSize: 'var(--body-md)' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: '40px', display: 'block', marginBottom: 'var(--space-2)', opacity: 0.4 }}>search_off</span>
-                    Nenhum protocolo encontrado.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((row, i) => {
-                  const statusCfg = getStatusConfig(row.status)
-                  const isOverdue = parseInt(row.timeSpent) > 14 && !row.status.includes('Aprovado') && !row.status.includes('Não Aprovado') && row.status !== 'Parecer Emitido'
-                  return (
-                    <tr key={row.id} style={{ borderBottom: '1px solid var(--outline-variant)', transition: 'background 0.1s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-container-low)'}
-                      onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'var(--surface-container-lowest)' : 'transparent'}>
-                      <td style={{ ...tdStyle, color: 'var(--on-surface-variant)', fontSize: '12px', fontWeight: 'var(--font-medium)' }}>{row.id}</td>
-                      <td style={{ ...tdStyle, fontSize: '12px', color: 'var(--on-surface-variant)', whiteSpace: 'nowrap' }}>{row.submissionDate}</td>
-                      <td style={tdStyle}><span style={{ fontFamily: 'monospace', fontWeight: 'var(--font-bold)', fontSize: '12px', color: 'var(--primary)', background: 'var(--primary-container)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>{row.code}</span></td>
-                      <td style={{ ...tdStyle, fontWeight: 'var(--font-medium)', fontSize: '13px', whiteSpace: 'nowrap' }}>{row.studentName}</td>
-                      <td style={{ ...tdStyle, fontSize: '12px', color: 'var(--on-surface-variant)', whiteSpace: 'nowrap' }}>{row.contact}</td>
-                      <td style={{ ...tdStyle, maxWidth: '240px' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', fontSize: '13px' }} title={row.title}>{row.title}</span></td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}><span style={{ fontSize: '12px', fontWeight: 'var(--font-semibold)', color: 'var(--primary)', background: 'var(--primary-container)', padding: '2px 10px', borderRadius: 'var(--radius-full)' }}>{formatVersionLabel(row.versionNumber)}</span></td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        {row.meetingDate ? (
-                          <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 'var(--font-medium)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>event</span> {row.meetingDate}
-                          </span>
-                        ) : (
-                          <button onClick={(e) => { e.stopPropagation(); handleSetMeeting(row) }}
-                            style={{ padding: '5px 12px', border: '1px dashed var(--tertiary)', borderRadius: 'var(--radius-lg)', background: 'var(--tertiary-container)', cursor: 'pointer', fontSize: '11px', color: 'var(--on-tertiary-container)', fontFamily: 'var(--font-family)', fontWeight: 'var(--font-semibold)', display: 'inline-flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>event</span> Marcar
-                          </button>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: statusCfg.bg, color: statusCfg.text, fontWeight: 'var(--font-medium)', whiteSpace: 'nowrap' }}>
-                          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: statusCfg.dot, flexShrink: 0 }} />
-                          {row.status}
-                        </span>
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: '12px', color: 'var(--on-surface-variant)', whiteSpace: 'nowrap' }}>{row.approvalDate || '—'}</td>
-                      <td style={{ ...tdStyle, fontSize: '12px', color: isOverdue ? 'var(--error)' : 'var(--on-surface-variant)', fontWeight: isOverdue ? 'var(--font-bold)' : 'var(--font-regular)', whiteSpace: 'nowrap' }}>
-                        {isOverdue && <span style={{ marginRight: '4px' }}>⚠️</span>}{row.timeSpent}
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+        <div className="secretary-panel__actions">
+          <button type="button" className="btn btn-outline" onClick={() => void load()} disabled={loading}><span className="material-symbols-outlined" aria-hidden="true">refresh</span>Atualizar</button>
+          <button type="button" className="btn btn-outline" onClick={exportCsv} disabled={filtered.length === 0}><span className="material-symbols-outlined" aria-hidden="true">download</span>Exportar</button>
         </div>
+      </header>
+
+      {error && <div className="secretary-alert secretary-alert--error" role="alert" aria-live="polite"><span className="material-symbols-outlined" aria-hidden="true">error</span><span>{error}</span></div>}
+
+      <section className="secretary-summary-grid" aria-label={`Resumo de ${itemPlural}`}>
+        <div className="secretary-stat"><span className="secretary-stat__label">Total</span><strong className="secretary-stat__value">{totals.total}</strong></div>
+        <div className="secretary-stat"><span className="secretary-stat__label">Para tratar</span><strong className="secretary-stat__value">{totals.pending}</strong></div>
+        <div className="secretary-stat"><span className="secretary-stat__label">Em revisão</span><strong className="secretary-stat__value">{totals.reviewing}</strong></div>
+      </section>
+
+      <div className="secretary-toolbar">
+        <div className="secretary-control-group"><label className="secretary-field-label" htmlFor="submission-search">Pesquisar</label><input id="submission-search" name="submission-search" className="secretary-control" type="search" autoComplete="off" value={query} placeholder="Código, título ou estudante…" onChange={event => updateSearch({ q: event.target.value || null })} /></div>
+        <div className="secretary-control-group"><label className="secretary-field-label" htmlFor="course-filter">Curso</label><select id="course-filter" name="course-filter" className="secretary-control" value={course} onChange={event => updateSearch({ course: event.target.value === 'all' ? null : event.target.value })}><option value="all">Todos os cursos</option>{courses.map(item => <option key={item} value={item}>{item}</option>)}</select></div>
+        <div className="secretary-filter-group" aria-label="Estado da submissão">{(['all', 'pending', 'reviewing', 'approved', 'rejected'] as StatusFilter[]).map(item => <button key={item} type="button" className="secretary-filter" aria-pressed={status === item} onClick={() => updateSearch({ status: item === 'all' ? null : item })}>{item === 'all' ? 'Todos' : item === 'pending' ? 'Para tratar' : item === 'reviewing' ? 'Em revisão' : item === 'approved' ? 'Aprovados' : 'Não aprovados'}</button>)}</div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-2)', padding: '0 var(--space-1)', fontSize: '11px', color: 'var(--on-surface-variant)' }}>
-        <span>{filtered.length} de {rows.length} registos</span>
-        <span>ISCISA — Direção Científica © {new Date().getFullYear()}</span>
-      </div>
-    </div>
+      {loading ? (
+        <div className="secretary-loading"><span className="secretary-spinner" aria-hidden="true" />A carregar {itemPlural}…</div>
+      ) : filtered.length === 0 ? (
+        <div className="secretary-empty-state"><span className="material-symbols-outlined" aria-hidden="true">search_off</span><strong>Não foram encontradas submissões</strong><span>Ajusta os filtros ou atualiza a lista.</span></div>
+      ) : (
+        <>
+          <div className="secretary-table-wrap">
+            <table className="secretary-table secretary-tracking-table">
+              <thead><tr><th>ID</th><th>Data da submissão</th><th>Código</th><th>Nome do estudante</th><th>Contacto/e-mail</th><th>Título do trabalho</th><th>Número da versão</th><th>Data da reunião</th><th>Ponto de situação</th><th>Data da aprovação</th><th>Tempo gasto</th><th>Avaliadores</th></tr></thead>
+              <tbody>
+                {filtered.map(row => (
+                  <tr key={`${row.itemType}-${row.id}`}>
+                    <td>{row.id}</td>
+                    <td>{formatDate(row.submittedAt)}</td>
+                    <td><Link to={`/secretary/protocols?type=${row.itemType === 'topic' ? 'topics' : 'protocols'}&status=all&item=${row.id}`}>{row.code}</Link></td>
+                    <td>{row.student}</td>
+                    <td>{row.contact}</td>
+                    <td><span className="secretary-table__title" title={row.title}>{row.title}</span></td>
+                    <td>{row.version}</td>
+                    <td>{formatDate(row.meetingAt)}</td>
+                    <td><span className={`secretary-status-badge secretary-status-badge--${row.category}`}>{row.status}</span></td>
+                    <td>{formatDate(row.approvedAt)}</td>
+                    <td>{row.elapsedDays === null ? '-' : `${row.elapsedDays} dias`}</td>
+                    <td>{row.reviewers}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="secretary-mobile-list">
+            {filtered.map(row => (
+              <article key={`${row.itemType}-${row.id}`} className="secretary-mobile-row">
+                <div><p className="secretary-row__eyebrow">{row.code} · Registo #{row.id}</p><h2 className="secretary-row__title">{row.title}</h2></div>
+                <span>{row.student}{row.contact !== '-' ? ` · ${row.contact}` : ''}</span>
+                <span className={`secretary-status-badge secretary-status-badge--${row.category}`}>{row.status}</span>
+                <dl className="secretary-tracking-fields"><div><dt>Submissão</dt><dd>{formatDate(row.submittedAt)}</dd></div><div><dt>Versão</dt><dd>{row.version}</dd></div><div><dt>Reunião</dt><dd>{formatDate(row.meetingAt)}</dd></div><div><dt>Aprovação</dt><dd>{formatDate(row.approvedAt)}</dd></div><div><dt>Tempo gasto</dt><dd>{row.elapsedDays === null ? '-' : `${row.elapsedDays} dias`}</dd></div><div><dt>Avaliadores</dt><dd>{row.reviewers}</dd></div></dl>
+                <Link className="btn btn-outline" to={`/secretary/protocols?type=${row.itemType === 'topic' ? 'topics' : 'protocols'}&status=all&item=${row.id}`}>Ver detalhes</Link>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </main>
   )
-}
-
-function StatCard({ icon, label, value, color, bg }: { icon: string; label: string; value: number; color: string; bg: string }) {
-  return (
-    <div style={{ padding: 'var(--space-3)', background: bg, borderRadius: 'var(--radius-lg)', border: `1px solid ${color}`, display: 'flex', alignItems: 'center', gap: 'var(--space-3)', transition: 'all 0.2s ease' }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--elevation-2)' }}
-      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'var(--elevation-1)' }}>
-      <span className="material-symbols-outlined" style={{ fontSize: '28px', color }}>{icon}</span>
-      <div>
-        <div style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color, lineHeight: 1 }}>{value}</div>
-        <div style={{ fontSize: 'var(--label-md)', color, opacity: 0.8, marginTop: '2px' }}>{label}</div>
-      </div>
-    </div>
-  )
-}
-
-const selectStyle: React.CSSProperties = { padding: '10px 14px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', fontSize: '13px', fontFamily: 'var(--font-family)', color: 'var(--on-surface)', cursor: 'pointer', outline: 'none', minWidth: '180px' }
-
-const thStyle: React.CSSProperties = { padding: '12px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--on-surface-variant)', borderBottom: '2px solid var(--primary)', whiteSpace: 'nowrap' }
-const tdStyle: React.CSSProperties = { padding: '12px 14px', verticalAlign: 'middle' }
-
-function handleSetMeeting(row: SpreadsheetRow) { const date = prompt(`Marcar reunião para ${row.code}:\nData (DD/MM/AAAA):`); if (date) alert(`✅ Reunião marcada para ${date}`) }
-
-function exportToExcel(rows: SpreadsheetRow[]) {
-  const headers = ['ID', 'Data Submissão', 'Código', 'Estudante', 'Contacto', 'Título', 'Versão', 'Data Reunião', 'Situação', 'Data Aprovação', 'Tempo']
-  const csv = [headers.join(','), ...rows.map(r => [r.id, r.submissionDate, r.code, `"${r.studentName}"`, r.contact, `"${r.title}"`, r.versionNumber, r.meetingDate || '—', `"${r.status}"`, r.approvalDate || '—', r.timeSpent].join(','))].join('\n')
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `planilha-${new Date().getFullYear()}.csv`; a.click(); URL.revokeObjectURL(url)
-}
-
-function getMockData(): SpreadsheetRow[] {
-  return [
-    { id: 1, submissionDate: '15/03/2025', code: 'PTM0001E', studentName: 'Sofia Estudante', contact: 'sofia@iscisa.ac.mz', title: 'Impacto da malária na saúde infantil em zonas rurais de Moçambique', versionNumber: '1', meetingDate: null, status: 'Em Revisão (Núcleo)', statusRaw: 'in_review_nucleo', approvalDate: null, timeSpent: '12 dias', course: 'Mestrado em Saúde e Segurança no Trabalho', organ: 'Núcleo Científico' },
-    { id: 2, submissionDate: '18/03/2025', code: 'PTM0002E', studentName: 'Carlos Mavie', contact: 'carlos@iscisa.ac.mz', title: 'Estudo sobre desnutrição infantil', versionNumber: '2', meetingDate: '22/03/2025', status: 'Parecer Emitido', statusRaw: 'parecer_emitido_deliberacao', approvalDate: '25/03/2025', timeSpent: '10 dias', course: 'Mestrado em Saúde e Segurança no Trabalho', organ: 'Núcleo Científico' },
-    { id: 3, submissionDate: '20/03/2025', code: 'PTM0003E', studentName: 'Ana Tembe', contact: 'ana@iscisa.ac.mz', title: 'Avaliação de políticas de saúde pública', versionNumber: '1', meetingDate: null, status: 'Aguardando CC', statusRaw: 'pending_comite_cientifico', approvalDate: null, timeSpent: '7 dias', course: 'Mestrado em Saúde Pública', organ: 'Comité Científico' },
-    { id: 4, submissionDate: '22/03/2025', code: 'PTM0004E', studentName: 'Pedro Nkosi', contact: 'pedro@iscisa.ac.mz', title: 'Análise de dados epidemiológicos em saúde ocupacional', versionNumber: '3', meetingDate: '28/03/2025', status: 'Aprovado Final', statusRaw: 'approved_final', approvalDate: '01/04/2025', timeSpent: '17 dias', course: 'Mestrado em Saúde Pública', organ: 'Comité de Bioética' },
-    { id: 5, submissionDate: '25/03/2025', code: 'PTM0005E', studentName: 'Marta Chissano', contact: 'marta@iscisa.ac.mz', title: 'Estudo clínico sobre HIV/SIDA em adultos', versionNumber: '1', meetingDate: null, status: 'Não Aprovado', statusRaw: 'rejected', approvalDate: null, timeSpent: '5 dias', course: 'Licenciatura em Enfermagem', organ: 'Núcleo Científico' },
-    { id: 6, submissionDate: '10/03/2025', code: 'PTM0006E', studentName: 'José Macamo', contact: 'jose@iscisa.ac.mz', title: 'Resistência antimicrobiana em hospitais centrais', versionNumber: '2', meetingDate: null, status: 'Em Revisão (CC)', statusRaw: 'in_review_comite_cientifico', approvalDate: null, timeSpent: '27 dias', course: 'Mestrado em Saúde Pública', organ: 'Comité Científico' },
-  ]
 }

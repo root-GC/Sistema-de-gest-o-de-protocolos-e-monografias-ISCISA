@@ -157,12 +157,12 @@ export default function CompleteProfilePage() {
   }
 
   return (
-    <div style={{ 
+    <div className="teacher-workspace" style={{
       minHeight: '100vh', 
       display: 'flex', 
       alignItems: 'center', 
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, var(--surface-container-low) 0%, var(--surface-container) 100%)',
+      background: 'var(--surface-container-low)',
       fontFamily: 'var(--font-family)',
       padding: 'var(--space-3)'
     }}>
@@ -482,7 +482,7 @@ export default function CompleteProfilePage() {
               fontSize: 'var(--body-lg)',
               fontWeight: 'var(--font-semibold)',
               opacity: submitting ? 0.7 : 1,
-              transition: 'all 0.2s ease',
+              transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease',
               width: '100%',
               boxShadow: 'var(--elevation-1)',
               position: 'relative',

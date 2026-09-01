@@ -1,8 +1,9 @@
 // src/pages/reviewer/ReviewerMeetingsPage.tsx
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { evaluationService, type EvaluationForm, type EvaluationOrgan, type FormCriterion } from '../../services/evaluationService'
+import { deliberationService, type DeliberationMeeting, type DeliberationMeetingItem } from '../../services/deliberationService'
 import OnlyOfficeEditor from '../../components/OnlyOfficeEditor/OnlyOfficeEditor'
 import '../../styles/global.css'
 
@@ -74,9 +75,7 @@ function formatDate(dateStr?: string | null): string {
 }
 
 function organForEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): EvaluationOrgan {
-  if (form?.organ === 'comite_cientifico') return 'comite-cientifico'
-  if (form?.organ === 'comite_bioetica') return 'comite-bioetica'
-  return 'nucleo'
+  return form?.organ === 'comite_bioetica' ? 'comite-bioetica' : 'comite-cientifico'
 }
 
 function isBioeticaEvaluation(form?: Pick<EvaluationForm, 'organ'> | null): boolean {
@@ -101,16 +100,20 @@ const DEFAULT_SPLIT = 50
 // ── Componente Principal ──────────────────────────────
 export default function ReviewerMeetingsPage() {
   const { protocolId } = useParams<{ protocolId: string }>()
+  const [searchParams] = useSearchParams()
   const id = Number(protocolId)
+  const requestedMeetingId = Number(searchParams.get('meeting'))
+  const requestedItemId = Number(searchParams.get('item'))
 
   // ── Protocol & Form state ──
   const [protocol, setProtocol] = useState<Protocol | null>(null)
   const [evaluationForm, setEvaluationForm] = useState<EvaluationForm | null>(null)
+  const [meeting, setMeeting] = useState<DeliberationMeeting | null>(null)
+  const [meetingItem, setMeetingItem] = useState<DeliberationMeetingItem | null>(null)
   const [criterionReviews, setCriterionReviews] = useState<Record<number, string>>({})
   const [finalDecision, setFinalDecision] = useState<string | null>(null)
 
   // ── Deliberation state ──
-  const [isStartingDeliberation, setIsStartingDeliberation] = useState(false)
   const [isClosingMeeting, setIsClosingMeeting] = useState(false)
   const [closingResult, setClosingResult] = useState<'deliberated' | 'not_deliberated' | null>(null)
 
@@ -170,7 +173,7 @@ export default function ReviewerMeetingsPage() {
   // ═══════════════════════════════════════════════
   // PANEL TOGGLE
   // ═══════════════════════════════════════════════
-  function toggleDocumentFullscreen() {
+  const toggleDocumentFullscreen = useCallback(() => {
     if (expandedPanel === 'document') {
       setExpandedPanel('both')
       setSplitPosition(savedSplitPosition.current)
@@ -178,9 +181,9 @@ export default function ReviewerMeetingsPage() {
       savedSplitPosition.current = splitPosition
       setExpandedPanel('document')
     }
-  }
+  }, [expandedPanel, splitPosition])
 
-  function toggleFormFullscreen() {
+  const toggleFormFullscreen = useCallback(() => {
     if (expandedPanel === 'form') {
       setExpandedPanel('both')
       setSplitPosition(savedSplitPosition.current)
@@ -188,7 +191,7 @@ export default function ReviewerMeetingsPage() {
       savedSplitPosition.current = splitPosition
       setExpandedPanel('form')
     }
-  }
+  }, [expandedPanel, splitPosition])
 
   function toggleOnlyOfficeFullscreen() {
     setOnlyOfficeFullscreen(prev => !prev)
@@ -221,7 +224,7 @@ export default function ReviewerMeetingsPage() {
     }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
-  }, [expandedPanel, splitPosition, onlyOfficeFullscreen])
+  }, [onlyOfficeFullscreen, toggleDocumentFullscreen, toggleFormFullscreen])
 
   // ═══════════════════════════════════════════════
   // LIFECYCLE
@@ -229,7 +232,7 @@ export default function ReviewerMeetingsPage() {
   useEffect(() => {
     if (id) loadMeetingData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, requestedMeetingId, requestedItemId])
 
   async function loadMeetingData() {
     setLoading(true)
@@ -247,16 +250,29 @@ export default function ReviewerMeetingsPage() {
       
       setProtocol(currentProtocol)
 
-      const formsData = await evaluationService.listForReviewer()
-      const form = formsData.evaluation_forms?.find(f => f.protocol_id === id)
-      
-      if (!form) {
-        setError('Ficha de avaliação não encontrada.')
+      const currentMeeting = requestedMeetingId
+        ? (await deliberationService.getMeeting(requestedMeetingId)).meeting
+        : (await deliberationService.listMeetings()).meetings.find(candidate =>
+            candidate.items.some(item => item.protocol.id === id)
+          )
+      const currentItem = currentMeeting?.items.find(item =>
+        requestedItemId ? item.id === requestedItemId : item.protocol.id === id
+      )
+
+      if (!currentMeeting || !currentItem) {
+        setError('Reunião de deliberação não encontrada.')
         setLoading(false)
         return
       }
 
-      const fullForm = await evaluationService.getForm(form.id, organForEvaluation(form))
+      setMeeting(currentMeeting)
+      setMeetingItem(currentItem)
+
+      const formOrgan: EvaluationOrgan = currentItem.form_organ === 'comite_bioetica'
+        ? 'comite-bioetica'
+        : 'comite-cientifico'
+
+      const fullForm = await evaluationService.getForm(currentItem.evaluation_form_id, formOrgan)
       const formData = fullForm.evaluation_form
       
       if (!formData) {
@@ -291,39 +307,24 @@ export default function ReviewerMeetingsPage() {
       }
       setCriterionReviews(reviews)
 
-    } catch (e: any) {
-      setError(e?.message || 'Erro ao carregar dados da reunião.')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Erro ao carregar dados da reunião.')
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleStartDeliberation() {
-    if (!evaluationForm) return
-    setIsStartingDeliberation(true)
-    setError(null)
-    try {
-      await evaluationService.startDeliberation(evaluationForm.id, organForEvaluation(evaluationForm))
-      setSuccess('Reunião de deliberação iniciada.')
-      await loadMeetingData()
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setIsStartingDeliberation(false)
-    }
-  }
-
   async function handleCloseMeeting(result: 'deliberated' | 'not_deliberated') {
-    if (!evaluationForm) return
+    if (!evaluationForm || !meeting || !meetingItem) return
     setIsClosingMeeting(true)
     setClosingResult(result)
     setError(null)
     try {
-      const { message } = await evaluationService.closeMeeting(evaluationForm.id, result, organForEvaluation(evaluationForm))
+      const { message } = await deliberationService.closeItem(meeting.id, meetingItem.id, result)
       setSuccess(message)
       await loadMeetingData()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível encerrar a reunião.')
     } finally {
       setIsClosingMeeting(false)
       setClosingResult(null)
@@ -332,20 +333,20 @@ export default function ReviewerMeetingsPage() {
 
   async function openFile(url: string | null | undefined) {
     if (!url) return
-    try { await evaluationService.openFile(url) } catch (e) {}
+    try { await evaluationService.openFile(url) } catch { setError('Não foi possível abrir o documento.') }
   }
   
   async function downloadFile(url: string | null | undefined) {
     if (!url) return
-    try { await evaluationService.downloadFile(url) } catch (e) {}
+    try { await evaluationService.downloadFile(url) } catch { setError('Não foi possível descarregar o documento.') }
   }
 
   async function handleSaveCriterionReview(fcId: number) {
     if (!evaluationForm || evaluationForm.status !== 'in_deliberation') return
     try {
       await evaluationService.saveCriterionReview(evaluationForm.id, fcId, criterionReviews[fcId] || null, organForEvaluation(evaluationForm))
-    } catch (e: any) {
-      setError(e.message)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível guardar o critério.')
     }
   }
 
@@ -374,15 +375,23 @@ export default function ReviewerMeetingsPage() {
   // RENDER
   // ═══════════════════════════════════════════════
   if (protocol && evaluationForm) {
-    const state = getMeetingState(evaluationForm)
-    const isInDeliberation = evaluationForm?.status === 'in_deliberation'
-    const isScheduled = evaluationForm?.status === 'deliberation_scheduled'
+    const state = meetingItem?.status === 'scheduled'
+      ? { label: 'Agendada', className: 'is-deliberation-scheduled', description: `Reunião marcada para ${formatDate(meeting?.scheduled_at)} em ${meeting?.location || 'local a definir'}.` }
+      : meetingItem?.status === 'in_progress'
+        ? { label: 'Em Deliberação', className: 'is-deliberation-active', description: 'Reunião em andamento. Registe o resultado da deliberação.' }
+        : meetingItem?.status === 'deliberated'
+          ? { label: 'Reunião Encerrada', className: 'is-deliberated', description: 'Houve deliberação. Aguardando decisão final.' }
+          : meetingItem?.status === 'not_deliberated'
+            ? { label: 'Sem Consenso', className: 'is-not-deliberated', description: 'O protocolo regressou ao fim da fila.' }
+            : getMeetingState(evaluationForm)
+    const isInDeliberation = meetingItem?.status === 'in_progress'
+    const isScheduled = meetingItem?.status === 'scheduled'
     const isConcluded = evaluationForm?.status === 'concluded'
-    const isDeliberated = evaluationForm?.status === 'deliberated'
-    const isNotDeliberated = evaluationForm?.status === 'not_deliberated'
+    const isDeliberated = meetingItem?.status === 'deliberated'
+    const isNotDeliberated = meetingItem?.status === 'not_deliberated'
     const isBioeticaForm = isBioeticaEvaluation(evaluationForm)
     const canAccessForm = !isBioeticaForm || Boolean(evaluationForm.can_access_form)
-    const canManageMeeting = !isBioeticaForm || Boolean(evaluationForm.is_primary_reviewer)
+    const canManageMeeting = Boolean(meetingItem?.can_operate)
     const canEditCriteria = isInDeliberation && !isConcluded && canAccessForm && canManageMeeting
     
     const protocolCode = protocol.code || `ISC-P-${id}`
@@ -456,7 +465,7 @@ export default function ReviewerMeetingsPage() {
         )}
 
         {/* ── SPLIT VIEW ── */}
-        <div className={`evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
+        <div className={`teacher-workspace evaluation-split-view ${isDragging ? 'is-dragging' : ''}`} ref={containerRef}>
           
           {/* LEFT: ONLYOFFICE EDITOR */}
           <section className="doc-viewer-pane" style={{
@@ -554,15 +563,9 @@ export default function ReviewerMeetingsPage() {
                   <span className="material-symbols-outlined">event</span>
                   <div>
                     <strong>Reunião Agendada</strong>
-                    <p>{formatDate(evaluationForm.deliberation_date)} — {evaluationForm.deliberation_location || 'Local não definido'}</p>
+                    <p>{formatDate(meeting?.scheduled_at)} — {meeting?.location || 'Local não definido'}</p>
                   </div>
-                  {canManageMeeting ? (
-                    <button className="btn btn-primary btn-sm" onClick={handleStartDeliberation} disabled={isStartingDeliberation}>
-                      {isStartingDeliberation ? 'A iniciar...' : 'Iniciar Reunião'}
-                    </button>
-                  ) : (
-                    <span className="badge badge-warning">Apenas o revisor principal inicia</span>
-                  )}
+                  <span className="badge badge-warning">A Secretaria inicia a reunião no horário marcado</span>
                 </div>
               )}
 
@@ -722,7 +725,7 @@ export default function ReviewerMeetingsPage() {
                             fontSize: 'var(--body-md)',
                             fontWeight: 'var(--font-semibold)',
                             cursor: isClosingMeeting ? 'wait' : 'pointer',
-                            transition: 'all 0.2s ease',
+                            transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease',
                             opacity: isClosingMeeting && closingResult !== 'deliberated' ? 0.6 : 1,
                           }}
                           onMouseEnter={e => {
@@ -775,7 +778,7 @@ export default function ReviewerMeetingsPage() {
                             fontSize: 'var(--body-md)',
                             fontWeight: 'var(--font-semibold)',
                             cursor: isClosingMeeting ? 'wait' : 'pointer',
-                            transition: 'all 0.2s ease',
+                            transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease',
                             opacity: isClosingMeeting && closingResult !== 'not_deliberated' ? 0.6 : 1,
                           }}
                           onMouseEnter={e => {

@@ -49,11 +49,15 @@ export const menuRegistry = [
     icon: 'ti-users',
     route: '/supervision',
     permission: 'supervision.view',
-    roles: ['supervisor'],
-    children: [
-      { label: 'Lista', route: '/supervision/list', permission: 'supervision.view' },
-      { label: 'Validar submissão', route: '/supervision/pending', permission: 'supervision.approve' },
-    ],
+    roles: ['teacher', 'supervisor', 'reviewer'],
+  },
+  {
+    id: 'supervision_pending',
+    label: 'Aprovar submissões',
+    icon: 'ti-check-double',
+    route: '/supervision/pending',
+    permission: 'supervision.approve',
+    roles: ['teacher', 'supervisor', 'reviewer'],
   },
 
   // ── Teacher / Reviewer ────────────────────────────────────────────
@@ -65,18 +69,22 @@ export const menuRegistry = [
     permission: 'workload.view',
     roles: ['teacher', 'supervisor', 'reviewer'],
   },
- {
-  id: 'reviews',
-  label: 'Revisões',
-  icon: 'ti-eye',
-  route: '/reviews',
-  permission: 'protocol.evaluate',
-  roles: ['reviewer'],
-  children: [
-    { label: 'Atribuídas a mim', route: '/reviews/assigned', permission: 'protocol.evaluate' },
-    { label: 'Concluídas',       route: '/reviews/done',     permission: 'protocol.evaluate' },
-  ],
-},
+  {
+    id: 'reviews',
+    label: 'Revisões',
+    icon: 'ti-eye',
+    route: '/reviews',
+    permission: 'protocol.evaluate',
+    roles: ['teacher', 'supervisor', 'reviewer'],
+  },
+  {
+    id: 'review_history',
+    label: 'Histórico',
+    icon: 'ti-history',
+    route: '/reviews/history',
+    permission: 'protocol.evaluate',
+    roles: ['teacher', 'supervisor', 'reviewer'],
+  },
 // 🆕 Reuniões de Deliberação (Núcleo)
 {
   id: 'reviewer_meetings',
@@ -84,7 +92,7 @@ export const menuRegistry = [
   icon: 'ti-calendar-event',
   route: '/reviewer/meetings',
   permission: 'protocol.evaluate',
-  roles: ['reviewer'],
+  roles: ['teacher', 'supervisor', 'reviewer'],
 },
 // No menu do revisor
 {
@@ -93,7 +101,7 @@ export const menuRegistry = [
   icon: 'ti-gavel',
   route: '/reviewer/final-decisions',
   permission: 'protocol.evaluate',
-  roles: ['reviewer'],
+  roles: ['teacher', 'supervisor', 'reviewer'],
 },
 
   // ── Coordinator ───────────────────────────────────────────────────
@@ -111,7 +119,7 @@ export const menuRegistry = [
     icon: 'ti-files',
     route: '/protocols',
     permission: 'protocol.assign',
-    roles: ['coordinator', 'secretary'],
+    roles: ['coordinator'],
     children: [
       { label: 'Em revisão',   route: '/protocols?status=reviewing',   permission: 'protocol.assign'  },
       { label: 'Aprovados',    route: '/protocols?status=approved',    permission: 'protocol.assign'  },
@@ -146,35 +154,53 @@ export const menuRegistry = [
     icon: 'ti-calendar-event',
     route: '/agenda',
     permission: null,
-    roles: ['teacher', 'reviewer', 'secretary', 'coordinator', 'admin'],
+    roles: ['teacher', 'supervisor', 'reviewer', 'secretary', 'coordinator', 'admin'],
   },
 
   // ── Secretary ─────────────────────────────────────────────────────
   {
     id: 'secretary_protocols',
-    label: 'Gestão de submissões',
+    label: 'Submissões',
     icon: 'ti-clipboard-list',
     route: '/secretary/protocols',
     permission: 'protocol.triage',
     roles: ['secretary'],
   },
-  // 🆕 Marcar Reunião (substitui Harmonização)
   {
-    id: 'secretary_meeting',
-    label: 'Marcar Reunião',
-    icon: 'ti-calendar-plus',
-    route: '/secretary/meeting',
-    permission: 'protocol.view.all',
+    id: 'secretary_history',
+    label: 'Histórico',
+    icon: 'ti-history',
+    route: '/secretary/history',
+    permission: 'protocol.triage',
     roles: ['secretary'],
+    organTypes: ['nucleus', 'scientific_committee', 'bioethics_committee'],
   },
-  // 🆕 Planilha de Protocolos (substitui Revisões Concluídas)
+  {
+    id: 'secretary_deliberations',
+    label: 'Deliberações',
+    icon: 'ti-gavel',
+    route: '/secretary/meeting',
+    permission: 'protocol.assign',
+    roles: ['secretary'],
+    organTypes: ['scientific_committee', 'bioethics_committee'],
+  },
+  {
+    id: 'secretary_signatures',
+    label: 'Assinar',
+    icon: 'ti-signature',
+    route: '/secretary/signatures',
+    permission: 'protocol.assign',
+    roles: ['secretary'],
+    organTypes: ['scientific_committee', 'bioethics_committee'],
+  },
   {
     id: 'secretary_spreadsheet',
-    label: 'Planilha de Protocolos',
+    label: 'Planilha',
     icon: 'ti-table',
     route: '/secretary/spreadsheet',
-    permission: 'protocol.view.all',
+    permission: 'protocol.triage',
     roles: ['secretary'],
+    organTypes: ['nucleus', 'scientific_committee', 'bioethics_committee'],
   },
 
   // ── Organ President ───────────────────────────────────────────────
@@ -187,10 +213,12 @@ export const menuRegistry = [
     route: '/organ-president',
     permission: null,
     roles: ['admin'],
+    adminScope: 'organ',
+    organTypes: ['nucleus', 'scientific_committee', 'bioethics_committee'],
     children: [
       { id: 'organ_president_dashboard', label: 'Painel', route: '/organ-president', permission: null },
       { id: 'organ_president_members',   label: 'Membros', route: '/organ-president/members', permission: null },
-      { id: 'organ_president_reviewers', label: 'Convidar Revisores', route: '/organ-president/reviewers', permission: null },
+      { id: 'organ_president_reviewers', label: 'Adicionar Revisores', route: '/organ-president/reviewers', permission: null },
       { id: 'organ_president_teachers',  label: 'Registar Docentes', route: '/organ-president/teachers', permission: null }, // 🆕 NOVA ROTA
     ],
   },
@@ -203,6 +231,8 @@ export const menuRegistry = [
     route: '/general-admin',
     permission: 'admin.organs',
     roles: ['admin'],
+    adminScope: 'organ',
+    organTypes: ['scientific_direction'],
     children: [
       { id: 'general_admin_dashboard',  label: 'Painel',            route: '/general-admin',               permission: 'admin.organs' },
       { id: 'general_admin_personnel',  label: 'Gestão de Pessoal', route: '/general-admin/personnel',     permission: 'admin.organs' },
@@ -217,6 +247,7 @@ export const menuRegistry = [
     icon: 'ti-settings',
     permission: 'admin.users',
     roles: ['admin'],
+    adminScope: 'global',
     children: [
       { id: 'admin_users',         label: 'Utilizadores',      icon: 'ti-users-group', route: '/admin/users',         permission: 'admin.users',    roles: ['admin'] },
       { id: 'admin_organs',        label: 'Órgãos e áreas',    icon: 'ti-building',    route: '/admin/organs',        permission: 'admin.organs',   roles: ['admin'] },

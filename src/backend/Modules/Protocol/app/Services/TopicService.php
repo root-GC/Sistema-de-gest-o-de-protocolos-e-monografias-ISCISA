@@ -2,12 +2,13 @@
 
 namespace Modules\Protocol\app\Services;
 
+use App\Services\DocumentTraceService;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Modules\Protocol\app\Events\TopicReviewersAssigned;
 use Modules\Protocol\app\Events\TopicStatusChanged;
 use Modules\Protocol\app\Models\EvaluationForm;
@@ -84,7 +85,7 @@ class TopicService
         if ($document) {
             $path = $document->storeAs(
                 'topics/' . $topic->id,
-                'topic-document-' . $topic->id . '.docx',
+                'topic-document-' . Str::uuid() . '.docx',
                 'public'
             );
 
@@ -93,7 +94,16 @@ class TopicService
                 'document_name' => $document->getClientOriginalName(),
             ]);
 
-            $this->recordSupervisorComment($topic, $supervisor, $comment);
+            app(DocumentTraceService::class)->capture(
+                $topic,
+                'topics',
+                $topic->id,
+                $topic->document_name,
+                $topic->document_path,
+                1,
+                'topic_document',
+                $user,
+            );
         }
 
         $topic->load([
@@ -593,42 +603,6 @@ class TopicService
     {
         return DB::transaction(function () use ($topic, $reviewer, $data) {
             $topic = Topic::lockForUpdate()->findOrFail($topic->id);
-
-            Log::info('=== SUBMIT EVALUATION ===');
-
-            Log::info('Dados do Topic recebido', [
-                'id' => $topic->id,
-                'status' => $topic->status,
-                'title' => $topic->title ?? null,
-                'student_id' => $topic->student_id ?? null,
-                'supervisor_id' => $topic->supervisor_id ?? null,
-                'scientific_area_id' => $topic->scientific_area_id ?? null,
-                'created_at' => $topic->created_at,
-                'updated_at' => $topic->updated_at,
-            ]);
-
-
-            Log::info('Estados permitidos para avaliação', [
-                'STATUS_ASSIGNED' => Topic::STATUS_ASSIGNED,
-                'STATUS_IN_REVIEW' => Topic::STATUS_IN_REVIEW,
-                'current_status' => $topic->status,
-                'can_evaluate' => in_array(
-                    $topic->status,
-                    [
-                        Topic::STATUS_ASSIGNED,
-                        Topic::STATUS_IN_REVIEW
-                    ],
-                    true
-                )
-            ]);
-
-
-            Log::info('Dados enviados pelo avaliador', [
-                'reviewer_id' => $reviewer->id,
-                'reviewer_name' => $reviewer->name,
-                'decision' => $data['decision'] ?? null,
-                'comment_id' => $data['comment_id'] ?? null,
-            ]);
 
             $teacherProfile = $reviewer->teacherProfile;
 

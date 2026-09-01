@@ -38,7 +38,7 @@ interface ScientificArea {
 }
 
 export default function ManageOrganMembersPage() {
-  const { user, profiles } = useAuth()
+  const { profiles } = useAuth()
   const [members, setMembers] = useState<OrganMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +46,7 @@ export default function ManageOrganMembersPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterRole, setFilterRole] = useState<string>('all')
 
-  // Convidar Secretário/a
+  // Adicionar Secretário/a
   const [showInviteSecretary, setShowInviteSecretary] = useState(false)
   const [secretaryName, setSecretaryName] = useState('')
   const [secretaryEmail, setSecretaryEmail] = useState('')
@@ -188,12 +188,12 @@ export default function ManageOrganMembersPage() {
       }
 
       await generalAdminService.createSecretary(payload)
-      setSuccessMessage('Secretário/a convidado/a com sucesso! Email enviado.')
+      setSuccessMessage('Secretário/a adicionado/a com sucesso! Email enviado.')
       setShowInviteSecretary(false)
       loadMembers()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (e: any) {
-      setError(e?.message || 'Erro ao convidar secretário/a.')
+      setError(e?.message || 'Erro ao adicionar secretário/a.')
     } finally {
       setIsSubmitting(false)
     }
@@ -284,17 +284,17 @@ export default function ManageOrganMembersPage() {
           fontWeight: 'var(--font-semibold)', fontFamily: 'var(--font-family)', whiteSpace: 'nowrap'
         }}>
           <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>mail</span>
-          Convidar Secretário/a
+          Adicionar Secretário/a
         </button>
       </div>
 
-      {/* Modal: Convidar Secretário/a */}
+      {/* Modal: Adicionar Secretário/a */}
       {showInviteSecretary && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-3)' }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-4)', width: '100%', maxWidth: '500px', maxHeight: '85vh', overflow: 'auto' }}>
             <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
               <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>mail</span>
-              Convidar Secretário/a
+              Adicionar Secretário/a
             </h2>
             <form onSubmit={handleInviteSecretary} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               <FormField label="Nome *" value={secretaryName} onChange={setSecretaryName} required />
@@ -336,7 +336,7 @@ export default function ManageOrganMembersPage() {
               <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowInviteSecretary(false)} className="btn">Cancelar</button>
                 <button type="submit" className="btn btn-primary" disabled={isSubmitting} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', opacity: isSubmitting ? 0.7 : 1 }}>
-                  {isSubmitting ? 'A enviar...' : 'Enviar Convite'}
+                  {isSubmitting ? 'A adicionar...' : 'Adicionar Secretário/a'}
                 </button>
               </div>
             </form>

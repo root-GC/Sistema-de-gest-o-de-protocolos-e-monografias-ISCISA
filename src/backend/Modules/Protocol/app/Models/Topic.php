@@ -48,7 +48,17 @@ class Topic extends Model
 
     protected $appends = [
         'status_label',
+        'has_document',
     ];
+
+    protected $hidden = [
+        'document_path',
+    ];
+
+    public function getHasDocumentAttribute(): bool
+    {
+        return ! empty($this->document_path);
+    }
 
     public static function rejectedStatuses(): array
     {

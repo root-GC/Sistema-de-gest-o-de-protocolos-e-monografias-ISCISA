@@ -28,7 +28,7 @@ export interface ScientificAreaInfo {
 export interface OrganInfo {
   id: number;
   name: string;
-  type?: string;
+  type?: 'nucleus' | 'scientific_committee' | 'bioethics_committee' | 'scientific_direction';
 }
 
 export interface StudentProfile {
@@ -45,6 +45,7 @@ export interface TeacherProfile {
   academic_degree?: string | null;
   is_internal?: boolean;
   scientific_area: ScientificAreaInfo | null;
+  course: CourseInfo | null;
 }
 
 export interface CoordinatorProfile {
@@ -62,7 +63,7 @@ export interface SecretaryProfile {
 
 export interface AdminProfile {
   id: number;
-  access_scope?: string;
+  access_scope?: 'global' | 'organ';
   organ_id?: number;
   organ: OrganInfo | null;
 }
@@ -136,34 +137,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Hidratar sessão ao carregar
   useEffect(() => {
+    let cancelled = false;
     const token = localStorage.getItem('sgpmc_token');
     const saved = localStorage.getItem('sgpmc_user');
-    
+
     if (token && saved) {
       try {
         const userData = JSON.parse(saved) as UserPayload;
-        console.log('🔍 Hidratando sessão:', userData);
         hydrate(userData);
-      } catch (error) {
-        console.error('❌ Erro ao hidratar sessão:', error);
+
+        authService.me()
+          .then(({ user: refreshedUser }) => {
+            if (cancelled) return;
+
+            localStorage.setItem('sgpmc_user', JSON.stringify(refreshedUser));
+            hydrate(refreshedUser);
+          })
+          .catch(() => undefined)
+          .finally(() => {
+            if (!cancelled) setLoading(false);
+          });
+      } catch {
         clear();
+        window.setTimeout(() => {
+          if (!cancelled) setLoading(false);
+        }, 0);
       }
     } else {
       clear();
+      window.setTimeout(() => {
+        if (!cancelled) setLoading(false);
+      }, 0);
     }
-    
-    setLoading(false);
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function hydrate(data: UserPayload) {
-    console.log('💧 Hydrate:', {
-      id: data.id,
-      name: data.name,
-      roles: data.roles,
-      permissions: data.permissions?.length,
-      profiles: Object.keys(data.profiles || {})
-    });
-    
     setUser({ 
       id: data.id, 
       name: data.name, 
@@ -186,9 +198,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     setActiveRole(roleToSet);
     
-    console.log('✅ Active role:', roleToSet);
-    console.log('👤 Admin profile:', data.profiles?.admin);
-    console.log('📋 Profile incomplete:', isProfileIncomplete);
   }
 
   // Verificar se o perfil do docente está completo
@@ -219,21 +228,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     setIsProfileIncomplete(isIncomplete);
     
-    console.log('📋 Perfil docente:', {
-      hasTeacherRole,
-      hasProfile: !!teacherProfile,
-      academic_degree: teacherProfile.academic_degree,
-      department: teacherProfile.department,
-      isIncomplete
-    });
   }
 
   const login = useCallback(async (email: string, password: string): Promise<UserPayload> => {
     setIsAuthenticating(true);
     try {
       const { token, user: userData } = await authService.login(email, password);
-
-      console.log('🔑 Login bem-sucedido:', userData);
 
       localStorage.setItem('sgpmc_token', token);
       localStorage.setItem('sgpmc_user', JSON.stringify(userData));
@@ -278,10 +278,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchRole = useCallback((role: Role) => {
     if (!roles.includes(role)) {
-      console.warn(`⚠️ Role "${role}" não disponível. Roles:`, roles);
       return;
     }
-    console.log(`🔄 Trocando para role: ${role}`);
     setActiveRole(role);
     localStorage.setItem('sgpmc_active_role', role);
   }, [roles]);
@@ -291,16 +289,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { user: userData } = await authService.me();
       localStorage.setItem('sgpmc_user', JSON.stringify(userData));
       hydrate(userData);
-    } catch (error) {
-      console.error('❌ Failed to refresh user data:', error);
+    } catch {
       clear();
     }
   }, []);
 
   // Atualizar dados do utilizador (após completar perfil)
   const updateUser = useCallback((userData: UserPayload) => {
-    console.log('🔄 Atualizando utilizador:', userData);
-    
     localStorage.setItem('sgpmc_user', JSON.stringify(userData));
     
     setUser({ 
@@ -318,7 +313,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   function clear() {
-    console.log('🧹 Limpando sessão');
     localStorage.removeItem('sgpmc_token');
     localStorage.removeItem('sgpmc_user');
     localStorage.removeItem('sgpmc_active_role');

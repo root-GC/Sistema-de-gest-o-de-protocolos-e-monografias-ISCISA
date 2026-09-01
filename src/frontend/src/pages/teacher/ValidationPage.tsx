@@ -1,5 +1,5 @@
 // src/pages/teacher/ValidationPage.tsx
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supervisorService, type Supervisee } from '../../services/supervisorService'
 import '../../styles/global.css'
@@ -230,11 +230,8 @@ export default function ValidationPage() {
     { id: 'monographs', label: 'Monografias', icon: 'book', color: 'var(--secondary)', bg: 'var(--secondary-container)', textColor: 'var(--on-secondary-container)' },
   ]
 
-  useEffect(() => {
-    loadSupervisees()
-  }, [])
-
-  async function loadSupervisees() {
+  const loadSupervisees = useCallback(async () => {
+    await Promise.resolve()
     setLoading(true)
     setError(null)
     try {
@@ -247,7 +244,12 @@ export default function ValidationPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const requestId = window.setTimeout(() => { void loadSupervisees() }, 0)
+    return () => window.clearTimeout(requestId)
+  }, [loadSupervisees])
 
   // 🆕 Filtra apenas os que precisam de ação do supervisor
   function needsSupervisorAction(phase: string, status?: string): boolean {
@@ -377,7 +379,7 @@ export default function ValidationPage() {
   // RENDER
   // ============================================================
   return (
-    <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
+    <div className="teacher-workspace" style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
 
       {/* Cabeçalho */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
@@ -390,10 +392,40 @@ export default function ValidationPage() {
             {stats.pendingMonographs > 0 && ` • ${stats.pendingMonographs} monografia${stats.pendingMonographs !== 1 ? 's' : ''} pendente${stats.pendingMonographs !== 1 ? 's' : ''}`}
           </p>
         </div>
+        <button
+          onClick={() => navigate('/supervision')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '12px 18px',
+            border: '1px solid var(--outline-variant)',
+            borderRadius: 'var(--radius-lg)',
+            background: 'var(--surface)',
+            color: 'var(--on-surface)',
+            fontSize: 'var(--body-md)',
+            fontWeight: 'var(--font-semibold)',
+            fontFamily: 'var(--font-family)',
+            cursor: 'pointer'
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>groups</span>
+          Ver supervisionandos
+        </button>
+      </div>
+
+      <div style={{
+        display: 'flex',
+        gap: 'var(--space-2)',
+        flexWrap: 'wrap',
+        marginBottom: 'var(--space-4)'
+      }}>
+        <PageSwitchButton icon="groups" label="Supervisionandos" subtitle={`${stats.totalSupervisees} estudantes`} onClick={() => navigate('/supervision')} />
+        <PageSwitchButton active icon="task_alt" label="Pendentes" subtitle={`${stats.pendingTopics + stats.pendingProtocols + stats.pendingMonographs} por decidir`} onClick={() => navigate('/supervision/pending')} />
       </div>
 
       {/* Estatísticas Rápidas */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+      <div className="teacher-summary-grid">
         <StatCard icon="hourglass_top" label="Precisam de Ação" count={stats.pendingTopics + stats.pendingProtocols + stats.pendingMonographs} color="var(--tertiary)" bg="var(--tertiary-container)" onClick={() => setActiveTab('topics')} />
         <StatCard icon="lightbulb" label="Temas" count={stats.pendingTopics} color="var(--tertiary)" bg="var(--tertiary-container)" onClick={() => setActiveTab('topics')} />
         <StatCard icon="description" label="Protocolos" count={stats.pendingProtocols} color="var(--primary)" bg="var(--primary-container)" onClick={() => setActiveTab('protocols')} />
@@ -408,7 +440,7 @@ export default function ValidationPage() {
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 'var(--space-1)', borderBottom: '2px solid var(--outline-variant)', marginBottom: 'var(--space-4)' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-1)', borderBottom: '2px solid var(--outline-variant)', marginBottom: 'var(--space-3)', overflowX: 'auto' }}>
         {tabs.map(tab => {
           const count = tab.id === 'topics' ? stats.pendingTopics : tab.id === 'protocols' ? stats.pendingProtocols : stats.pendingMonographs
           return (
@@ -419,7 +451,7 @@ export default function ValidationPage() {
               borderBottom: activeTab === tab.id ? `3px solid ${tab.color}` : '3px solid transparent',
               borderRadius: 0, cursor: 'pointer', background: 'transparent',
               color: activeTab === tab.id ? tab.color : 'var(--on-surface-variant)',
-              transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+              transition: 'border-color 200ms ease, color 200ms ease, background-color 200ms ease', display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
               whiteSpace: 'nowrap', marginBottom: '-2px'
             }}>
               <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{tab.icon}</span>
@@ -428,6 +460,26 @@ export default function ValidationPage() {
             </button>
           )
         })}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 'var(--space-2)',
+        flexWrap: 'wrap',
+        padding: '12px 16px',
+        marginBottom: 'var(--space-4)',
+        background: 'var(--surface-container-low)',
+        border: '1px solid var(--outline-variant)',
+        borderRadius: 'var(--radius-lg)'
+      }}>
+        <span style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface)' }}>
+          {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} em {tabs.find(tab => tab.id === activeTab)?.label.toLowerCase()}
+        </span>
+        <span style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>
+          Abre qualquer item para decidir, descarregar documento ou registar correções.
+        </span>
       </div>
 
       {/* Barra de Pesquisa */}
@@ -456,8 +508,8 @@ export default function ValidationPage() {
             const statusConfig = getStatusConfig(item.type, item.status)
             return (
               <div key={`${item.type}-${item.id}-${index}`} className="card" onClick={() => navigate(`/supervision/review/${item.type}/${item.id}`)} style={{
-                padding: 'var(--space-3) var(--space-4)', display: 'flex', alignItems: 'center',
-                gap: 'var(--space-3)', cursor: 'pointer', transition: 'all 0.2s ease',
+                padding: 'var(--space-2) var(--space-3)', display: 'flex', alignItems: 'center',
+                gap: 'var(--space-3)', cursor: 'pointer', transition: 'border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease',
                 border: `1px solid ${statusConfig.color}`, flexWrap: 'wrap',
                 background: `color-mix(in srgb, ${statusConfig.bg} 25%, var(--surface))`
               }}
@@ -500,15 +552,49 @@ export default function ValidationPage() {
 // ============================================================
 function StatCard({ icon, label, count, color, bg, onClick }: { icon: string; label: string; count: number; color: string; bg: string; onClick: () => void }) {
   return (
-    <div onClick={onClick} style={{ padding: 'var(--space-3)', background: bg, borderRadius: 'var(--radius-lg)', border: `1px solid ${color}`, cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--elevation-2)' }}
-      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'var(--elevation-1)' }}
+    <button type="button" className="teacher-summary-card" onClick={onClick} style={{ borderColor: color }}>
+      <span className="material-symbols-outlined" aria-hidden="true" style={{ color, background: bg, borderRadius: 'var(--radius-md)', padding: '4px' }}>{icon}</span>
+      <span className="teacher-summary-card__label">{label}</span>
+      <strong className="teacher-summary-card__value">{count}</strong>
+    </button>
+  )
+}
+
+function PageSwitchButton({
+  active = false,
+  icon,
+  label,
+  subtitle,
+  onClick,
+}: {
+  active?: boolean
+  icon: string
+  label: string
+  subtitle: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-2)',
+        padding: '12px 16px',
+        borderRadius: 'var(--radius-lg)',
+        border: `1px solid ${active ? 'var(--primary)' : 'var(--outline-variant)'}`,
+        background: active ? 'var(--primary-container)' : 'var(--surface)',
+        color: active ? 'var(--on-primary-container)' : 'var(--on-surface)',
+        cursor: 'pointer',
+        fontFamily: 'var(--font-family)',
+      }}
     >
-      <span className="material-symbols-outlined" style={{ fontSize: '32px', color }}>{icon}</span>
-      <div>
-        <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color, margin: 0, lineHeight: 1 }}>{count}</p>
-        <p style={{ fontSize: 'var(--label-sm)', color, margin: '4px 0 0', opacity: 0.8 }}>{label}</p>
-      </div>
-    </div>
+      <span className="material-symbols-outlined" style={{ fontSize: '20px', color: active ? 'var(--primary)' : 'var(--on-surface-variant)' }}>{icon}</span>
+      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)' }}>{label}</span>
+        <span style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>{subtitle}</span>
+      </span>
+    </button>
   )
 }

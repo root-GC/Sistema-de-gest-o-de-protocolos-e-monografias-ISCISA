@@ -31,7 +31,7 @@ class MonographReview extends Model
     public function decidedBy(): BelongsTo
     {
         return $this->belongsTo(
-            \App\Models\User::class,
+            \Modules\User\app\Models\User::class,
             'decided_by_user_id'
         );
     }

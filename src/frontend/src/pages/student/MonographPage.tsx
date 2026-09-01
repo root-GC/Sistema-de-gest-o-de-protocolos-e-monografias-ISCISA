@@ -9,6 +9,10 @@ import '../../styles/global.css'
 // ============================================================
 function getStatusStyle(status: string) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
+    submetida: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Submetida' },
+    verificacao_documental: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Em verificacao documental' },
+    verificada: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Verificada' },
+    devolvida: { bg: 'var(--error-container)', color: 'var(--on-error-container)', dot: 'var(--error)', label: 'Devolvida para correcao' },
     monograph_submitted: { bg: 'var(--tertiary-fixed)', color: 'var(--on-tertiary-fixed)', dot: 'var(--tertiary)', label: 'Submetida' },
     monograph_pending_supervisor: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Pendente (Supervisor)' },
     monograph_approved_supervisor: { bg: 'var(--primary-container)', color: 'var(--on-primary-container)', dot: 'var(--primary)', label: 'Aprovada (Supervisor)' },
@@ -91,12 +95,7 @@ export default function MonographPage() {
   }
 
   const current = monographs[0]
-  const canSubmitNew = Boolean(current) && [
-    'monograph_rejected_supervisor',
-    'monograph_rejected_nucleo',
-    'monograph_rejected_cc',
-    'monograph_rejected_bioetica',
-  ].includes(current.status)
+  const canSubmitNew = current?.status === 'devolvida'
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]

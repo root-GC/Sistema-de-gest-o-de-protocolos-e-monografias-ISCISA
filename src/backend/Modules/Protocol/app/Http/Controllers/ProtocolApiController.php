@@ -5,7 +5,10 @@ namespace Modules\Protocol\app\Http\Controllers;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use App\Models\DocumentRevision;
+use App\Models\WorkflowEvent;
 use Modules\Protocol\app\Http\Requests\SubmitProtocolRequest;
 use Modules\Protocol\app\Http\Resources\ProtocolResource;
 use Modules\Protocol\app\Http\Resources\ProtocolReviewerResource;
@@ -52,10 +55,10 @@ class ProtocolApiController extends Controller
         if ($user->hasPermission('protocol.assign')) {
             $secretaryProfile = $user->secretaryProfile;
 
-            return ! $secretaryProfile
-                || ! $secretaryProfile->organ_id
-                || (int) $protocol->current_organ_id === (int) $secretaryProfile->organ_id
-                || $this->hasSecretaryOrganTrace($protocol, $secretaryProfile->organ_id, $secretaryProfile->organ?->type);
+            return $secretaryProfile
+                && $secretaryProfile->organ_id
+                && ((int) $protocol->current_organ_id === (int) $secretaryProfile->organ_id
+                    || $this->hasSecretaryOrganTrace($protocol, $secretaryProfile->organ_id, $secretaryProfile->organ?->type));
         }
 
         return false;
@@ -130,17 +133,10 @@ class ProtocolApiController extends Controller
 
     public function show(Request $request, string $protocol)
     {
-        $user = $request->user()->load('teacherProfile');
+        $user = $request->user();
         $protocol = \Modules\Protocol\app\Models\Protocol::query()->findOrFail($protocol);
 
-        $isStudent = (int) $protocol->student === (int) $user->id;
-        $isSupervisor = $user->teacherProfile && (int) $protocol->supervisor_id === (int) $user->teacherProfile->id;
-        $canViewAll = $user->hasPermission('protocol.view.all')
-            || $user->hasPermission('supervision.view')
-            || $user->hasPermission('protocol.evaluate')
-            || $user->hasPermission('protocol.assign');
-
-        if (! $isStudent && ! $isSupervisor && ! $canViewAll) {
+        if (! $this->canAccessProtocolDocument($user, $protocol)) {
             abort(403);
         }
 
@@ -171,13 +167,13 @@ class ProtocolApiController extends Controller
             abort(403);
         }
 
-        $histories = $protocol->histories()
+        $legacyHistories = $protocol->histories()
             ->with(['actor:id,name,email', 'organ:id,name,type'])
             ->orderByDesc('occurred_at')
             ->orderByDesc('id')
             ->get()
             ->map(fn($history) => [
-                'id' => $history->id,
+                'id' => 'legacy-' . $history->id,
                 'organ_id' => $history->organ_id,
                 'action' => $history->action,
                 'description' => $history->description,
@@ -195,10 +191,62 @@ class ProtocolApiController extends Controller
                     'name' => $history->organ->name,
                     'type' => $history->organ->type,
                 ] : null,
+                'source' => 'legacy',
             ]);
+
+        $workflowEvents = collect();
+        if (Schema::hasTable('workflow_events')) {
+            $workflowEvents = WorkflowEvent::query()
+                ->where('subject_type', 'protocol')
+                ->where('subject_id', $protocol->id)
+                ->with(['actor:id,name,email', 'organ:id,name,type', 'documentRevision'])
+                ->orderByDesc('occurred_at')
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn (WorkflowEvent $event) => [
+                    'id' => 'workflow-' . $event->id,
+                    'organ_id' => $event->organ_id,
+                    'action' => $event->action,
+                    'description' => $event->description,
+                    'old_status' => $event->from_state,
+                    'new_status' => $event->to_state,
+                    'metadata' => $event->metadata,
+                    'occurred_at' => $event->occurred_at,
+                    'actor' => $event->actor ? [
+                        'id' => $event->actor->id,
+                        'name' => $event->actor->name,
+                        'email' => $event->actor->email,
+                    ] : null,
+                    'organ' => $event->organ ? [
+                        'id' => $event->organ->id,
+                        'name' => $event->organ->name,
+                        'type' => $event->organ->type,
+                    ] : null,
+                    'document_revision' => $event->documentRevision ? [
+                        'id' => $event->documentRevision->id,
+                        'file_name' => $event->documentRevision->file_name,
+                        'sha256' => $event->documentRevision->sha256,
+                        'availability' => $event->documentRevision->availability,
+                    ] : null,
+                    'source' => 'workflow',
+                ]);
+        }
+
+        $histories = $workflowEvents
+            ->concat($legacyHistories)
+            ->unique(fn (array $entry) => implode('|', [
+                $entry['action'] ?? '',
+                $entry['old_status'] ?? '',
+                $entry['new_status'] ?? '',
+                (string) ($entry['occurred_at'] ?? ''),
+                (string) ($entry['organ_id'] ?? ''),
+            ]))
+            ->sortByDesc('occurred_at')
+            ->values();
 
         return response()->json([
             'history' => $histories,
+            'backfill_required' => Schema::hasTable('workflow_events') && $workflowEvents->isEmpty() && $legacyHistories->isNotEmpty(),
         ]);
     }
 
@@ -244,6 +292,7 @@ class ProtocolApiController extends Controller
                 'created_at' => $document->created_at,
                 'download_url' => url("api/v1/protocols/{$protocol->id}/documents/{$document->id}/download"),
             ])->values(),
+            'document_versions' => $this->documentVersions($protocol),
             'topic' => $topic ? [
                 'id' => $topic->id,
                 'title' => $topic->title,
@@ -309,6 +358,51 @@ class ProtocolApiController extends Controller
         return response()->json(['review_context' => $response]);
     }
 
+    private function documentVersions(Protocol $protocol): array
+    {
+        if (! Schema::hasTable('document_revisions')) {
+            return [];
+        }
+
+        $protocolVersions = DocumentRevision::query()
+            ->where('documentable_type', Protocol::class)
+            ->where('documentable_id', $protocol->id)
+            ->orderBy('submission_number')
+            ->orderBy('revision_number')
+            ->get();
+        $topicVersions = $protocol->topic
+            ? DocumentRevision::query()
+                ->where('documentable_type', \Modules\Protocol\app\Models\Topic::class)
+                ->where('documentable_id', $protocol->topic->id)
+                ->orderBy('submission_number')
+                ->orderBy('revision_number')
+                ->get()
+            : collect();
+
+        return $protocolVersions->concat($topicVersions)->map(function (DocumentRevision $revision) use ($protocol): array {
+            $downloadUrl = match ($revision->source_table) {
+                'documents' => url("api/v1/protocols/{$protocol->id}/documents/{$revision->source_id}/download"),
+                'protocol_document_requirements' => url("api/v1/protocols/{$protocol->id}/required-documents/{$revision->source_id}/download"),
+                'topics' => url("api/v1/protocols/{$protocol->id}/topic-document/download"),
+                default => null,
+            };
+
+            return [
+                'id' => $revision->id,
+                'submission_number' => $revision->submission_number,
+                'revision_number' => $revision->revision_number,
+                'document_key' => $revision->document_key,
+                'file_name' => $revision->file_name,
+                'mime_type' => $revision->mime_type,
+                'file_size' => $revision->file_size,
+                'sha256' => $revision->sha256,
+                'availability' => $revision->availability,
+                'captured_at' => $revision->captured_at,
+                'download_url' => $revision->availability === DocumentRevision::AVAILABILITY_AVAILABLE ? $downloadUrl : null,
+            ];
+        })->values()->all();
+    }
+
     public function downloadDocumentVersion(Request $request, Protocol $protocol, Document $document)
     {
         if ((int) $document->protocol_id !== (int) $protocol->id || ! $this->canAccessProtocolDocument($request->user(), $protocol)) {
@@ -316,7 +410,7 @@ class ProtocolApiController extends Controller
         }
 
         if (! Storage::disk('public')->exists($document->file_path)) {
-            abort(404, 'Documento não encontrado.');
+            abort(410, 'O documento desta versão não está disponível no armazenamento.');
         }
 
         return Storage::disk('public')->download($document->file_path, $document->file_name);
@@ -330,7 +424,7 @@ class ProtocolApiController extends Controller
 
         $topic = $protocol->topic;
         if (! $topic?->document_path || ! Storage::disk('public')->exists($topic->document_path)) {
-            abort(404, 'Documento do tema não encontrado.');
+            abort(410, 'O documento desta versão do tema não está disponível no armazenamento.');
         }
 
         return Storage::disk('public')->download($topic->document_path, $topic->document_name ?: basename($topic->document_path));
@@ -1021,8 +1115,12 @@ class ProtocolApiController extends Controller
             ->latest('version')
             ->first() ?: $protocol->latestDocument()->first();
 
-        if (! $document || ! Storage::disk('public')->exists($document->file_path)) {
+        if (! $document) {
             abort(404, 'Documento não encontrado.');
+        }
+
+        if (! Storage::disk('public')->exists($document->file_path)) {
+            abort(410, 'O documento desta versão não está disponível no armazenamento.');
         }
 
         $inline = $request->query('inline') === '1';
@@ -1049,8 +1147,12 @@ class ProtocolApiController extends Controller
             abort(403);
         }
 
-        if (! $requirement->file_path || ! Storage::disk('public')->exists($requirement->file_path)) {
+        if (! $requirement->file_path) {
             abort(404, 'Anexo não encontrado.');
+        }
+
+        if (! Storage::disk('public')->exists($requirement->file_path)) {
+            abort(410, 'O anexo desta versão não está disponível no armazenamento.');
         }
 
         $inline = $request->query('inline') === '1';

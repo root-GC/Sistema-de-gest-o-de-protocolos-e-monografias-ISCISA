@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { agendaService } from '../../services/agendaService';
 import type { AgendaEvent } from '../../types/agenda';
 import { getTypeMeta } from '../../types/agenda';
+import { useNavigate } from 'react-router-dom';
 import '../../styles/global.css';
 
 const MONTHS_PT = [
@@ -39,8 +40,11 @@ function buildMonthGrid(year: number, month: number) {
 }
 
 export default function AgendaPage() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +81,7 @@ export default function AgendaPage() {
         a.date.localeCompare(b.date) || (a.start ?? '').localeCompare(b.start ?? ''),
       )
       .slice(0, 6);
-  }, [filtered]);
+  }, [filtered, today]);
 
   const kpis = useMemo(() => {
     const inMonth = filtered.filter(e => {
@@ -92,22 +96,23 @@ export default function AgendaPage() {
     };
   }, [filtered, cursor]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await agendaService.loadEvents();
       setEvents(data);
-    } catch (err) {
+    } catch {
       setError('Erro ao carregar eventos');
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const requestId = window.setTimeout(() => { void loadData(); }, 0);
+    return () => window.clearTimeout(requestId);
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -762,13 +767,16 @@ function AgendaView({ events, today }: { events: AgendaEvent[]; today: Date }) {
 
 function EventRow({ event }: { event: AgendaEvent }) {
   const meta = getTypeMeta(event.type);
+  const navigate = useNavigate();
   return (
-    <div style={{
+    <button type="button" disabled={!event.link} onClick={() => event.link && navigate(event.link)} style={{
       display: 'flex', gap: 'var(--space-2)',
+      width: '100%', textAlign: 'left', color: 'inherit', font: 'inherit',
       padding: 'var(--space-2) var(--space-3)',
       borderRadius: 'var(--radius-lg)',
       border: '1px solid var(--surface-variant)',
       background: 'var(--surface)',
+      cursor: event.link ? 'pointer' : 'default', opacity: 1,
     }}>
       <span style={{
         marginTop: '4px', width: '8px', height: '8px',
@@ -825,7 +833,7 @@ function EventRow({ event }: { event: AgendaEvent }) {
           )}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -833,8 +841,9 @@ function UpcomingRow({ event }: { event: AgendaEvent }) {
   const [y, m, d] = event.date.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   const meta = getTypeMeta(event.type);
+  const navigate = useNavigate();
   return (
-    <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start' }}>
+    <button type="button" disabled={!event.link} onClick={() => event.link && navigate(event.link)} style={{ display: 'flex', width: '100%', gap: 'var(--space-2)', alignItems: 'flex-start', border: 0, padding: 0, background: 'transparent', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: event.link ? 'pointer' : 'default', opacity: 1 }}>
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         width: '40px', padding: '4px', borderRadius: 'var(--radius-md)',
@@ -881,6 +890,6 @@ function UpcomingRow({ event }: { event: AgendaEvent }) {
           )}
         </div>
       </div>
-    </div>
+    </button>
   );
 }

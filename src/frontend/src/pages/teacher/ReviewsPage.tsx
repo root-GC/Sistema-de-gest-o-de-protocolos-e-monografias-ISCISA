@@ -1,636 +1,268 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { topicService, type Topic } from '../../services/topicService'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { ReviewerProtocolAttachmentsDialog } from '../../components/protocol/ReviewerProtocolAttachmentsDialog'
+import { evaluationService, type EvaluationForm } from '../../services/evaluationService'
 import { protocolService, type Protocol } from '../../services/protocolService'
-import { TopicJustificationToggle } from '../../components/TopicJustification'
-import '../../styles/global.css'
+import { topicService, type Topic } from '../../services/topicService'
+import './reviewerWorkspace.css'
 
-// ============================================================
-// HELPERS
-// ============================================================
-function getTopicStatusStyle(status: string) {
-  const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
-    topic_pending_nucleo:   { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Pendente' },
-    topic_assigned:         { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Atribuído' },
-    topic_assigned_for_review: { bg: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', dot: 'var(--tertiary)', label: 'Atribuído' },
-    topic_in_review:        { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Em Revisão' },
-    topic_approved_nucleo:  { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
-    topic_rejected_nucleo:  { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado' },
-  }
-  return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
+type ReviewType = 'topics' | 'protocols'
+
+type ReviewItem = {
+  id: number
+  type: ReviewType
+  title: string
+  code: string
+  statusLabel: string
+  context?: string | null
+  assignedAt?: string | null
+  completedAt?: string | null
+  complete: boolean
+  daysRemaining?: number
+  overdue?: boolean
+  href: string
+  protocol?: Protocol
 }
 
-function getProtocolStatusStyle(status: string) {
-  const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
-    protocol_in_review_nucleo:   { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Em Revisão' },
-    protocol_approved_nucleo:    { bg: 'var(--primary-container)',  color: 'var(--on-primary-container)',  dot: 'var(--primary)',  label: 'Aprovado' },
-    protocol_rejected_nucleo:    { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado (Núcleo)' },
-    protocol_rejected_cc:        { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado (CC)' },
-    protocol_rejected_bioetica:  { bg: 'var(--error-container)',    color: 'var(--on-error-container)',    dot: 'var(--error)',    label: 'Não Aprovado (Bioética)' },
-    protocol_resubmitted:        { bg: 'var(--tertiary-fixed)',     color: 'var(--on-tertiary-fixed)',    dot: 'var(--tertiary)', label: 'Re-submetido' },
-  }
-  return map[status] || { bg: 'var(--surface-container)', color: 'var(--on-surface-variant)', dot: 'var(--outline)', label: status }
+function formatDate(value?: string | null) {
+  if (!value) return 'Sem data registada'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Sem data registada'
+  return new Intl.DateTimeFormat('pt-MZ', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
 }
 
-// ============================================================
-// COMPONENTE
-// ============================================================
+function durationInDays(start?: string | null, end?: string | null) {
+  if (!start) return null
+  const startDate = new Date(start)
+  const endDate = end ? new Date(end) : new Date()
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null
+  return Math.max(0, Math.ceil((endDate.getTime() - startDate.getTime()) / 86_400_000))
+}
+
+function durationLabel(start?: string | null, end?: string | null) {
+  const days = durationInDays(start, end)
+  if (days === null) return 'Duração indisponível'
+  return `${days} dia${days === 1 ? '' : 's'}`
+}
+
+function protocolFormOrgan(protocol: Protocol): 'comite_cientifico' | 'comite_bioetica' | null {
+  switch (protocol.my_assignment?.organ?.type) {
+    case 'scientific_committee': return 'comite_cientifico'
+    case 'bioethics_committee': return 'comite_bioetica'
+    default: return null
+  }
+}
+
+function getProtocolForm(protocol: Protocol, forms: EvaluationForm[]) {
+  const organ = protocolFormOrgan(protocol)
+  if (!organ) return null
+  return forms.find(form => form.protocol_id === protocol.id && form.organ === organ && form.form_type === 'evaluation') ?? null
+}
+
+function protocolItem(protocol: Protocol, forms: EvaluationForm[]): ReviewItem {
+  const form = getProtocolForm(protocol, forms)
+  const evaluation = form?.reviewer_evaluations?.[0]
+  const complete = evaluation?.status === 'submitted' || Boolean(evaluation?.submitted_at)
+
+  return {
+    id: protocol.id,
+    type: 'protocols',
+    title: protocol.topic?.title || 'Protocolo sem tema associado',
+    code: protocol.code || `Protocolo #${protocol.id}`,
+    statusLabel: complete ? 'Revisão concluída' : protocol.status_label || 'Em revisão',
+    context: protocol.my_assignment?.organ?.name || protocol.topic?.scientific_area?.name || null,
+    assignedAt: protocol.my_assignment?.assigned_at,
+    completedAt: evaluation?.submitted_at,
+    complete,
+    daysRemaining: evaluation?.days_remaining,
+    overdue: evaluation?.overdue,
+    href: `/reviews/protocols/${protocol.id}`,
+    protocol,
+  }
+}
+
+function topicItem(topic: Topic): ReviewItem {
+  const evaluation = topic.my_assignment?.evaluation
+  const complete = Boolean(evaluation?.decision || evaluation?.evaluated_at)
+
+  return {
+    id: topic.id,
+    type: 'topics',
+    title: topic.title,
+    code: topic.course?.code || `Tema #${topic.id}`,
+    statusLabel: complete
+      ? evaluation?.decision === 'approved' ? 'Aprovado' : 'Não aprovado'
+      : topic.status_label || 'Em revisão',
+    context: topic.scientific_area?.name || topic.course?.name || null,
+    assignedAt: topic.my_assignment?.assigned_at,
+    completedAt: evaluation?.evaluated_at,
+    complete,
+    href: `/reviews/topics/${topic.id}`,
+  }
+}
+
 export default function ReviewsPage() {
-  const [tab, setTab] = useState<'topics' | 'protocols'>('topics')
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [topics, setTopics] = useState<Topic[]>([])
   const [protocols, setProtocols] = useState<Protocol[]>([])
+  const [forms, setForms] = useState<EvaluationForm[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [attachmentProtocol, setAttachmentProtocol] = useState<Protocol | null>(null)
+
+  const activeType: ReviewType = searchParams.get('type') === 'protocols' ? 'protocols' : 'topics'
+  const showingHistory = location.pathname === '/reviews/history'
+
+  const updateType = useCallback((type: ReviewType) => {
+    const next = new URLSearchParams(searchParams)
+    if (type === 'topics') next.delete('type')
+    else next.set('type', type)
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [topicResponse, protocolResponse, formResponse] = await Promise.all([
+        topicService.listForReviewer(),
+        protocolService.listForReviewer(),
+        evaluationService.listForReviewerAcrossCommittees(),
+      ])
+      setTopics(topicResponse.topics || [])
+      setProtocols(protocolResponse.protocols || [])
+      setForms(formResponse.evaluation_forms || [])
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar as revisões. Atualize a página para tentar novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    if (tab === 'topics') loadTopics()
-    else loadProtocols()
-  }, [tab])
+    const requestId = window.setTimeout(() => { void load() }, 0)
+    return () => window.clearTimeout(requestId)
+  }, [load])
 
-  async function loadTopics() {
-    setLoading(true)
-    try {
-      const data = await topicService.listForReviewer()
-      setTopics(data.topics || [])
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function loadProtocols() {
-    setLoading(true)
-    try {
-      const data = await protocolService.listForReviewer()
-      setProtocols(data.protocols || [])
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ============================================================
-  // LOADING
-  // ============================================================
-  if (loading) {
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '60vh',
-        fontFamily: 'var(--font-family)',
-        color: 'var(--on-surface-variant)',
-        fontSize: 'var(--body-lg)',
-        gap: 'var(--space-2)'
-      }}>
-        <span style={{
-          width: '24px',
-          height: '24px',
-          border: '3px solid var(--outline-variant)',
-          borderTopColor: 'var(--primary)',
-          borderRadius: 'var(--radius-full)',
-          animation: 'spin 0.8s linear infinite'
-        }} />
-        A carregar...
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    )
-  }
-
-  // ============================================================
-  // DADOS FILTRADOS
-  // ============================================================
-  const assignedTopics = topics.filter(t => 
-    t.status !== 'topic_approved_nucleo' && t.status !== 'topic_rejected_nucleo'
+  const topicItems = useMemo(() => topics.map(topicItem), [topics])
+  const protocolItems = useMemo(
+    () => protocols.filter(protocol => protocolFormOrgan(protocol) !== null).map(protocol => protocolItem(protocol, forms)),
+    [forms, protocols]
   )
-  const doneTopics = topics.filter(t => 
-    t.status === 'topic_approved_nucleo' || t.status === 'topic_rejected_nucleo'
-  )
+  const activeItems = activeType === 'topics' ? topicItems : protocolItems
+  const visibleItems = activeItems.filter(item => showingHistory ? item.complete : !item.complete)
+  const pendingCount = topicItems.filter(item => !item.complete).length + protocolItems.filter(item => !item.complete).length
+  const completedItems = [...topicItems, ...protocolItems].filter(item => item.complete)
+  const completedCount = completedItems.length
+  const averageDuration = completedItems.length
+    ? Math.round(completedItems.reduce((total, item) => total + (durationInDays(item.assignedAt, item.completedAt) ?? 0), 0) / completedItems.length)
+    : null
 
-  const assignedProtocols = protocols.filter(p => 
-    p.status !== 'protocol_approved_nucleo' && p.status !== 'protocol_rejected_nucleo'
-  )
-  const doneProtocols = protocols.filter(p => 
-    p.status === 'protocol_approved_nucleo' || p.status === 'protocol_rejected_nucleo'
-  )
-
-  // ============================================================
-  // RENDER
-  // ============================================================
   return (
-    <div style={{
-      width: '100%',
-      fontFamily: 'var(--font-family)',
-      color: 'var(--on-background)'
-    }}>
-
-      {/* Cabeçalho */}
-      <div style={{ marginBottom: 'var(--space-4)' }}>
-        <h1 style={{
-          fontSize: 'var(--headline-lg)',
-          fontWeight: 'var(--font-semibold)',
-          color: 'var(--on-surface)',
-          marginBottom: 'var(--space-1)'
-        }}>
-          Revisões Científicas
-        </h1>
-        <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
-          {tab === 'topics' 
-            ? `${assignedTopics.length} tema${assignedTopics.length !== 1 ? 's' : ''} pendente${assignedTopics.length !== 1 ? 's' : ''} • ${doneTopics.length} concluído${doneTopics.length !== 1 ? 's' : ''}`
-            : `${assignedProtocols.length} protocolo${assignedProtocols.length !== 1 ? 's' : ''} pendente${assignedProtocols.length !== 1 ? 's' : ''} • ${doneProtocols.length} concluído${doneProtocols.length !== 1 ? 's' : ''}`
-          }
-        </p>
-      </div>
-
-      {/* Erro */}
-      {error && (
-        <div role="alert" style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-1)',
-          padding: 'var(--space-2) var(--space-3)',
-          background: 'var(--error-container)',
-          color: 'var(--on-error-container)',
-          borderRadius: 'var(--radius-lg)',
-          fontSize: 'var(--body-md)',
-          fontWeight: 'var(--font-medium)',
-          marginBottom: 'var(--space-4)'
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
-          {error}
+    <main className="teacher-workspace reviewer-workspace" aria-labelledby="reviewer-workspace-title">
+      <header className="reviewer-workspace__header">
+        <div>
+          <p className="reviewer-workspace__eyebrow">Área do Revisor</p>
+          <h1 id="reviewer-workspace-title">{showingHistory ? 'Histórico de Revisões' : 'Minhas Revisões'}</h1>
+          <p>{showingHistory ? 'Consulta as revisões que já submeteste.' : 'Organiza o trabalho pendente e abre cada avaliação.'}</p>
         </div>
-      )}
-
-      {/* Tabs */}
-      <div style={{
-        display: 'flex',
-        gap: 'var(--space-1)',
-        borderBottom: '1px solid var(--outline-variant)',
-        paddingBottom: 'var(--space-1)',
-        marginBottom: 'var(--space-4)'
-      }}>
-        <button
-          onClick={() => setTab('topics')}
-          style={{
-            padding: '10px var(--space-3)',
-            fontSize: 'var(--body-md)',
-            fontWeight: 'var(--font-semibold)',
-            fontFamily: 'var(--font-family)',
-            border: 'none',
-            borderRadius: 'var(--radius-lg)',
-            cursor: 'pointer',
-            background: tab === 'topics' ? 'var(--primary-container)' : 'transparent',
-            color: tab === 'topics' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
-            transition: 'all 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-1)'
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>lightbulb</span>
-          Temas
-          {assignedTopics.length > 0 && (
-            <span style={{
-              background: 'var(--tertiary)',
-              color: 'var(--on-tertiary)',
-              padding: '2px 8px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: 'var(--label-sm)',
-              fontWeight: 'var(--font-bold)'
-            }}>
-              {assignedTopics.length}
-            </span>
-          )}
+        <button type="button" className="btn btn-outline" onClick={() => void load()} disabled={loading}>
+          <span className="material-symbols-outlined" aria-hidden="true">refresh</span>Atualizar
         </button>
+      </header>
 
-        <button
-          onClick={() => setTab('protocols')}
-          style={{
-            padding: '10px var(--space-3)',
-            fontSize: 'var(--body-md)',
-            fontWeight: 'var(--font-semibold)',
-            fontFamily: 'var(--font-family)',
-            border: 'none',
-            borderRadius: 'var(--radius-lg)',
-            cursor: 'pointer',
-            background: tab === 'protocols' ? 'var(--primary-container)' : 'transparent',
-            color: tab === 'protocols' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
-            transition: 'all 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-1)'
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>description</span>
-          Protocolos
-          {assignedProtocols.length > 0 && (
-            <span style={{
-              background: 'var(--tertiary)',
-              color: 'var(--on-tertiary)',
-              padding: '2px 8px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: 'var(--label-sm)',
-              fontWeight: 'var(--font-bold)'
-            }}>
-              {assignedProtocols.length}
-            </span>
-          )}
+      <section className="reviewer-summary-grid" aria-label="Resumo das revisões">
+        <div className="reviewer-summary-card">
+          <span className="material-symbols-outlined" aria-hidden="true">pending_actions</span>
+          <span className="reviewer-summary-card__value">{pendingCount}</span>
+          <span className="reviewer-summary-card__label">Pendentes</span>
+        </div>
+        <div className="reviewer-summary-card">
+          <span className="material-symbols-outlined" aria-hidden="true">task_alt</span>
+          <span className="reviewer-summary-card__value">{completedCount}</span>
+          <span className="reviewer-summary-card__label">Concluídas</span>
+        </div>
+        <div className="reviewer-summary-card">
+          <span className="material-symbols-outlined" aria-hidden="true">timelapse</span>
+          <span className="reviewer-summary-card__value">{averageDuration === null ? '—' : `${averageDuration} d`}</span>
+          <span className="reviewer-summary-card__label">Duração média</span>
+        </div>
+      </section>
+
+      {error && <div className="reviewer-alert" role="alert" aria-live="polite"><span className="material-symbols-outlined" aria-hidden="true">error</span>{error}</div>}
+
+      <div className="reviewer-tabs" role="tablist" aria-label="Tipo de revisão">
+        <button type="button" role="tab" aria-selected={activeType === 'topics'} className="reviewer-tab" onClick={() => updateType('topics')}>
+          <span className="material-symbols-outlined" aria-hidden="true">lightbulb</span>Temas <span>{topicItems.filter(item => showingHistory ? item.complete : !item.complete).length}</span>
+        </button>
+        <button type="button" role="tab" aria-selected={activeType === 'protocols'} className="reviewer-tab" onClick={() => updateType('protocols')}>
+          <span className="material-symbols-outlined" aria-hidden="true">description</span>Protocolos <span>{protocolItems.filter(item => showingHistory ? item.complete : !item.complete).length}</span>
         </button>
       </div>
 
-      {/* ==================== TEMAS ==================== */}
-      {tab === 'topics' && (
-        <>
-          {/* Atribuídas */}
-          <div style={{ marginBottom: 'var(--space-5)' }}>
-            <h2 style={{
-              fontSize: 'var(--title-md)',
-              fontWeight: 'var(--font-semibold)',
-              color: 'var(--tertiary)',
-              marginBottom: 'var(--space-3)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-1)'
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>pending_actions</span>
-              Atribuídas a mim
-            </h2>
+      {loading ? (
+        <div className="reviewer-loading" role="status" aria-live="polite"><span className="reviewer-spinner" aria-hidden="true" />A carregar revisões…</div>
+      ) : visibleItems.length === 0 ? (
+        <div className="reviewer-empty-state">
+          <span className="material-symbols-outlined" aria-hidden="true">{showingHistory ? 'history_toggle_off' : 'assignment_turned_in'}</span>
+          <strong>{showingHistory ? 'Ainda não há revisões concluídas' : `Sem ${activeType === 'topics' ? 'temas' : 'protocolos'} pendentes`}</strong>
+          <span>{showingHistory ? 'As avaliações submetidas aparecerão aqui.' : 'Novas atribuições aparecerão nesta fila.'}</span>
+        </div>
+      ) : (
+        <section className="reviewer-review-list" aria-label={showingHistory ? 'Revisões concluídas' : 'Revisões pendentes'}>
+          {visibleItems.map(item => {
+            const protocol = item.protocol
 
-            {assignedTopics.length === 0 ? (
-              <div style={{
-                textAlign: 'center',
-                padding: 'var(--space-4) var(--space-3)',
-                color: 'var(--on-surface-variant)',
-                background: 'var(--surface-container-low)',
-                borderRadius: 'var(--radius-xl)',
-                border: '1px dashed var(--outline-variant)',
-                fontSize: 'var(--body-md)'
-              }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '32px', marginBottom: 'var(--space-1)', display: 'block' }}>task_alt</span>
-                Nenhuma revisão pendente.
+            return (
+            <article key={`${item.type}-${item.id}`} className="reviewer-review-card">
+              <div className="reviewer-review-card__main">
+                <div className="reviewer-review-card__heading">
+                  <span className="reviewer-review-card__code">{item.code}</span>
+                  <span className={`reviewer-status reviewer-status--${item.complete ? 'approved' : 'pending'}`}>{item.statusLabel}</span>
+                </div>
+                <h2>{item.title}</h2>
+                <div className="reviewer-review-card__meta">
+                  {item.context && <span><span className="material-symbols-outlined" aria-hidden="true">account_balance</span>{item.context}</span>}
+                  <span><span className="material-symbols-outlined" aria-hidden="true">event</span>Atribuída: {formatDate(item.assignedAt)}</span>
+                  <span><span className="material-symbols-outlined" aria-hidden="true">schedule</span>{durationLabel(item.assignedAt, item.complete ? item.completedAt : null)}</span>
+                  {!item.complete && item.type === 'protocols' && item.daysRemaining !== undefined && (
+                    <span className={item.overdue ? 'is-overdue' : ''}><span className="material-symbols-outlined" aria-hidden="true">timer</span>{item.overdue ? `Atrasado há ${Math.abs(item.daysRemaining)} dia(s)` : item.daysRemaining === 0 ? 'Prazo termina hoje' : `${item.daysRemaining} dia(s) restante(s)`}</span>
+                  )}
+                </div>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                {assignedTopics.map(topic => {
-                  const s = getTopicStatusStyle(topic.status)
-                  return (
-                    <Link
-                      key={topic.id}
-                      to={`/reviews/topics/${topic.id}`}
-                      className="card"
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: 'var(--space-2)',
-                        padding: 'var(--space-3) var(--space-4)',
-                        textDecoration: 'none',
-                        transition: 'all 0.2s',
-                        border: '1px solid var(--outline-variant)'
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.boxShadow = 'var(--elevation-2)'
-                        e.currentTarget.style.borderColor = 'var(--primary)'
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.boxShadow = 'none'
-                        e.currentTarget.style.borderColor = 'var(--outline-variant)'
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <h3 style={{
-                          fontSize: 'var(--body-lg)',
-                          fontWeight: 'var(--font-semibold)',
-                          color: 'var(--on-surface)',
-                          marginBottom: '6px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {topic.title}
-                        </h3>
-                        {topic.scientific_area && (
-                          <span style={{
-                            fontSize: 'var(--label-sm)',
-                            color: 'var(--on-surface-variant)',
-                            marginRight: '8px'
-                          }}>
-                            {topic.scientific_area.name}
-                          </span>
-                        )}
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '2px 10px',
-                          borderRadius: 'var(--radius-full)',
-                          fontSize: 'var(--label-md)',
-                          fontWeight: 'var(--font-medium)',
-                          background: s.bg,
-                          color: s.color
-                        }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: 'var(--radius-full)', background: s.dot }} />
-                          {topic.status_label || s.label}
-                        </span>
-                      </div>
-                      <span className="material-symbols-outlined" style={{
-                        fontSize: '24px',
-                        color: 'var(--primary)',
-                        flexShrink: 0
-                      }}>
-                        arrow_forward
-                      </span>
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
 
-          {/* Concluídas */}
-          {doneTopics.length > 0 && (
-            <div>
-              <h2 style={{
-                fontSize: 'var(--title-md)',
-                fontWeight: 'var(--font-semibold)',
-                color: 'var(--on-surface-variant)',
-                marginBottom: 'var(--space-3)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-1)'
-              }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>checklist</span>
-                Concluídas
-              </h2>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                {doneTopics.map(topic => {
-                  const s = getTopicStatusStyle(topic.status)
-                  return (
-                    <div key={topic.id} className="card" style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: 'var(--space-2)',
-                      padding: 'var(--space-2) var(--space-3)',
-                      opacity: 0.75
-                    }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <h3 style={{
-                          fontSize: 'var(--body-md)',
-                          fontWeight: 'var(--font-semibold)',
-                          color: 'var(--on-surface)',
-                          marginBottom: '4px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {topic.title}
-                        </h3>
-                        <TopicJustificationToggle
-                          justification={topic.justification}
-                          showEmpty
-                          compact
-                          style={{ marginTop: 'var(--space-2)' }}
-                        />
-                      </div>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '2px 10px',
-                        borderRadius: 'var(--radius-full)',
-                        fontSize: 'var(--label-md)',
-                        fontWeight: 'var(--font-medium)',
-                        background: s.bg,
-                        color: s.color,
-                        flexShrink: 0
-                      }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: 'var(--radius-full)', background: s.dot }} />
-                        {topic.status_label || s.label}
-                      </span>
-                    </div>
-                  )
-                })}
+              <div className="reviewer-review-card__actions">
+                {protocol && (
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setAttachmentProtocol(protocol)}>
+                    <span className="material-symbols-outlined" aria-hidden="true">attach_file</span>Anexos ({protocol.reviewer_attachments?.length || 0})
+                  </button>
+                )}
+                <Link to={item.href} className="btn btn-primary btn-sm">
+                  <span className="material-symbols-outlined" aria-hidden="true">{item.complete ? 'visibility' : 'rate_review'}</span>{item.complete ? 'Consultar' : 'Avaliar'}
+                </Link>
               </div>
-            </div>
-          )}
-        </>
+
+              {showingHistory && protocol?.review_history && protocol.review_history.length > 0 && (
+                <section className="reviewer-history" aria-label={`Histórico do ${item.code}`}>
+                  <p className="reviewer-history__title"><span className="material-symbols-outlined" aria-hidden="true">history</span>Eventos deste órgão</p>
+                  <ol>
+                    {protocol.review_history.map(entry => (
+                      <li key={entry.id}>
+                        <strong>{entry.description || entry.action.replaceAll('_', ' ')}</strong>
+                        <span>{formatDate(entry.occurred_at)}{entry.actor?.name ? ` · ${entry.actor.name}` : ''}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+            </article>
+            )
+          })}
+        </section>
       )}
 
-      {/* ==================== PROTOCOLOS ==================== */}
-      {tab === 'protocols' && (
-        <>
-          {/* Atribuídos */}
-          <div style={{ marginBottom: 'var(--space-5)' }}>
-            <h2 style={{
-              fontSize: 'var(--title-md)',
-              fontWeight: 'var(--font-semibold)',
-              color: 'var(--tertiary)',
-              marginBottom: 'var(--space-3)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-1)'
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>pending_actions</span>
-              Atribuídos a mim
-            </h2>
-
-            {assignedProtocols.length === 0 ? (
-              <div style={{
-                textAlign: 'center',
-                padding: 'var(--space-4) var(--space-3)',
-                color: 'var(--on-surface-variant)',
-                background: 'var(--surface-container-low)',
-                borderRadius: 'var(--radius-xl)',
-                border: '1px dashed var(--outline-variant)',
-                fontSize: 'var(--body-md)'
-              }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '32px', marginBottom: 'var(--space-1)', display: 'block' }}>task_alt</span>
-                Nenhum protocolo pendente.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                {assignedProtocols.map(protocol => {
-                  const s = getProtocolStatusStyle(protocol.status)
-                  return (
-                    <Link
-                      key={protocol.id}
-                      to={`/reviews/protocols/${protocol.id}`}
-                      className="card"
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: 'var(--space-2)',
-                        padding: 'var(--space-3) var(--space-4)',
-                        textDecoration: 'none',
-                        transition: 'all 0.2s',
-                        border: '1px solid var(--outline-variant)'
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.boxShadow = 'var(--elevation-2)'
-                        e.currentTarget.style.borderColor = 'var(--primary)'
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.boxShadow = 'none'
-                        e.currentTarget.style.borderColor = 'var(--outline-variant)'
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 'var(--space-2)',
-                          marginBottom: '6px',
-                          flexWrap: 'wrap'
-                        }}>
-                          <h3 style={{
-                            fontSize: 'var(--body-lg)',
-                            fontWeight: 'var(--font-bold)',
-                            color: 'var(--on-surface)'
-                          }}>
-                            {protocol.code}
-                          </h3>
-                        </div>
-                        {protocol.topic && (
-                          <>
-                            <p style={{
-                              fontSize: 'var(--body-sm)',
-                              color: 'var(--on-surface-variant)',
-                              marginBottom: '6px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              Tema: {protocol.topic.title}
-                            </p>
-                            <TopicJustificationToggle
-                              justification={protocol.topic.justification}
-                              showEmpty
-                              compact
-                              style={{ marginBottom: 'var(--space-2)' }}
-                            />
-                          </>
-                        )}
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '2px 10px',
-                          borderRadius: 'var(--radius-full)',
-                          fontSize: 'var(--label-md)',
-                          fontWeight: 'var(--font-medium)',
-                          background: s.bg,
-                          color: s.color
-                        }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: 'var(--radius-full)', background: s.dot }} />
-                          {protocol.status_label || s.label}
-                        </span>
-                      </div>
-                      <span className="material-symbols-outlined" style={{
-                        fontSize: '24px',
-                        color: 'var(--primary)',
-                        flexShrink: 0
-                      }}>
-                        arrow_forward
-                      </span>
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Concluídos */}
-          {doneProtocols.length > 0 && (
-            <div>
-              <h2 style={{
-                fontSize: 'var(--title-md)',
-                fontWeight: 'var(--font-semibold)',
-                color: 'var(--on-surface-variant)',
-                marginBottom: 'var(--space-3)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-1)'
-              }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>checklist</span>
-                Concluídos
-              </h2>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                {doneProtocols.map(protocol => {
-                  const s = getProtocolStatusStyle(protocol.status)
-                  return (
-                    <div key={protocol.id} className="card" style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: 'var(--space-2)',
-                      padding: 'var(--space-2) var(--space-3)',
-                      opacity: 0.75
-                    }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <h3 style={{
-                          fontSize: 'var(--body-md)',
-                          fontWeight: 'var(--font-semibold)',
-                          color: 'var(--on-surface)',
-                          marginBottom: '4px'
-                        }}>
-                          {protocol.code}
-                        </h3>
-                        {protocol.topic && (
-                          <>
-                            <p style={{
-                              fontSize: 'var(--label-sm)',
-                              color: 'var(--on-surface-variant)',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {protocol.topic.title}
-                            </p>
-                            <TopicJustificationToggle
-                              justification={protocol.topic.justification}
-                              showEmpty
-                              compact
-                              style={{ marginTop: 'var(--space-2)' }}
-                            />
-                          </>
-                        )}
-                      </div>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '2px 10px',
-                        borderRadius: 'var(--radius-full)',
-                        fontSize: 'var(--label-md)',
-                        fontWeight: 'var(--font-medium)',
-                        background: s.bg,
-                        color: s.color,
-                        flexShrink: 0
-                      }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: 'var(--radius-full)', background: s.dot }} />
-                        {protocol.status_label || s.label}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+      <ReviewerProtocolAttachmentsDialog protocol={attachmentProtocol} open={Boolean(attachmentProtocol)} onClose={() => setAttachmentProtocol(null)} />
+    </main>
   )
 }

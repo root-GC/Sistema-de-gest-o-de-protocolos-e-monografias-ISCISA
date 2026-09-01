@@ -1,5 +1,5 @@
 // src/pages/reviewer/FinalDecisionPage.tsx
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { evaluationService, type EvaluationForm } from '../../services/evaluationService'
 
@@ -71,34 +71,33 @@ export default function FinalDecisionPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
-  useEffect(() => {
-    loadPendingDecisions()
-  }, [])
-
-  async function loadPendingDecisions() {
+  const loadPendingDecisions = useCallback(async () => {
+    await Promise.resolve()
     setLoading(true)
     setError(null)
     try {
-      const [nucleoData, ccData, bioeticaData] = await Promise.all([
-        evaluationService.listPendingFinalDecision('nucleo'),
+      const [ccData, bioeticaData] = await Promise.all([
         evaluationService.listPendingFinalDecision('comite-cientifico'),
         evaluationService.listPendingFinalDecision('comite-bioetica'),
       ])
       const uniqueForms = [
-        ...(nucleoData.evaluation_forms || []),
         ...(ccData.evaluation_forms || []),
         ...(bioeticaData.evaluation_forms || []),
       ]
         .filter((form, index, all) => all.findIndex(item => item.id === form.id) === index)
 
-      console.log('📊 Decisões Pendentes:', uniqueForms)
       setForms(uniqueForms)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível carregar as decisões pendentes.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const requestId = window.setTimeout(() => { void loadPendingDecisions() }, 0)
+    return () => window.clearTimeout(requestId)
+  }, [loadPendingDecisions])
 
   // Filtros
   const filteredForms = forms.filter(f => {
@@ -138,7 +137,7 @@ export default function FinalDecisionPage() {
   // RENDER
   // ============================================================
   return (
-    <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
+    <div className="teacher-workspace" style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
 
       {/* Cabeçalho */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
@@ -200,9 +199,9 @@ export default function FinalDecisionPage() {
                 className="card"
                 onClick={() => navigate(`/reviewer/final-decisions/${form.id}`)}
                 style={{
-                  padding: 'var(--space-3) var(--space-4)', display: 'flex', alignItems: 'center',
+                  padding: 'var(--space-2) var(--space-3)', display: 'flex', alignItems: 'center',
                   gap: 'var(--space-3)', cursor: 'pointer',
-                  transition: 'all 0.2s ease', border: `1px solid ${isPending ? statusConfig.color : 'var(--outline-variant)'}`,
+                  transition: 'border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease', border: `1px solid ${isPending ? statusConfig.color : 'var(--outline-variant)'}`,
                   flexWrap: 'wrap', background: isPending ? `color-mix(in srgb, ${statusConfig.bg} 30%, var(--surface))` : 'var(--surface)',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = statusConfig.color; e.currentTarget.style.boxShadow = 'var(--elevation-2)' }}

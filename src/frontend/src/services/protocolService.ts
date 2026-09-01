@@ -10,6 +10,15 @@ export interface Protocol {
     title: string;
     justification?: string | null;
     status: string;
+    scientific_area?: {
+      id: number;
+      name: string;
+    } | null;
+    course?: {
+      id: number;
+      name: string;
+      code?: string | null;
+    } | null;
   };
   status: string;
   status_label: string;
@@ -38,13 +47,38 @@ export interface Protocol {
   latest_document?: {
     id: number;
     file_name: string;
-    file_url: string;
     download_url?: string;
-    file_path: string;
     version: number;
     status: string;
   } | null;
+  my_assignment?: ReviewAssignment | null;
   review_assignments?: ReviewAssignment[];
+  reviewer_attachments?: ReviewerProtocolAttachment[];
+  review_history?: ReviewerProtocolHistory[];
+}
+
+export interface ReviewerProtocolAttachment {
+  id: number;
+  name: string;
+  file_name?: string | null;
+  download_url?: string | null;
+  is_optional: boolean;
+  uploaded: boolean;
+  approved: boolean | null;
+  status_label: string;
+}
+
+export interface ReviewerProtocolHistory {
+  id: number;
+  action: string;
+  description?: string | null;
+  old_status?: string | null;
+  new_status?: string | null;
+  occurred_at: string;
+  actor?: {
+    id: number;
+    name: string;
+  } | null;
 }
 
 export interface ProtocolHistory {
@@ -102,8 +136,6 @@ export interface ProtocolOrganTracking {
 export interface Document {
   id: number;
   file_name: string;
-  file_url: string;
-  file_path: string;
   download_url?: string;
   status: string;
   version: number;
@@ -115,6 +147,31 @@ export interface Document {
   } | null;
   rejected_at?: string | null;
   submitted_at?: string;
+}
+
+export interface ProtocolReviewComment {
+  id: number;
+  content: string;
+  stage: string;
+  created_at: string;
+  user?: { id: number; name: string; email?: string };
+}
+
+export interface ProtocolReviewContext {
+  protocol: { id: number; code: string; submission_number: number; version: string };
+  documents: Array<{ id: number; submission_number: number; label: string; file_name: string; created_at: string; download_url: string }>;
+  topic: {
+    id: number;
+    title: string;
+    document_name?: string | null;
+    download_url?: string | null;
+    comments: Array<{ id: number; content: string; created_at: string; author?: { name: string } | null }>;
+    evaluations: Array<{ decision?: string | null; evaluated_at?: string | null; comment?: string | null }>;
+  } | null;
+  cc_context?: {
+    forms: Array<{ id: number; version: string; decision?: string | null; conclusion_summary?: string | null; source_document_id?: number | null; reviews: Array<{ status?: string | null; decision?: string | null; overall_comment?: string | null; submitted_at?: string | null; reviewer?: string | null }>; evaluation_form_download_url: string; opinions: Array<{ id: number; download_url: string; signed_download_url?: string | null }> }>;
+    supervisor_comments: Array<{ id: number; content: string; created_at: string; author?: string | null }>;
+  };
 }
 
 export const CC_REQUIRED_DOCUMENTS = [
@@ -163,9 +220,7 @@ export interface ProtocolDocumentRequirement {
   nome: string;
   required_for_organ: string;
   is_optional?: boolean;
-  file_path?: string | null;
   file_name?: string | null;
-  file_url?: string | null;
   download_url?: string | null;
   enviado: boolean;
   aprovado: boolean | null;
@@ -181,7 +236,16 @@ export interface ProtocolDocumentRequirement {
 
 export interface ReviewAssignment {
   id: number;
+  organ_id?: number | null;
+  status?: string | null;
+  review_order?: boolean;
   is_primary?: boolean;
+  assigned_at?: string | null;
+  organ?: {
+    id: number;
+    name: string;
+    type: string;
+  } | null;
   reviewer_one?: {
     id: number;
     name?: string | null;
@@ -407,9 +471,14 @@ export const protocolService = {
       protocol: Protocol;
     }>,
 
-  // ── Secretary ───────────────────────────────────────
-  listForSecretary: () =>
-    req('GET', '/api/v1/nucleo/secretary/protocols') as Promise<{ protocols: Protocol[] }>,
+  getReviewContext: (protocolId: number) =>
+    req('GET', `/api/v1/protocols/${protocolId}/review-context`) as Promise<{ review_context: ProtocolReviewContext }>,
+
+  listReviewComments: (protocolId: number) =>
+    req('GET', `/api/v1/protocols/${protocolId}/review-comments`) as Promise<{ comments: ProtocolReviewComment[] }>,
+
+  addReviewComment: (protocolId: number, content: string) =>
+    req('POST', `/api/v1/protocols/${protocolId}/review-comments`, { content }) as Promise<{ comment: ProtocolReviewComment }>,
 
   getEligibleReviewers: (protocolId: number) =>
     req('GET', `/api/v1/protocols/${protocolId}/eligible-reviewers`) as Promise<{
@@ -425,28 +494,6 @@ export const protocolService = {
 
   assignReviewers: (protocolId: number, reviewerOneId: number, reviewerTwoId: number) =>
     req('POST', `/api/v1/protocols/${protocolId}/assign-reviewers`, {
-      reviewer_one_id: reviewerOneId,
-      reviewer_two_id: reviewerTwoId,
-    }) as Promise<{
-      message: string;
-      protocol: Protocol;
-    }>,
-
-  // ── Núcleo Científico ───────────────────────────────
-  getEligibleReviewersNucleo: (protocolId: number) =>
-    req('GET', `/api/v1/nucleo/protocols/${protocolId}/eligible-reviewers`) as Promise<{
-      reviewers: EligibleReviewer[];
-    }>,
-
-  getAssignedReviewersNucleo: (protocolId: number) =>
-    req('GET', `/api/v1/nucleo/protocols/${protocolId}/reviewers`) as Promise<{
-      reviewers: AssignedProtocolReviewer[];
-      review_assignments: ReviewAssignment[];
-      total: number;
-    }>,
-
-  assignReviewersNucleo: (protocolId: number, reviewerOneId: number, reviewerTwoId: number) =>
-    req('POST', `/api/v1/nucleo/protocols/${protocolId}/assign-reviewers`, {
       reviewer_one_id: reviewerOneId,
       reviewer_two_id: reviewerTwoId,
     }) as Promise<{
@@ -506,5 +553,5 @@ export const protocolService = {
 
   // ── Reviewer ────────────────────────────────────────
   listForReviewer: () =>
-    req('GET', '/api/v1/nucleo/reviewer/protocols') as Promise<{ protocols: Protocol[] }>,
+    req('GET', '/api/v1/reviewer/protocols') as Promise<{ protocols: Protocol[] }>,
 };

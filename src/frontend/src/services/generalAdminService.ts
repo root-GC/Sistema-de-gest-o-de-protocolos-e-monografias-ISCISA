@@ -72,7 +72,7 @@ export interface DashboardStats {
 }
 
 export interface Activity {
-  id: number
+  id: number | string
   action: string
   description: string
   created_at: string
@@ -105,8 +105,8 @@ interface ApiResponse<T> {
 const BASE = '/api/v1'
 
 export const generalAdminService = {
-
-  // ⚠️ Sem rota 'dashboard' — nenhum controller a serve.
+  getDashboard: () =>
+    req('GET', `${BASE}/general-admin/dashboard`) as Promise<DashboardStats>,
 
   // ── Coordinators ──────────────────────────────────────────
   listCoordinators: () =>
@@ -123,7 +123,7 @@ export const generalAdminService = {
   }) =>
     req('POST', `${BASE}/coordinators`, data) as Promise<{
       message: string
-      user: User & { coordinatorProfile?: any }
+      user: User & { coordinatorProfile?: unknown }
     }>,
 
   updateCoordinator: (id: number, data: {

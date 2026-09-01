@@ -3,9 +3,10 @@
 namespace Modules\Defense\app\Events;
 
 use Modules\Defense\app\Models\{Defense, DefenseJury};
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
 
-class DefenseDateRejected
+class DefenseDateRejected implements ShouldDispatchAfterCommit
 {
     use Dispatchable;
     public function __construct(

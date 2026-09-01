@@ -1,5 +1,6 @@
 // src/components/layout/Topbar.tsx
 import { useLocation } from 'react-router-dom'
+import { RoleSwitcher } from '../auth/RoleSwitcher'
 
 const ROUTE_LABELS: Record<string, string> = {
   '/dashboard': 'Painel Principal',
@@ -7,7 +8,9 @@ const ROUTE_LABELS: Record<string, string> = {
   '/protocol/mine': 'O meu protocolo',
   '/monograph': 'Monografia',
   '/supervision': 'Corpo Docente',
+  '/supervision/pending': 'Aprovar submissões',
   '/reviews': 'Revisões Científicas',
+  '/reviews/history': 'Histórico de Revisões',
   '/workload': 'A minha carga',
   '/protocols': 'Protocolos',
   '/protocols/assign': 'Atribuição de revisores',
@@ -42,7 +45,7 @@ export function Topbar({ onMenuClick, sidebarExpanded, isMobile, mobileOpen }: T
       paddingRight: 'var(--gutter)',
       transition: 'padding-left 0.25s ease'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0 }}>
         {/* Botão toggle */}
         <button
           onClick={onMenuClick}
@@ -63,12 +66,13 @@ export function Topbar({ onMenuClick, sidebarExpanded, isMobile, mobileOpen }: T
 
         <h2 style={{
           fontSize: 'var(--title-md)', fontWeight: 'var(--font-bold)',
-          color: 'var(--on-surface)', whiteSpace: 'nowrap'
+          color: 'var(--on-surface)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
         }}>{label}</h2>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <button aria-label="Notificações" style={{
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
+        <RoleSwitcher />
+        <button className="topbar-icon-action" aria-label="Notificações" style={{
           width: '40px', height: '40px', borderRadius: 'var(--radius-full)', border: 'none',
           background: 'transparent', color: 'var(--on-surface-variant)', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'
@@ -79,7 +83,7 @@ export function Topbar({ onMenuClick, sidebarExpanded, isMobile, mobileOpen }: T
             background: 'var(--secondary)', borderRadius: 'var(--radius-full)'
           }} />
         </button>
-        <button aria-label="Perfil" style={{
+        <button className="topbar-icon-action" aria-label="Perfil" style={{
           width: '40px', height: '40px', borderRadius: 'var(--radius-full)', border: 'none',
           background: 'transparent', color: 'var(--on-surface-variant)', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center'

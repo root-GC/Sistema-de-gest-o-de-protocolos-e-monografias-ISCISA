@@ -13,9 +13,11 @@ export interface Topic {
   scientific_area?: { id: number; name: string };
   course?: { id: number; name: string; code?: string };
   student?: { id: string; name: string; email: string };
-  document_path?: string | null;
+  has_document?: boolean;
   document_name?: string | null;
   my_assignment?: TopicReviewAssignment | null;
+  review_assignments?: TopicReviewAssignment[];
+  histories?: TopicHistory[];
 }
 
 export interface TopicReviewComment {
@@ -42,7 +44,31 @@ export interface TopicReviewEvaluation {
 export interface TopicReviewAssignment {
   id: number;
   assigned_at?: string;
+  reviewer?: {
+    id: number;
+    name?: string | null;
+    email?: string | null;
+  } | null;
   evaluation?: TopicReviewEvaluation | null;
+}
+
+export interface TopicHistory {
+  id: number;
+  organ_id?: number | null;
+  action: string;
+  action_label?: string | null;
+  description?: string | null;
+  old_status?: string | null;
+  old_status_label?: string | null;
+  new_status?: string | null;
+  new_status_label?: string | null;
+  metadata?: Record<string, unknown> | null;
+  occurred_at: string;
+  actor?: {
+    id: number;
+    name: string;
+    email?: string;
+  } | null;
 }
 
 export interface AssignedTopicReviewer {
@@ -139,6 +165,9 @@ export const topicService = {
   list: () =>
     req('GET', '/api/v1/topics') as Promise<{ topics: Topic[] }>,
 
+  downloadDocument: (topicId: number) =>
+    `/api/v1/topics/${topicId}/document`,
+
   // ---------------------------------------------------------------------------
   // ESTUDANTE - Temas aprovados (para submeter protocolo)
   // GET /api/v1/topics/my-approved
@@ -163,15 +192,21 @@ export const topicService = {
   // SUPERVISOR - Aprovar tema
   // PATCH /api/v1/topics/{topicId}/supervisor-approve
   // ---------------------------------------------------------------------------
-  approveBySupervisor: (topicId: number) =>
-    req('PATCH', `/api/v1/topics/${topicId}/supervisor-approve`),
+  approveBySupervisor: (topicId: number, comment?: string) =>
+    req('PATCH', `/api/v1/topics/${topicId}/supervisor-approve`, { comment }),
 
   // ---------------------------------------------------------------------------
   // SUPERVISOR - Não Aprovar tema
   // PATCH /api/v1/topics/{topicId}/supervisor-reject
   // ---------------------------------------------------------------------------
   rejectBySupervisor: (topicId: number, justification: string) =>
-    req('PATCH', `/api/v1/topics/${topicId}/supervisor-reject`, { justification }),
+    req('PATCH', `/api/v1/topics/${topicId}/supervisor-reject`, { comment: justification }),
+
+  submitSupervisorComment: (topicId: number, content: string) =>
+    req('POST', `/api/v1/topics/${topicId}/supervisor-comments`, { content }) as Promise<{
+      message: string;
+      comment: TopicReviewComment;
+    }>,
 
   // ---------------------------------------------------------------------------
   // SECRETÁRIO - Listar temas para o núcleo

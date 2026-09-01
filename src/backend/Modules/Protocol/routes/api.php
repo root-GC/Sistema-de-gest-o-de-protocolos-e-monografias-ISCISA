@@ -10,11 +10,12 @@ use Modules\Protocol\app\Http\Controllers\ProtocolApiController;
 use Modules\Protocol\app\Http\Controllers\DashboardController;
 use Modules\Protocol\app\Http\Controllers\AgendaController;
 use Modules\Protocol\app\Http\Controllers\DeliberationMeetingController;
+use Modules\Protocol\app\Http\Controllers\LegacyNucleusProtocolController;
+use Modules\Protocol\app\Http\Controllers\SystemStatusController;
 
 Route::prefix('api')->middleware(['api'])->group(function () {
-    Route::get('/onlyoffice/config',
-        [OnlyOfficeController::class, 'config']
-    );
+    Route::get('/onlyoffice/documents/{document}', [OnlyOfficeController::class, 'downloadDocumentForOnlyOffice']);
+    Route::get('/onlyoffice/topics/{topic}', [OnlyOfficeController::class, 'downloadTopicForOnlyOffice']);
     Route::post('/protocolo/onlyoffice/callback',
         [OnlyOfficeController::class, 'callback']
     );
@@ -35,6 +36,8 @@ Route::prefix('api')->middleware(['api'])->group(function () {
 
 
 Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () {
+
+    Route::get('admin/system-status', [SystemStatusController::class, 'index']);
 
     Route::get('deliberation-queue', [DeliberationMeetingController::class, 'queue']);
     Route::get('deliberation-meetings', [DeliberationMeetingController::class, 'index']);
@@ -106,18 +109,18 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     // Evaluation forms - shared (download PDF)
     Route::get('evaluation-forms/{form}/download', [EvaluationFormController::class, 'downloadEvaluationForm'])->name('evaluation-forms.download');
 
+    // Canonical reviewer queue. The former Nucleus URL remains a read-only alias.
+    Route::get('reviewer/protocols', [ProtocolApiController::class, 'getForReviewer'])->name('reviewer.protocols.list');
+
     // === NÚCLEO CIENTÍFICO (NC) ===
     Route::prefix('nucleo')->group(function () {
         Route::get('evaluation-forms/{form}', [EvaluationFormController::class, 'show'])->name('nucleo.evaluation-forms.show');
-        Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [EvaluationFormController::class, 'saveCriterionReview'])->name('nucleo.evaluation-forms.criteria.review');
-        Route::post('evaluation-forms/{form}/submit', [EvaluationFormController::class, 'submit'])->name('nucleo.evaluation-forms.submit');
-        Route::post('evaluation-forms/{form}/schedule-deliberation', [EvaluationFormController::class, 'scheduleDeliberation'])->name('nucleo.evaluation-forms.schedule-deliberation');
-        Route::post('evaluation-forms/{form}/submit-deliberation', [EvaluationFormController::class, 'submitDeliberation'])->name('nucleo.evaluation-forms.submit-deliberation');
-
-        // NOVO: encerrar reunião (deliberated | not_deliberated)
-        Route::post('evaluation-forms/{form}/close-meeting', [EvaluationFormController::class, 'closeMeeting'])->name('nucleo.evaluation-forms.close-meeting');
-
-        Route::post('evaluation-forms/{form}/decide', [EvaluationFormController::class, 'decide'])->name('nucleo.evaluation-forms.decide');
+        Route::post('evaluation-forms/{form}/criteria/{formCriterion}/review', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.evaluation-forms.criteria.review');
+        Route::post('evaluation-forms/{form}/submit', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.evaluation-forms.submit');
+        Route::post('evaluation-forms/{form}/schedule-deliberation', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.evaluation-forms.schedule-deliberation');
+        Route::post('evaluation-forms/{form}/submit-deliberation', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.evaluation-forms.submit-deliberation');
+        Route::post('evaluation-forms/{form}/close-meeting', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.evaluation-forms.close-meeting');
+        Route::post('evaluation-forms/{form}/decide', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.evaluation-forms.decide');
 
         // NOVO: listagem para a aba de decisões finais pendentes (status = deliberated)
         Route::get('final-decisions', [EvaluationFormController::class, 'getPendingFinalDecision'])->name('nucleo.final-decisions.list');
@@ -125,11 +128,11 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
         Route::get('reviewer/evaluations', [EvaluationFormController::class, 'getForReviewer'])->name('nucleo.reviewer.evaluations.list');
         Route::get('secretary/evaluations', [EvaluationFormController::class, 'getForSecretary'])->name('nucleo.secretary.evaluations.list');
 
-        Route::get('protocols/{protocol}/eligible-reviewers', [ProtocolApiController::class, 'getEligibleReviewersNucleo'])->name('nucleo.protocols.eligible-reviewers');
-        Route::get('protocols/{protocol}/reviewers', [ProtocolApiController::class, 'getAssignedReviewersNucleo'])->name('nucleo.protocols.reviewers');
-        Route::post('protocols/{protocol}/assign-reviewers', [ProtocolApiController::class, 'assignReviewersNucleo'])->name('nucleo.protocols.assign-reviewers');
+        Route::get('protocols/{protocol}/eligible-reviewers', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.protocols.eligible-reviewers');
+        Route::get('protocols/{protocol}/reviewers', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.protocols.reviewers');
+        Route::post('protocols/{protocol}/assign-reviewers', [LegacyNucleusProtocolController::class, 'gone'])->name('nucleo.protocols.assign-reviewers');
 
-        Route::get('reviewer/protocols', [ProtocolApiController::class, 'getForReviewer'])->name('reviewer.protocols.list');
+        Route::get('reviewer/protocols', [ProtocolApiController::class, 'getForReviewer'])->name('nucleo.reviewer.protocols.legacy');
         Route::get('secretary/protocols', [ProtocolApiController::class, 'getForSecretary'])->name('secretary.protocols.list');
     });
 

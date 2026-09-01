@@ -1,4 +1,60 @@
 // src/types/dashboard.ts
+import type { ComponentType } from 'react';
+
+/**
+ * Payload permissivo para widgets legados. Cada widget conhece a estrutura do
+ * respetivo endpoint; a configuração comum apenas transporta os dados.
+ */
+export interface WidgetData {
+  protocols?: never[];
+  available_reviewers?: never[];
+  triages?: never[];
+  documents?: never[];
+  reviews?: never[];
+  workloads?: never[];
+  evaluations?: never[];
+  defenses?: never[];
+  students?: never[];
+  notifications?: never[];
+  deadlines?: never[];
+  reports?: never[];
+  stats?: Record<string, never>;
+  personal?: Record<string, never>;
+  is_jury_view?: never;
+  is_overloaded?: never;
+  upcoming_count?: never;
+  completed_count?: never;
+  today_count?: never;
+  unassigned_count?: never;
+  partial_count?: never;
+  returns?: never;
+  allocations?: never;
+  stocks?: never;
+  loan?: never;
+  transactions?: never;
+  tax?: never;
+  score?: never;
+  profile?: never;
+  password?: never;
+}
+
+export interface WidgetProps {
+  data?: WidgetData;
+  isLoading?: boolean;
+}
+
+export interface DashboardWidget {
+  id: string;
+  title: string;
+  description: string;
+  category: 'workflow' | 'review' | 'evaluation' | 'defense' | 'supervision' | 'reports' | 'administration' | 'general';
+  order: number;
+  size: 'small' | 'medium' | 'large' | 'full';
+  component: ComponentType<WidgetProps>;
+  permissions: string[];
+  anyPermission?: boolean;
+  endpoint?: string;
+}
 
 export type ProtocolStatus =
   | 'protocol_pending_supervisor'
@@ -61,14 +117,23 @@ export interface StudentDashboardPayload {
 }
 
 export interface QueueItem {
-  protocol_id: number;
+  protocol_id?: number;
+  topic_id?: number;
+  item_type?: 'topic' | 'protocol';
   title: string | null;
   waiting_since: string | null;
   action_needed: string;
 }
 
 export interface SecretaryDashboardPayload {
+  organ: {
+    id: number;
+    name: string;
+    type: string;
+    description: string | null;
+  } | null;
   queue: {
+    pending_topics: number;
     pending_nucleo: number;
     pending_comite_cientifico: number;
     pending_comite_bioetica: number;

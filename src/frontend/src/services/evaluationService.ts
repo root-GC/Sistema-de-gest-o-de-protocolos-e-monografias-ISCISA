@@ -1,13 +1,15 @@
 // src/services/evaluationService.ts
-import { req } from './apiClient'
+import { downloadApiFile, openApiFile, req } from './apiClient'
 
 // ═══════════════════════════════════════════════
 // TIPOS
 // ═══════════════════════════════════════════════
 
-export type EvaluationOrgan = 'nucleo' | 'comite-cientifico' | 'comite-bioetica'
+export type EvaluationOrgan = 'comite-cientifico' | 'comite-bioetica'
 
-function organBase(organ: EvaluationOrgan = 'nucleo'): string {
+const committeeOrgans: EvaluationOrgan[] = ['comite-cientifico', 'comite-bioetica']
+
+function organBase(organ: EvaluationOrgan): string {
   return `/api/v1/${organ}`
 }
 
@@ -52,6 +54,11 @@ export interface ReviewerEvaluation {
   deliberation_submitted?: boolean
   submitted_at: string | null
   evaluated_at?: string | null
+  assigned_at?: string | null
+  due_at?: string | null
+  days_remaining?: number
+  overdue?: boolean
+  review_status?: 'reviewed' | 'not_reviewed'
   criterion_reviews?: CriterionReview[]
 }
 
@@ -137,12 +144,22 @@ export interface EvaluationOpinionResult {
 export const evaluationService = {
   // ── Listagens ──────────────────────────────────────
 
-  listForReviewer: (organ: EvaluationOrgan = 'nucleo') =>
+  listForReviewer: (organ: EvaluationOrgan) =>
     req('GET', `${organBase(organ)}/reviewer/evaluations`) as Promise<{
       evaluation_forms: EvaluationForm[]
     }>,
 
-  listForSecretary: (organ: EvaluationOrgan = 'nucleo') =>
+  listForReviewerAcrossCommittees: async () => {
+    const responses = await Promise.all(committeeOrgans.map(organ => evaluationService.listForReviewer(organ)))
+    const seen = new Set<number>()
+    const evaluation_forms = responses
+      .flatMap(response => response.evaluation_forms || [])
+      .filter(form => !seen.has(form.id) && Boolean(seen.add(form.id)))
+
+    return { evaluation_forms }
+  },
+
+  listForSecretary: (organ: EvaluationOrgan) =>
     req('GET', `${organBase(organ)}/secretary/evaluations`) as Promise<{
       evaluation_forms: EvaluationForm[]
     }>,
@@ -150,17 +167,29 @@ export const evaluationService = {
   /**
    * Lista fichas com status 'deliberated' — aguardando decisão final.
    */
-  listPendingFinalDecision: (organ: EvaluationOrgan = 'nucleo') =>
+  listPendingFinalDecision: (organ: EvaluationOrgan) =>
     req('GET', `${organBase(organ)}/final-decisions`) as Promise<{
       evaluation_forms: EvaluationForm[]
     }>,
 
   // ── Detalhe ────────────────────────────────────────
 
-  getForm: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
+  getForm: (formId: number, organ: EvaluationOrgan) =>
     req('GET', `${organBase(organ)}/evaluation-forms/${formId}`) as Promise<{
       evaluation_form: EvaluationForm
     }>,
+
+  getFormAcrossCommittees: async (formId: number) => {
+    let lastError: unknown
+    for (const organ of committeeOrgans) {
+      try {
+        return await evaluationService.getForm(formId, organ)
+      } catch (error) {
+        lastError = error
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('Ficha de avaliação não encontrada.')
+  },
 
   // ── Critérios ──────────────────────────────────────
 
@@ -168,7 +197,7 @@ export const evaluationService = {
     formId: number,
     formCriterionId: number,
     comment: string | null,
-    organ: EvaluationOrgan = 'nucleo'
+    organ: EvaluationOrgan = 'comite-cientifico'
   ) =>
     req('POST', `${organBase(organ)}/evaluation-forms/${formId}/criteria/${formCriterionId}/review`, {
       comment,
@@ -180,7 +209,7 @@ export const evaluationService = {
     formId: number,
     decision: 'approved' | 'not_approved',
     overallComment?: string | null,
-    organ: EvaluationOrgan = 'nucleo'
+    organ: EvaluationOrgan = 'comite-cientifico'
   ) =>
     req('POST', `${organBase(organ)}/evaluation-forms/${formId}/submit`, {
       decision,
@@ -212,7 +241,7 @@ export const evaluationService = {
     formId: number,
     date: string,
     location: string,
-    organ: EvaluationOrgan = 'nucleo'
+    organ: EvaluationOrgan = 'comite-cientifico'
   ) =>
     req('POST', `${organBase(organ)}/evaluation-forms/${formId}/schedule-deliberation`, {
       deliberation_date: date,
@@ -222,17 +251,11 @@ export const evaluationService = {
       evaluation_form: EvaluationForm
     }>,
 
-  startDeliberation: (formId: number, organ: EvaluationOrgan = 'nucleo') =>
-    req('POST', `${organBase(organ)}/evaluation-forms/${formId}/start-deliberation`) as Promise<{
-      message: string
-      evaluation_form: EvaluationForm
-    }>,
-
   submitDeliberation: (
     formId: number,
     decision: 'approved' | 'not_approved',
     conclusionSummary?: string | null,
-    organ: EvaluationOrgan = 'nucleo'
+    organ: EvaluationOrgan = 'comite-cientifico'
   ) =>
     req('POST', `${organBase(organ)}/evaluation-forms/${formId}/submit-deliberation`, {
       decision,
@@ -250,7 +273,7 @@ export const evaluationService = {
    * - 'not_deliberated' se as decisões divergem
    * O resultado vem diretamente no evaluation_form.status.
    */
-  closeMeeting: (formId: number, result: 'deliberated' | 'not_deliberated', organ: EvaluationOrgan = 'nucleo') =>
+  closeMeeting: (formId: number, result: 'deliberated' | 'not_deliberated', organ: EvaluationOrgan = 'comite-cientifico') =>
   req('POST', `${organBase(organ)}/evaluation-forms/${formId}/close-meeting`, {
     result,
   }) as Promise<{
@@ -262,7 +285,7 @@ export const evaluationService = {
     formId: number,
     decision: 'approved' | 'not_approved',
     conclusionSummary?: string | null,
-    organ: EvaluationOrgan = 'nucleo'
+    organ: EvaluationOrgan = 'comite-cientifico'
   ) =>
     req('POST', `${organBase(organ)}/evaluation-forms/${formId}/decide`, {
       decision,
@@ -275,35 +298,7 @@ export const evaluationService = {
 
   // ── Ficheiros ──────────────────────────────────────
 
-  openFile: async (url: string, filename?: string) => {
-    void filename
-    try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      window.open(blobUrl, '_blank')
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
-    } catch (error) {
-      console.error('Erro ao abrir ficheiro:', error)
-      window.open(url, '_blank')
-    }
-  },
+  openFile: (url: string, filename?: string) => openApiFile(url, filename),
 
-  downloadFile: async (url: string, filename?: string) => {
-    try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = filename || 'documento'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
-    } catch (error) {
-      console.error('Erro ao descarregar ficheiro:', error)
-      window.open(url, '_blank')
-    }
-  },
+  downloadFile: (url: string, filename?: string) => downloadApiFile(url, filename),
 }

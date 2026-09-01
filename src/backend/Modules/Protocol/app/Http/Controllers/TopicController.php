@@ -159,8 +159,12 @@ public function getComments(Request $request, Topic $topic)
             abort(403);
         }
 
-        if (! $topic->document_path || ! Storage::disk('public')->exists($topic->document_path)) {
+        if (! $topic->document_path) {
             abort(404);
+        }
+
+        if (! Storage::disk('public')->exists($topic->document_path)) {
+            abort(410, 'O documento desta versão não está disponível no armazenamento.');
         }
 
         return Storage::disk('public')->download(

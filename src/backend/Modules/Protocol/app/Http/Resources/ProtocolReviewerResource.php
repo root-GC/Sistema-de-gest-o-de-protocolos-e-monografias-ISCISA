@@ -4,7 +4,6 @@ namespace Modules\Protocol\app\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 use Modules\Protocol\app\Models\Protocol;
 
 class ProtocolReviewerResource extends JsonResource
@@ -64,8 +63,6 @@ class ProtocolReviewerResource extends JsonResource
             'latest_document' => $this->whenLoaded('latestDocument', fn() => $this->latestDocument ? [
                 'id' => $this->latestDocument->id,
                 'file_name' => $this->latestDocument->file_name,
-                'file_url' => Storage::disk('public')->url($this->latestDocument->file_path),
-                'file_path' => $this->latestDocument->file_path,
                 'download_url' => url("api/v1/protocols/{$this->id}/download"),
                 'version' => $this->latestDocument->version,
                 'version_label' => $this->latestDocument->version_label,

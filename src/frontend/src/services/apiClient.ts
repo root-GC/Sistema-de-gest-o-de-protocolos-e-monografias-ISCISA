@@ -89,7 +89,7 @@ function filenameFromDisposition(value: string | null): string | null {
 }
 
 // Converte objeto em query string
-function toQueryString(params: Record<string, any>): string {
+function toQueryString(params: Record<string, unknown>): string {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
@@ -108,6 +108,7 @@ export interface ApiFile {
 export interface ApiFileObjectUrl {
   objectUrl: string;
   filename: string;
+  mimeType: string;
   revoke: () => void;
 }
 
@@ -138,6 +139,7 @@ export async function createApiFileObjectUrl(
   return {
     objectUrl,
     filename: file.filename,
+    mimeType: file.blob.type,
     revoke: () => URL.revokeObjectURL(objectUrl),
   };
 }
@@ -189,7 +191,7 @@ export async function req<T = unknown>(method: string, url: string, body?: unkno
     // Para GET/HEAD, converte body em query string
     if (method === 'GET' || method === 'HEAD') {
       if (body && typeof body === 'object' && !(body instanceof FormData)) {
-        fetchUrl += toQueryString(body as Record<string, any>);
+        fetchUrl += toQueryString(body as Record<string, unknown>);
       }
     } else {
       // Para POST, PUT, PATCH, DELETE — envia no body
@@ -254,7 +256,7 @@ export async function reqFormData<T = unknown>(method: string, url: string, form
 
 // Export default para compatibilidade
 export const apiClient = {
-  get: <T = unknown>(url: string, params?: Record<string, any>) => 
+  get: <T = unknown>(url: string, params?: Record<string, unknown>) =>
     req<T>('GET', url, params),
   
   post: <T = unknown>(url: string, data?: unknown) => 

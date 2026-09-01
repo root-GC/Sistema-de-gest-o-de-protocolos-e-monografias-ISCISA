@@ -1,20 +1,10 @@
-// src/services/monographService.ts
-
-const BASE = import.meta.env.VITE_API_URL ?? ''
-
-function token(): string | null {
-  return localStorage.getItem('sgpmc_token')
-}
-
-// ============================================================
-// TIPOS
-// ============================================================
+import { downloadApiFile, openApiFile, req, reqFormData } from './apiClient'
 
 export interface MonographDocument {
   id: number
   file_name: string
   version: number
-  status: 'active' | 'inactive'
+  status: string
   download_url: string | null
   created_at: string
 }
@@ -22,11 +12,11 @@ export interface MonographDocument {
 export interface MonographOpinion {
   id: number
   organ: string
-  decision: 'approved' | 'rejected'
+  decision: string
   version: number
   download_url: string | null
   evaluation_form_download_url: string | null
-  created_at: string
+  created_at: string | null
 }
 
 export interface Monograph {
@@ -37,215 +27,65 @@ export interface Monograph {
   status_label: string
   submission_number: number
   version: number
-  student?: {
-    id: number
-    name: string
-    email: string
-    student_number?: string
-  }
-  topic?: {
-    id: number
-    title: string
-  }
+  student?: { id: number; name: string; email: string; student_number?: string }
+  supervisor?: { id: number; name: string | null; email: string | null }
+  topic?: { id: number; title: string }
   documents: MonographDocument[]
   created_at: string
   updated_at: string
 }
 
-export interface MonographListResponse {
-  monographs: Monograph[]
+export interface MonographListResponse { monographs: Monograph[] }
+export interface MonographSubmitResponse { message?: string; monograph?: Monograph; data?: Monograph }
+export interface MonographOpinionsResponse { opinions: MonographOpinion[] }
+
+interface RawMonographListResponse {
+  monographs?: Monograph[] | { data?: Monograph[] }
+  data?: Monograph[]
 }
 
-export interface MonographSubmitResponse {
-  message: string
-  monograph: Monograph
+function normalizeList(response: RawMonographListResponse): MonographListResponse {
+  const nested = response.monographs
+  const monographs = Array.isArray(nested)
+    ? nested
+    : nested?.data ?? response.data ?? []
+
+  return { monographs }
 }
-
-export interface MonographOpinionsResponse {
-  opinions: MonographOpinion[]
-}
-
-export interface EligibleReviewersResponse {
-  reviewers: { id: number; name: string; email?: string }[]
-}
-
-export interface AssignedReviewer {
-  id: number
-  assignment_id: number
-  name: string
-  email?: string
-  slot: 'reviewer_one' | 'reviewer_two'
-}
-
-export interface AssignedReviewersResponse {
-  reviewers: AssignedReviewer[]
-}
-
-export interface AssignReviewersResponse {
-  message: string
-}
-
-// ============================================================
-// HELPERS
-// ============================================================
-
-async function req<T>(method: string, path: string, body: unknown = null, isFormData = false): Promise<T> {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  }
-  
-  if (!isFormData) {
-    headers['Content-Type'] = 'application/json'
-  }
-  
-  const t = token()
-  if (t) headers['Authorization'] = `Bearer ${t}`
-
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: isFormData ? (body as FormData) : (body ? JSON.stringify(body) : null),
-  })
-
-  const data = await res.json()
-
-  if (!res.ok) {
-    const msg =
-      data?.message ??
-      (Object.values(data?.errors ?? {})[0] as string[] | undefined)?.[0] ??
-      'Erro desconhecido'
-    const error = new Error(msg) as Error & { status?: number }
-    error.status = res.status
-    throw error
-  }
-
-  return data as T
-}
-
-// ============================================================
-// SERVIÇO
-// ============================================================
 
 export const monographService = {
-  // ==================== ESTUDANTE ====================
+  list: async (): Promise<MonographListResponse> =>
+    normalizeList(await req<RawMonographListResponse>('GET', '/api/monographs')),
 
-  /**
-   * Listar monografias do estudante logado
-   */
-  list: () =>
-    req<MonographListResponse>('GET', '/api/monographs'),
+  // The same scoped endpoint serves the student, supervisor and nucleus secretary.
+  listForSecretary: async (): Promise<MonographListResponse> =>
+    normalizeList(await req<RawMonographListResponse>('GET', '/api/monographs')),
 
-  /**
-   * Submeter versão de uma monografia existente
-   * Nota: o backend expõe POST /api/monographs/{monograph}/submit
-   */
+  get: (monographId: number) =>
+    req<{ data?: Monograph }>('GET', `/api/monographs/${monographId}`),
+
   submit: (monographId: number, file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    return req<MonographSubmitResponse>('POST', `/api/monographs/${monographId}/submit`, formData, true)
+    return reqFormData<MonographSubmitResponse>('POST', `/api/monographs/${monographId}/submit`, formData)
   },
 
-  /**
-   * Compatibilidade (antigo chamado sem id) - mantido para evitar que chamadas falhem
-   * -> redireciona para erro explícito
-   */
-  submitWithoutId: (file: File) => {
-    // This helper throws so callers that still call submit(file) get a clear message
-    return Promise.reject(new Error('Endpoint inválido: é necessário um monographId. Aguarde a criação da monografia pelo backend ou contacte o núcleo.'))
-  },
+  endorse: (monographId: number, approved: boolean, reason?: string) =>
+    req<MonographSubmitResponse>('POST', `/api/monographs/${monographId}/endorse`, { approved, reason: reason || null }),
 
-  /**
-   * Listar pareceres de uma monografia
-   */
+  verifyDocuments: (monographId: number, approved: boolean, reason?: string) =>
+    req<MonographSubmitResponse>('POST', `/api/monographs/${monographId}/verify`, {
+      role: 'secretary',
+      approved,
+      reason: reason || null,
+    }),
+
   listOpinions: (monographId: number) =>
     req<MonographOpinionsResponse>('GET', `/api/monographs/${monographId}/opinions`),
 
-  // ==================== SECRETÁRIO / NÚCLEO ====================
+  history: (monographId: number) =>
+    req<unknown>('GET', `/api/monographs/${monographId}/history`),
 
-  /**
-   * Listar todas as monografias (para secretário/núcleo)
-   */
-  listForSecretary: () =>
-    req<MonographListResponse>('GET', '/api/v1/secretary/monographs'),
-
-  /**
-   * Listar revisores elegíveis para uma monografia
-   */
-  getEligibleReviewers: (monographId: number) =>
-    req<EligibleReviewersResponse>('GET', `/api/v1/monographs/${monographId}/eligible-reviewers`),
-
-  /**
-   * Listar revisores atribuídos a uma monografia
-   */
-  getAssignedReviewers: (monographId: number) =>
-    req<AssignedReviewersResponse>('GET', `/api/v1/monographs/${monographId}/reviewers`),
-
-  /**
-   * Atribuir revisores a uma monografia
-   */
-  assignReviewers: (monographId: number, reviewerOneId: number, reviewerTwoId: number) =>
-    req<AssignReviewersResponse>('POST', `/api/v1/monographs/${monographId}/assign-reviewers`, {
-      reviewer_one_id: reviewerOneId,
-      reviewer_two_id: reviewerTwoId,
-    }),
-
-  // ==================== ARQUIVOS ====================
-
-  /**
-   * Abrir arquivo no navegador
-   */
-  openFile: async (url: string, _fallbackFilename?: string) => {
-    const t = token()
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${t}`,
-        Accept: 'application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*',
-      },
-    })
-
-    if (!res.ok) {
-      throw new Error('Erro ao abrir o arquivo.')
-    }
-
-    const blob = await res.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    window.open(blobUrl, '_blank')
-  },
-
-  /**
-   * Fazer download do arquivo
-   */
-  downloadFile: async (url: string, fallbackFilename?: string) => {
-    const t = token()
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${t}`,
-        Accept: 'application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*',
-      },
-    })
-
-    if (!res.ok) {
-      throw new Error('Erro ao baixar o arquivo.')
-    }
-
-    const blob = await res.blob()
-    const contentDisposition = res.headers.get('content-disposition')
-    let filename = fallbackFilename || 'monografia.docx'
-
-    if (contentDisposition) {
-      const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-      if (match && match[1]) {
-        filename = match[1].replace(/['"]/g, '')
-      }
-    }
-
-    const blobUrl = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = blobUrl
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(blobUrl)
-  },
+  openFile: (url: string, fallbackFilename?: string) => openApiFile(url, fallbackFilename),
+  downloadFile: (url: string, fallbackFilename?: string) => downloadApiFile(url, fallbackFilename),
 }

@@ -5,7 +5,7 @@ function token() {
 }
 
 export interface OnlyOfficeConfigResponse {
-  config: any
+  config: Config
   token: string
 }
 
@@ -15,20 +15,26 @@ async function fetchConfig(url: string): Promise<OnlyOfficeConfigResponse> {
   if (authToken) headers.Authorization = `Bearer ${authToken}`
 
   const res = await fetch(url, { method: 'GET', headers })
-  const data = await res.json()
+  const data: unknown = await res.json()
 
   if (!res.ok) {
-    throw new Error(data.error ?? data.message ?? 'Erro ao carregar configuração do ONLYOFFICE')
+    const message = typeof data === 'object' && data !== null && 'message' in data
+      ? String(data.message)
+      : typeof data === 'object' && data !== null && 'error' in data
+        ? String(data.error)
+        : 'Erro ao carregar configuração do ONLYOFFICE'
+    throw new Error(message)
   }
 
-  return data
+  return data as OnlyOfficeConfigResponse
 }
 
 export const onlyOfficeService = {
-  // rota de teste, sem protocolo
-  getConfig: () => fetchConfig(`${BASE}/api/onlyoffice/config`),
-
   // rota real, protegida, resolve mode (edit/review/comment/view) conforme o utilizador
   getConfigForProtocol: (protocolId: number) =>
     fetchConfig(`${BASE}/api/onlyoffice/config/${protocolId}`),
+
+  getConfigForTopic: (topicId: number) =>
+    fetchConfig(`${BASE}/api/onlyoffice/topic/${topicId}`),
 }
+import type { Config } from '@onlyoffice/doceditor-types'

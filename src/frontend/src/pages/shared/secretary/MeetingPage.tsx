@@ -1,422 +1,294 @@
-// src/pages/secretary/MeetingPage.tsx
-import { useEffect, useState } from 'react'
-import { deliberationService, type DeliberationMeeting } from '../../../services/deliberationService'
-import type { EvaluationForm } from '../../../services/evaluationService'
-import '../../../styles/global.css'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useAuth, type SecretaryProfile } from '../../../context/AuthContext'
+import {
+  deliberationService,
+  type DeliberationMeeting,
+  type DeliberationQueueEntry,
+  type DeliberationReviewer,
+} from '../../../services/deliberationService'
+import './secretaryWorkspace.css'
+
+type Tab = 'queue' | 'scheduled' | 'in_progress' | 'completed'
+
+const TABS: Array<{ id: Tab; label: string; icon: string }> = [
+  { id: 'queue', label: 'Fila FIFO', icon: 'format_list_numbered' },
+  { id: 'scheduled', label: 'Agendadas', icon: 'event' },
+  { id: 'in_progress', label: 'Em andamento', icon: 'play_circle' },
+  { id: 'completed', label: 'Concluídas', icon: 'task_alt' },
+]
+
+const formatDateTime = (value: string) => new Intl.DateTimeFormat('pt-MZ', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'Africa/Maputo',
+}).format(new Date(value))
+
+function toMaputoInput(value: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Maputo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false, hourCycle: 'h23',
+  }).formatToParts(new Date(value))
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value || ''
+  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`
+}
+
+function maputoInputToUtc(value: string) {
+  return new Date(`${value}:00+02:00`).toISOString()
+}
+
+function reviewerDeadline(reviewer: DeliberationReviewer) {
+  if (reviewer.review_status === 'reviewed') return 'Revisão submetida'
+  if (reviewer.overdue) return `Atrasado há ${Math.abs(reviewer.days_remaining)} dia(s)`
+  if (reviewer.days_remaining === 0) return 'Prazo termina hoje'
+  return `${reviewer.days_remaining} dia(s) restante(s)`
+}
 
 export default function MeetingPage() {
-  const [pendingForms, setPendingForms] = useState<EvaluationForm[]>([])
+  const { activeProfile } = useAuth()
+  const secretary = activeProfile as SecretaryProfile | null
+  const [params, setParams] = useSearchParams()
+  const rawTab = params.get('tab') as Tab | null
+  const tab: Tab = TABS.some(item => item.id === rawTab) ? rawTab! : 'queue'
+  const selectedProtocolId = Number(params.get('protocol'))
+  const [queue, setQueue] = useState<DeliberationQueueEntry[]>([])
   const [meetings, setMeetings] = useState<DeliberationMeeting[]>([])
+  const [selected, setSelected] = useState<number[]>([])
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [location, setLocation] = useState('')
+  const [notes, setNotes] = useState('')
+  const [editing, setEditing] = useState<DeliberationMeeting | null>(null)
+  const [cancelling, setCancelling] = useState<DeliberationMeeting | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [startingMeetingId, setStartingMeetingId] = useState<number | null>(null)
+  const [currentTime, setCurrentTime] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-
-  const [showNewMeeting, setShowNewMeeting] = useState(false)
-  const [selectedFormIds, setSelectedFormIds] = useState<number[]>([])
-  const [meetingDate, setMeetingDate] = useState('')
-  const [meetingTime, setMeetingTime] = useState('10:00')
-  const [meetingNotes, setMeetingNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
-  const ORGAN = 'nucleo' // fixo por agora — só Núcleo implementado
+  const isCommittee = ['scientific_committee', 'bioethics_committee'].includes(secretary?.organ?.type || '')
 
-  useEffect(() => { loadData() }, [])
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!isCommittee) return
     setLoading(true)
     setError(null)
     try {
-      const [forms, storedMeetings] = await Promise.all([
-        deliberationService.listPendingForMeeting(),
-        Promise.resolve(deliberationService.listScheduledMeetings()),
+      const [queueResponse, meetingsResponse] = await Promise.all([
+        deliberationService.listQueue(),
+        deliberationService.listMeetings(),
       ])
-      setPendingForms(forms)
-      setMeetings(storedMeetings)
-    } catch (e) {
-      setError((e as Error).message)
+      setQueue(queueResponse.queue)
+      setMeetings(meetingsResponse.meetings)
+      if (selectedProtocolId) {
+        setSelected(queueResponse.queue.filter(item => item.protocol.id === selectedProtocolId).map(item => item.evaluation_form_id))
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível carregar as deliberações.')
     } finally {
       setLoading(false)
     }
+  }, [isCommittee, selectedProtocolId])
+
+  useEffect(() => {
+    const requestId = window.setTimeout(() => { void loadData() }, 0)
+    return () => window.clearTimeout(requestId)
+  }, [loadData])
+
+  useEffect(() => {
+    const updateTime = () => setCurrentTime(Date.now())
+    updateTime()
+    const intervalId = window.setInterval(updateTime, 30000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  const visibleMeetings = useMemo(
+    () => meetings.filter(meeting => meeting.status === tab),
+    [meetings, tab],
+  )
+  const selectedQueue = queue.filter(item => selected.includes(item.evaluation_form_id))
+
+  function changeTab(next: Tab) {
+    const nextParams = new URLSearchParams(params)
+    nextParams.set('tab', next)
+    nextParams.delete('meeting')
+    setParams(nextParams)
   }
 
-  function toggleFormSelection(formId: number) {
-    setSelectedFormIds(prev => prev.includes(formId) ? prev.filter(id => id !== formId) : [...prev, formId])
+  function toggleItem(id: number) {
+    setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   }
 
-  function selectAll() {
-    setSelectedFormIds(prev => prev.length === pendingForms.length ? [] : pendingForms.map(f => f.id))
-  }
-
-  async function handleCreateMeeting(e: React.FormEvent) {
-    e.preventDefault()
-    if (!meetingDate || selectedFormIds.length === 0) {
-      setError('Selecione a data e pelo menos um protocolo.')
-      setTimeout(() => setError(null), 3000)
+  async function createMeeting(event: React.FormEvent) {
+    event.preventDefault()
+    if (!scheduledAt || !location.trim() || selected.length === 0) {
+      setError('Seleciona protocolos, data, hora e local.')
       return
     }
-
     setSubmitting(true)
     setError(null)
     try {
-      const meeting = await deliberationService.scheduleMeeting({
-        date: meetingDate,
-        time: meetingTime,
-        organ: ORGAN,
-        notes: meetingNotes || undefined,
-        formIds: selectedFormIds,
+      const response = await deliberationService.createMeeting({
+        scheduled_at: maputoInputToUtc(scheduledAt),
+        location: location.trim(),
+        notes: notes.trim() || null,
+        evaluation_form_ids: selectedQueue.map(item => item.evaluation_form_id),
       })
-
-      setMeetings(prev => [meeting, ...prev])
-      setSuccess(`Reunião agendada para ${new Date(meetingDate).toLocaleDateString('pt-PT')} às ${meetingTime}. ${selectedFormIds.length} protocolo(s) incluído(s).`)
-
-      // Limpar formulário
-      setMeetingDate('')
-      setMeetingTime('10:00')
-      setMeetingNotes('')
-      setSelectedFormIds([])
-      setShowNewMeeting(false)
-
-      // Recarregar para remover da lista de pendentes
+      setMessage(response.message)
+      setSelected([])
+      setScheduledAt('')
+      setLocation('')
+      setNotes('')
+      changeTab('scheduled')
       await loadData()
-      setTimeout(() => setSuccess(null), 5000)
-    } catch (e) {
-      setError((e as Error).message)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível marcar a reunião.')
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (loading) return <Loader />
+  function openReschedule(meeting: DeliberationMeeting) {
+    setEditing(meeting)
+    setScheduledAt(toMaputoInput(meeting.scheduled_at))
+    setLocation(meeting.location)
+    setNotes(meeting.notes || '')
+  }
+
+  async function reschedule(event: React.FormEvent) {
+    event.preventDefault()
+    if (!editing || !scheduledAt || !location.trim()) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const response = await deliberationService.rescheduleMeeting(editing.id, {
+        scheduled_at: maputoInputToUtc(scheduledAt),
+        location: location.trim(),
+        notes: notes.trim() || null,
+      })
+      setMessage(response.message)
+      setEditing(null)
+      await loadData()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível reagendar.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function cancelMeeting() {
+    if (!cancelling) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const response = await deliberationService.cancelMeeting(cancelling.id, cancelReason.trim() || null)
+      setMessage(response.message)
+      setCancelling(null)
+      setCancelReason('')
+      await loadData()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível cancelar.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function startMeeting(meeting: DeliberationMeeting) {
+    setStartingMeetingId(meeting.id)
+    setError(null)
+    try {
+      const response = await deliberationService.startMeeting(meeting.id)
+      setMessage(response.message)
+      changeTab('in_progress')
+      await loadData()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível iniciar a reunião.')
+    } finally {
+      setStartingMeetingId(null)
+    }
+  }
+
+  if (!isCommittee) {
+    return <main className="secretary-workspace"><EmptyState title="Deliberações indisponíveis" text="Os Núcleos tratam apenas de temas. As reuniões de protocolos pertencem aos comités." /></main>
+  }
 
   return (
-    <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)', padding: 'var(--space-4)' }}>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+    <main className="secretary-workspace" aria-labelledby="deliberation-title">
+      <header className="secretary-page-header">
         <div>
-          <h1 style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-1)' }}>
-            <span className="material-symbols-outlined" style={{ verticalAlign: 'middle', marginRight: 'var(--space-2)', color: 'var(--primary)', fontSize: '28px' }}>calendar_add_on</span>
-            Marcar Reunião de Deliberação
-          </h1>
-          <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
-            Protocolos que precisam de deliberação entre os dois revisores do Núcleo Científico
-          </p>
+          <h1 id="deliberation-title" className="secretary-page-header__title">Deliberações</h1>
+          <p>Agenda real do {secretary?.organ?.name}. A fila respeita a ordem de atribuição dos revisores.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowNewMeeting(!showNewMeeting)}>
-          <span className="material-symbols-outlined">{showNewMeeting ? 'close' : 'add'}</span>
-          {showNewMeeting ? 'Cancelar' : 'Nova Reunião'}
+        <button className="btn btn-outline" type="button" onClick={() => void loadData()} disabled={loading}>
+          <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
+          Atualizar
         </button>
+      </header>
+
+      <div className="secretary-tabs" role="tablist" aria-label="Estados das deliberações">
+        {TABS.map(item => (
+          <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'is-active' : ''} onClick={() => changeTab(item.id)}>
+            <span className="material-symbols-outlined" aria-hidden="true">{item.icon}</span>
+            {item.label}
+            <span className="secretary-tab-count">{item.id === 'queue' ? queue.length : meetings.filter(meeting => meeting.status === item.id).length}</span>
+          </button>
+        ))}
       </div>
 
-      {success && <Alert type="success">{success}</Alert>}
-      {error && <Alert type="error">{error}</Alert>}
+      <div className="secretary-feedback" aria-live="polite">
+        {message && <div className="secretary-alert secretary-alert--success">{message}</div>}
+        {error && <div className="secretary-alert secretary-alert--error" role="alert">{error}</div>}
+      </div>
 
-      {/* Lista de protocolos pendentes (sempre visível) */}
-      {!showNewMeeting && (
-        <div style={{ marginBottom: 'var(--space-4)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
-            <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>pending_actions</span>
-              Protocolos Pendentes de Deliberação
-            </h2>
-            {pendingForms.length > 0 && (
-              <span style={{ 
-                fontSize: 'var(--body-sm)', 
-                padding: '4px 12px', 
-                borderRadius: 'var(--radius-full)', 
-                background: 'var(--tertiary-container)', 
-                color: 'var(--on-tertiary-container)',
-                fontWeight: 'var(--font-bold)'
-              }}>
-                {pendingForms.length} protocolo(s)
-              </span>
-            )}
-          </div>
-
-          {pendingForms.length === 0 ? (
-            <EmptyState message="Nenhum protocolo pendente de deliberação." icon="inbox" />
-          ) : (
-            <div style={{ 
-              border: '1px solid var(--outline-variant)', 
-              borderRadius: 'var(--radius-lg)', 
-              background: 'var(--surface-container-lowest)',
-              overflow: 'hidden'
-            }}>
-              {pendingForms.map(form => (
-                <div key={form.id} style={{
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 'var(--space-3)', 
-                  padding: '14px 16px',
-                  borderBottom: '1px solid var(--outline-variant)',
-                }}>
-                  <div style={{ 
-                    width: '40px', 
-                    height: '40px', 
-                    borderRadius: 'var(--radius-lg)', 
-                    background: 'var(--tertiary-container)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <span className="material-symbols-outlined" style={{ color: 'var(--on-tertiary-container)', fontSize: '20px' }}>
-                      description
-                    </span>
-                  </div>
-                  
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 'var(--font-bold)', fontSize: '13px', fontFamily: 'monospace', marginBottom: '2px' }}>
-                      {form.protocol?.code || `Protocolo #${form.protocol_id}`}
-                    </div>
-                    <div style={{ fontSize: '13px', color: 'var(--on-surface-variant)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {form.protocol?.topic?.title || 'Sem título'}
-                    </div>
-                  </div>
-
-                  <span style={{
-                    fontSize: '11px',
-                    padding: '4px 10px',
-                    borderRadius: 'var(--radius-full)',
-                    background: 'var(--error-container)',
-                    color: 'var(--on-error-container)',
-                    fontWeight: 'var(--font-bold)',
-                    flexShrink: 0
-                  }}>
-                    Aguarda Reunião
-                  </span>
-                </div>
+      {loading ? <Loader /> : tab === 'queue' ? (
+        <div className="deliberation-layout">
+          <section aria-labelledby="fifo-title">
+            <div className="secretary-section-heading">
+              <div><h2 id="fifo-title">Protocolos por ordem de chegada</h2><p>Os 7 dias são informativos e não bloqueiam a deliberação.</p></div>
+              {queue.length > 0 && <button type="button" className="btn btn-sm btn-outline" onClick={() => setSelected(selected.length === queue.length ? [] : queue.map(item => item.evaluation_form_id))}>{selected.length === queue.length ? 'Desmarcar todos' : 'Selecionar todos'}</button>}
+            </div>
+            <div className="deliberation-queue">
+              {queue.length === 0 ? <EmptyState title="Fila em dia" text="Nenhum protocolo aguarda agendamento neste órgão." /> : queue.map((item, index) => (
+                <QueueRow key={item.evaluation_form_id} item={item} position={index + 1} checked={selected.includes(item.evaluation_form_id)} onToggle={() => toggleItem(item.evaluation_form_id)} />
               ))}
             </div>
-          )}
+          </section>
+
+          <form className="deliberation-schedule-panel" onSubmit={createMeeting}>
+            <div><span className="secretary-eyebrow">Nova reunião</span><h2>Preparar pauta</h2><p>{selected.length} protocolo(s) selecionado(s) na ordem FIFO.</p></div>
+            <Field label="Data e hora" id="meeting-at"><input id="meeting-at" type="datetime-local" min={toMaputoInput(new Date().toISOString())} value={scheduledAt} onChange={event => setScheduledAt(event.target.value)} required /></Field>
+            <Field label="Local" id="meeting-location"><input id="meeting-location" value={location} onChange={event => setLocation(event.target.value)} maxLength={500} required /></Field>
+            <Field label="Notas" id="meeting-notes"><textarea id="meeting-notes" value={notes} onChange={event => setNotes(event.target.value)} rows={3} maxLength={5000} /></Field>
+            {selectedQueue.length > 0 && <ol className="deliberation-agenda-summary">{selectedQueue.map(item => <li key={item.evaluation_form_id}><strong>{item.protocol.code}</strong><span>{item.protocol.title}</span></li>)}</ol>}
+            <button className="btn btn-primary" type="submit" disabled={submitting || selected.length === 0}>{submitting ? 'A marcar...' : 'Marcar reunião'}</button>
+          </form>
         </div>
-      )}
-
-      {/* Formulário de nova reunião */}
-      {showNewMeeting && (
-        <form onSubmit={handleCreateMeeting} className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
-          <h3 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>event</span>
-            Detalhes da Reunião
-          </h3>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-            <div>
-              <label style={labelStyle}>Data *</label>
-              <input type="date" value={meetingDate} onChange={e => setMeetingDate(e.target.value)} required style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Hora</label>
-              <input type="time" value={meetingTime} onChange={e => setMeetingTime(e.target.value)} style={inputStyle} />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 'var(--space-3)' }}>
-            <label style={labelStyle}>Local</label>
-            <input 
-              type="text" 
-              value={ORGAN} 
-              readOnly 
-              style={{ ...inputStyle, background: 'var(--surface-container)', color: 'var(--on-surface-variant)' }} 
-            />
-          </div>
-
-          <div style={{ marginBottom: 'var(--space-3)' }}>
-            <label style={labelStyle}>Notas / Observações</label>
-            <textarea 
-              value={meetingNotes} 
-              onChange={e => setMeetingNotes(e.target.value)} 
-              rows={2} 
-              placeholder="Notas sobre a reunião..." 
-              style={{ ...inputStyle, resize: 'vertical' }} 
-            />
-          </div>
-
-          <div style={{ marginBottom: 'var(--space-4)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-              <label style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)' }}>
-                Protocolos para esta reunião ({selectedFormIds.length} selecionados)
-              </label>
-              <button type="button" onClick={selectAll} className="btn btn-sm btn-outline">
-                {selectedFormIds.length === pendingForms.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
-              </button>
-            </div>
-
-            <div style={{ 
-              maxHeight: '300px', 
-              overflowY: 'auto', 
-              border: '1px solid var(--outline-variant)', 
-              borderRadius: 'var(--radius-lg)', 
-              background: 'var(--surface-container-lowest)' 
-            }}>
-              {pendingForms.length === 0 ? (
-                <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--on-surface-variant)' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '32px', display: 'block', marginBottom: 'var(--space-1)' }}>inbox</span>
-                  Nenhum protocolo em deliberação pendente.
-                </div>
-              ) : (
-                pendingForms.map(form => {
-                  const isSelected = selectedFormIds.includes(form.id)
-
-                  return (
-                    <label key={form.id} style={{
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 'var(--space-2)', 
-                      padding: '12px 14px',
-                      borderBottom: '1px solid var(--outline-variant)', 
-                      cursor: 'pointer',
-                      background: isSelected ? 'var(--primary-container)' : 'transparent',
-                      transition: 'background 0.2s',
-                    }}>
-                      <input 
-                        type="checkbox" 
-                        checked={isSelected} 
-                        onChange={() => toggleFormSelection(form.id)}
-                        style={{ accentColor: 'var(--primary)', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }} 
-                      />
-                      <span style={{ fontWeight: 'var(--font-bold)', fontSize: '13px', minWidth: '85px', flexShrink: 0, fontFamily: 'monospace' }}>
-                        {form.protocol?.code || `#${form.protocol_id}`}
-                      </span>
-                      <span style={{ flex: 1, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {form.protocol?.topic?.title || '—'}
-                      </span>
-                    </label>
-                  )
-                })
-              )}
-            </div>
-          </div>
-
-          <button 
-            type="submit" 
-            className="btn btn-primary btn-lg btn-block" 
-            disabled={submitting || !meetingDate || selectedFormIds.length === 0}
-          >
-            {submitting ? (
-              'A agendar reunião...'
-            ) : (
-              <><span className="material-symbols-outlined">event_available</span> Agendar Reunião com {selectedFormIds.length} Protocolo(s)</>
-            )}
-          </button>
-        </form>
-      )}
-
-      {/* Reuniões agendadas */}
-      <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <span className="material-symbols-outlined">list_alt</span>
-        Reuniões Agendadas ({meetings.length})
-      </h2>
-
-      {meetings.length === 0 ? (
-        <EmptyState message="Nenhuma reunião agendada." icon="event_busy" />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {meetings.map(meeting => {
-            const isExpanded = expandedId === meeting.id
-            return (
-              <div key={meeting.id} className="card" style={{ padding: 'var(--space-3) var(--space-4)' }}>
-                <div 
-                  onClick={() => setExpandedId(isExpanded ? null : meeting.id)} 
-                  style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <div>
-                    <h3 style={{ fontSize: 'var(--body-lg)', fontWeight: 'var(--font-semibold)', margin: 0 }}>
-                      {new Date(meeting.date).toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                    </h3>
-                    <span style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
-                      {meeting.time} • {meeting.deliberationForms.length} protocolo(s)
-                    </span>
-                  </div>
-                  <span className="material-symbols-outlined">{isExpanded ? 'expand_less' : 'expand_more'}</span>
-                </div>
-                {isExpanded && (
-                  <div style={{ marginTop: 'var(--space-2)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--outline-variant)' }}>
-                    {meeting.deliberationForms.map(df => (
-                      <div key={df.id} style={{ fontSize: '13px', padding: '6px 0', color: 'var(--on-surface-variant)' }}>
-                        <span style={{ fontWeight: 'var(--font-bold)', fontFamily: 'monospace' }}>
-                          {df.protocol?.code || `#${df.protocol_id}`}
-                        </span>
-                        {' — '}
-                        {df.protocol?.topic?.title || 'Sem título'}
-                      </div>
-                    ))}
-                    {meeting.notes && (
-                      <p style={{ fontStyle: 'italic', marginTop: 'var(--space-2)', color: 'var(--on-surface-variant)' }}>
-                        "{meeting.notes}"
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <section className="deliberation-meeting-list" aria-live="polite">
+          {visibleMeetings.length === 0 ? <EmptyState title="Sem reuniões neste estado" text="Os registos aparecerão aqui quando o fluxo avançar." /> : visibleMeetings.map(meeting => (
+            <MeetingCard key={meeting.id} meeting={meeting} currentTime={currentTime} onStart={() => void startMeeting(meeting)} starting={startingMeetingId === meeting.id} onEdit={() => openReschedule(meeting)} onCancel={() => setCancelling(meeting)} />
+          ))}
+        </section>
       )}
-    </div>
+
+      {editing && <Modal title="Reagendar reunião" onClose={() => setEditing(null)}><form onSubmit={reschedule} className="deliberation-modal-form"><Field label="Data e hora" id="reschedule-at"><input id="reschedule-at" type="datetime-local" min={toMaputoInput(new Date().toISOString())} value={scheduledAt} onChange={event => setScheduledAt(event.target.value)} required autoFocus /></Field><Field label="Local" id="reschedule-location"><input id="reschedule-location" value={location} onChange={event => setLocation(event.target.value)} required /></Field><Field label="Notas" id="reschedule-notes"><textarea id="reschedule-notes" value={notes} onChange={event => setNotes(event.target.value)} rows={3} /></Field><div className="secretary-modal-actions"><button type="button" className="btn btn-outline" onClick={() => setEditing(null)}>Voltar</button><button className="btn btn-primary" disabled={submitting}>{submitting ? 'A guardar...' : 'Guardar'}</button></div></form></Modal>}
+      {cancelling && <Modal title="Cancelar reunião" onClose={() => setCancelling(null)}><p>Os {cancelling.items.length} protocolos regressarão imediatamente à fila na posição original.</p><Field label="Motivo opcional" id="cancel-reason"><textarea id="cancel-reason" value={cancelReason} onChange={event => setCancelReason(event.target.value)} rows={3} autoFocus /></Field><div className="secretary-modal-actions"><button type="button" className="btn btn-outline" onClick={() => setCancelling(null)}>Manter reunião</button><button type="button" className="btn btn-danger" onClick={() => void cancelMeeting()} disabled={submitting}>{submitting ? 'A cancelar...' : 'Confirmar cancelamento'}</button></div></Modal>}
+    </main>
   )
 }
 
-const labelStyle: React.CSSProperties = { 
-  display: 'block', 
-  fontSize: 'var(--body-md)', 
-  fontWeight: 'var(--font-medium)', 
-  marginBottom: 'var(--space-1)' 
+function QueueRow({ item, position, checked, onToggle }: { item: DeliberationQueueEntry; position: number; checked: boolean; onToggle: () => void }) {
+  return <article className={`deliberation-queue-row${checked ? ' is-selected' : ''}`}><label className="deliberation-select"><input type="checkbox" checked={checked} onChange={onToggle} /><span className="deliberation-position" aria-label={`Posição ${position}`}>{position}</span></label><div className="deliberation-protocol"><strong>{item.protocol.code}</strong><span>{item.protocol.title || 'Sem tema registado'}</span><small>Na fila desde {formatDateTime(item.queue_entered_at)} · {item.waiting_days} dia(s)</small></div><div className="deliberation-reviewers">{item.reviewers.map(reviewer => <div key={reviewer.id} className="deliberation-reviewer"><span><strong>{reviewer.name}</strong>{reviewer.is_primary && <small>Principal</small>}</span><span className={reviewer.review_status === 'reviewed' ? 'is-reviewed' : 'is-pending'}>{reviewer.review_status === 'reviewed' ? 'Revisto' : 'Não revisto'}</span><small className={reviewer.overdue ? 'is-overdue' : ''}>{reviewerDeadline(reviewer)}</small></div>)}</div></article>
 }
 
-const inputStyle: React.CSSProperties = { 
-  width: '100%', 
-  padding: '10px 12px', 
-  border: '1px solid var(--outline-variant)', 
-  borderRadius: 'var(--radius-lg)', 
-  fontSize: 'var(--body-md)', 
-  fontFamily: 'var(--font-family)', 
-  background: 'var(--surface-container-lowest)', 
-  color: 'var(--on-surface)' 
+function MeetingCard({ meeting, currentTime, starting, onStart, onEdit, onCancel }: { meeting: DeliberationMeeting; currentTime: number; starting: boolean; onStart: () => void; onEdit: () => void; onCancel: () => void }) {
+  const canStart = new Date(meeting.scheduled_at).getTime() <= currentTime
+
+  return <article className="deliberation-meeting-card"><div className="deliberation-meeting-card__header"><div><span className="secretary-eyebrow">Reunião #{meeting.id}</span><h2>{formatDateTime(meeting.scheduled_at)}</h2><p><span className="material-symbols-outlined" aria-hidden="true">location_on</span>{meeting.location}</p></div><span className={`secretary-status-badge is-${meeting.status}`}>{meeting.status === 'scheduled' ? 'Agendada' : meeting.status === 'in_progress' ? 'Em andamento' : 'Concluída'}</span></div>{meeting.notes && <p className="deliberation-notes">{meeting.notes}</p>}<div className="deliberation-agenda-list">{meeting.items.map((item, index) => <div key={item.id}><span>{index + 1}</span><div><strong>{item.protocol.code}</strong><small>{item.protocol.title}</small></div><span className={`secretary-status-badge is-${item.status}`}>{item.status === 'scheduled' ? 'Agendado' : item.status === 'in_progress' ? 'Em deliberação' : item.status === 'deliberated' ? 'Deliberado' : 'Sem consenso'}</span></div>)}</div>{meeting.status === 'scheduled' && meeting.can_manage && <div className="deliberation-card-actions"><button className="btn btn-sm btn-primary" type="button" onClick={onStart} disabled={starting || !canStart}><span className="material-symbols-outlined" aria-hidden="true">play_circle</span>{starting ? 'A iniciar...' : canStart ? 'Iniciar reunião' : 'Aguardar horário'}</button><button className="btn btn-sm btn-outline" type="button" onClick={onEdit}><span className="material-symbols-outlined" aria-hidden="true">edit_calendar</span>Reagendar</button><button className="btn btn-sm btn-danger" type="button" onClick={onCancel}><span className="material-symbols-outlined" aria-hidden="true">event_busy</span>Cancelar</button></div>}</article>
 }
 
-function Loader() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <span style={{ width: '24px', height: '24px', border: '3px solid var(--outline-variant)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  )
-}
-
-function Alert({ type, children }: { type: 'error' | 'success'; children: React.ReactNode }) {
-  return (
-    <div style={{ 
-      padding: 'var(--space-2) var(--space-3)', 
-      marginBottom: 'var(--space-4)', 
-      borderRadius: 'var(--radius-lg)', 
-      background: type === 'error' ? 'var(--error-container)' : 'var(--primary-container)', 
-      color: type === 'error' ? 'var(--on-error-container)' : 'var(--on-primary-container)', 
-      fontSize: 'var(--body-md)', 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: 'var(--space-2)' 
-    }}>
-      <span className="material-symbols-outlined">{type === 'error' ? 'error' : 'check_circle'}</span>
-      {children}
-    </div>
-  )
-}
-
-function EmptyState({ message, icon }: { message: string; icon?: string }) {
-  return (
-    <div style={{ 
-      textAlign: 'center', 
-      padding: 'var(--space-5)', 
-      color: 'var(--on-surface-variant)', 
-      background: 'var(--surface-container-low)', 
-      borderRadius: 'var(--radius-xl)', 
-      border: '1px dashed var(--outline-variant)' 
-    }}>
-      <span className="material-symbols-outlined" style={{ fontSize: '48px', marginBottom: 'var(--space-2)', display: 'block' }}>
-        {icon || 'inbox'}
-      </span>
-      <p>{message}</p>
-    </div>
-  )
-}
+function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) { return <div className="secretary-field"><label htmlFor={id}>{label}</label>{children}</div> }
+function EmptyState({ title, text }: { title: string; text: string }) { return <div className="secretary-empty-state"><span className="material-symbols-outlined" aria-hidden="true">event_available</span><h2>{title}</h2><p>{text}</p></div> }
+function Loader() { return <div className="secretary-loading" role="status"><span className="secretary-spinner" />A carregar deliberações...</div> }
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) { return <div className="secretary-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><section className="secretary-modal" role="dialog" aria-modal="true" aria-labelledby="deliberation-modal-title"><header><h2 id="deliberation-modal-title">{title}</h2><button type="button" onClick={onClose} aria-label="Fechar"><span className="material-symbols-outlined" aria-hidden="true">close</span></button></header>{children}</section></div> }

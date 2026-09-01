@@ -1,23 +1,19 @@
 import { useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { menuRegistry } from '../registry/menuRegistry'
+import { canAccess } from '../access/accessControl'
 
 export function useMenu() {
-  const { permissions, roles } = useAuth()
+  const { activeRole, permissions, profiles } = useAuth()
 
   return useMemo(() => {
+    const context = { activeRole, permissions, profiles }
+
     return menuRegistry
-      .filter(item => {
-        if (!item.permission && !item.roles) return true  // dashboard
-        const hasPerm = item.permission ? permissions.includes(item.permission) : false
-        const hasRole = item.roles      ? item.roles.some(r => roles.includes(r)) : false
-        return hasPerm || hasRole
-      })
+      .filter(item => canAccess(context, item))
       .map(item => ({
         ...item,
-        children: (item.children ?? []).filter(c =>
-          !c.permission || permissions.includes(c.permission)
-        ),
+        children: (item.children ?? []).filter(child => canAccess(context, child)),
       }))
-  }, [permissions, roles])
+  }, [activeRole, permissions, profiles])
 }

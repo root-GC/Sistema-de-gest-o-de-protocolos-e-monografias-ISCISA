@@ -1,7 +1,7 @@
 // src/components/layout/Sidebar.tsx
 import { useState, useEffect } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-// @ts-ignore
+import { NavLink, useLocation } from 'react-router-dom'
+// @ts-expect-error useMenu is implemented in JavaScript.
 import { useMenu } from '../../hooks/useMenu'
 import { useAuth } from '../../context/AuthContext'
 import '../../styles/global.css'
@@ -93,14 +93,15 @@ const ICON_MAP: Record<string, string> = {
   'ti-chart-pie': 'pie_chart',
   'ti-home': 'home',
   
-  // 🆕 NOVOS ÍCONES ADICIONADOS
-  'ti-calendar-plus': 'calendar_add_on',    // 📅➕ Marcar Reunião
+  // Ícones adicionais usados nos módulos operacionais
+  'ti-calendar-plus': 'calendar_add_on',
   'ti-table': 'table',      
-  'ti-gavel': 'gavel',                  // 📊 Planilha de Protocolos
+  'ti-gavel': 'gavel',
   
   // Fallbacks por ID
-  'secretary_meeting': 'calendar_add_on',    // Marcar Reunião
-  'secretary_spreadsheet': 'table',          // Planilha de Protocolos
+  'secretary_spreadsheet': 'table',
+  'secretary_history': 'history',
+  'supervision_pending': 'fact_check',
   
   dashboard: 'dashboard',
   inicio: 'dashboard',
@@ -207,15 +208,6 @@ const ICON_MAP: Record<string, string> = {
   check_circle: 'check_circle',
 }
 
-// ============================================================
-// CONTEXTO
-// ============================================================
-interface SidebarContextType {
-  expanded: boolean
-  requestExpand: () => void
-}
-export const SidebarContext = { current: null as SidebarContextType | null }
-
 interface SidebarProps {
   expanded: boolean
   mobileOpen: boolean
@@ -228,22 +220,38 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
   const menu: MenuItem[] = useMenu()
   const { user, activeProfile, logout, loading: authLoading } = useAuth()
   const location = useLocation()
-  const navigate = useNavigate()
   const [expandedMenu, setExpandedMenu] = useState<Record<string, boolean>>({})
   const [loggingOut, setLoggingOut] = useState(false)
-  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
 
   const reallyExpanded = isMobile ? mobileOpen : expanded
-  SidebarContext.current = { expanded: reallyExpanded, requestExpand: onExpand }
 
   useEffect(() => {
     if (isMobile) onCloseMobile()
-  }, [location.pathname])
+  }, [isMobile, location.pathname, onCloseMobile])
 
-  // Reset navigating state when route changes
-  useEffect(() => {
-    setNavigatingTo(null)
-  }, [location.pathname])
+  function routePath(route?: string) {
+    return route?.split('?')[0] || '/'
+  }
+
+  function routeMatches(route?: string, id?: string) {
+    const path = routePath(route)
+
+    if (path === '/secretary/protocols') {
+      const currentStatus = new URLSearchParams(location.search).get('status')
+      if (id === 'secretary_history') return location.pathname === path && currentStatus === 'complete'
+      if (id === 'secretary_protocols') return location.pathname === path && currentStatus !== 'complete'
+    }
+
+    if (!route?.includes('?')) {
+      return location.pathname === path
+    }
+
+    const expectedParams = new URLSearchParams(route.split('?')[1])
+    const currentParams = new URLSearchParams(location.search)
+
+    return location.pathname === path
+      && [...expectedParams.entries()].every(([key, value]) => currentParams.get(key) === value)
+  }
 
   function toggleMenu(id: string) {
     if (!reallyExpanded && !isMobile) {
@@ -252,17 +260,6 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
       return
     }
     setExpandedMenu(prev => ({ ...prev, [id]: !prev[id] }))
-  }
-
-  function handleItemClick(route: string) {
-    setNavigatingTo(route)
-    if (!reallyExpanded && !isMobile) {
-      onExpand()
-      setTimeout(() => navigate(route), 150)
-    } else {
-      navigate(route)
-      if (isMobile) onCloseMobile()
-    }
   }
 
   async function handleLogout() {
@@ -337,11 +334,11 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
           <div style={{ minWidth: 0 }}>
             <h1 style={{
               fontSize: '20px', fontWeight: 'var(--font-bold)', color: 'var(--primary)',
-              letterSpacing: '-0.02em', lineHeight: 1.2
+              letterSpacing: '0', lineHeight: 1.2
             }}>ISCISA</h1>
             <p style={{
               fontSize: '10px', color: 'var(--on-surface-variant)',
-              textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 'var(--font-semibold)'
+              textTransform: 'uppercase', letterSpacing: '0', fontWeight: 'var(--font-semibold)'
             }}>Direção Científica</p>
           </div>
         )}
@@ -370,16 +367,18 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
         ) : (
           menu.map(item => {
             const iconName = ICON_MAP[item.id] || ICON_MAP[item.icon] || item.icon || 'circle'
-            const isNavigating = navigatingTo === item.route
 
             if (item.children && item.children.length > 0) {
-              const isActiveParent = item.children.some(child => location.pathname === child.route)
+              const isActiveParent = item.children.some(child => routeMatches(child.route))
+              const isMenuOpen = expandedMenu[item.id] ?? isActiveParent
 
               return (
                 <div key={item.id}>
                   <button
+                    type="button"
+                    className="sidebar-nav-button"
                     onClick={() => toggleMenu(item.id)}
-                    aria-expanded={!!expandedMenu[item.id]}
+                    aria-expanded={isMenuOpen}
                     title={!reallyExpanded ? item.label : undefined}
                     style={{
                       display: 'flex', alignItems: 'center',
@@ -391,7 +390,8 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
                       color: isActiveParent ? 'var(--primary)' : 'var(--on-surface-variant)',
                       fontSize: 'var(--body-md)',
                       fontWeight: isActiveParent ? 'var(--font-bold)' : 'var(--font-regular)',
-                      cursor: 'pointer', transition: 'all 0.2s',
+                      cursor: 'pointer',
+                      transition: 'background-color 150ms ease, color 150ms ease, border-color 150ms ease',
                       justifyContent: reallyExpanded ? 'space-between' : 'center',
                       textAlign: 'left'
                     }}
@@ -402,7 +402,7 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
                         <span style={{ flex: 1 }}>{item.label}</span>
                         <span className="material-symbols-outlined" style={{
                           fontSize: '18px', transition: 'transform 0.2s ease',
-                          transform: expandedMenu[item.id] ? 'rotate(180deg)' : 'rotate(0deg)'
+                          transform: isMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)'
                         }}>expand_more</span>
                       </>
                     )}
@@ -410,33 +410,22 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
 
                   {reallyExpanded && (
                     <div style={{
-                      maxHeight: expandedMenu[item.id] ? '500px' : '0', overflow: 'hidden',
+                      maxHeight: isMenuOpen ? '500px' : '0', overflow: 'hidden',
                       transition: 'max-height 0.25s ease', paddingLeft: 'var(--space-4)'
                     }}>
                       {item.children.map(child => {
-                        const childNavigating = navigatingTo === child.route
                         return (
-                          <NavLink key={child.route} to={child.route} onClick={onCloseMobile} style={{
+                          <NavLink key={child.route} to={child.route} className="sidebar-nav-link" onClick={() => {
+                            if (isMobile) onCloseMobile()
+                          }} style={{
                             display: 'flex', alignItems: 'center', gap: 'var(--space-1)',
                             padding: '8px var(--space-2)', borderRadius: 'var(--radius-lg)',
                             fontSize: 'var(--body-md)', textDecoration: 'none',
-                            color: location.pathname === child.route ? 'var(--primary)' : 'var(--on-surface-variant)',
-                            fontWeight: location.pathname === child.route ? 'var(--font-semibold)' : 'var(--font-regular)',
-                            background: location.pathname === child.route ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-                            transition: 'all 0.2s', marginTop: '2px',
-                            pointerEvents: childNavigating ? 'none' : 'auto',
-                            opacity: childNavigating ? 0.7 : 1
+                            color: routeMatches(child.route) ? 'var(--primary)' : 'var(--on-surface-variant)',
+                            fontWeight: routeMatches(child.route) ? 'var(--font-semibold)' : 'var(--font-regular)',
+                            background: routeMatches(child.route) ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
+                            transition: 'background-color 150ms ease, color 150ms ease, opacity 150ms ease', marginTop: '2px'
                           }}>
-                            {childNavigating && (
-                              <span style={{
-                                width: '12px', height: '12px',
-                                border: '2px solid var(--primary)',
-                                borderTopColor: 'transparent',
-                                borderRadius: '50%',
-                                animation: 'spin 0.6s linear infinite',
-                                flexShrink: 0
-                              }} />
-                            )}
                             {child.label}
                           </NavLink>
                         )
@@ -447,11 +436,16 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
               )
             }
 
-            const active = location.pathname === (item.route || '/')
+            const itemRoute = item.route || '/'
+            const active = routeMatches(itemRoute, item.id)
             return (
-              <div
+              <NavLink
                 key={item.id}
-                onClick={() => handleItemClick(item.route || '/')}
+                to={itemRoute}
+                className="sidebar-nav-link"
+                onClick={() => {
+                  if (isMobile) onCloseMobile()
+                }}
                 title={!reallyExpanded ? item.label : undefined}
                 style={{
                   display: 'flex', alignItems: 'center',
@@ -463,27 +457,14 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
                   fontWeight: active ? 'var(--font-bold)' : 'var(--font-regular)',
                   background: active ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
                   borderRight: active && reallyExpanded ? '3px solid var(--primary)' : '3px solid transparent',
-                  transition: 'all 0.2s',
+                  transition: 'background-color 150ms ease, color 150ms ease, border-color 150ms ease, opacity 150ms ease',
                   justifyContent: reallyExpanded ? 'flex-start' : 'center',
-                  cursor: isNavigating ? 'wait' : 'pointer',
-                  opacity: isNavigating ? 0.7 : 1,
-                  pointerEvents: isNavigating ? 'none' : 'auto'
+                  cursor: 'pointer'
                 }}
               >
-                {isNavigating ? (
-                  <span style={{
-                    width: '20px', height: '20px',
-                    border: '2px solid var(--primary)',
-                    borderTopColor: 'transparent',
-                    borderRadius: '50%',
-                    animation: 'spin 0.6s linear infinite',
-                    flexShrink: 0
-                  }} />
-                ) : (
-                  <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{iconName}</span>
-                )}
+                <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{iconName}</span>
                 {reallyExpanded && <span>{item.label}</span>}
-              </div>
+              </NavLink>
             )
           })
         )}
@@ -506,33 +487,10 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
           </div>
         ) : reallyExpanded ? (
           <>
-            <div style={{ borderTop: '1px solid var(--outline-variant)', paddingTop: 'var(--space-2)' }}>
-              <div onClick={() => handleItemClick('/settings')} style={{
-                display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px var(--space-2)',
-                borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', cursor: 'pointer',
-                color: location.pathname === '/settings' ? 'var(--primary)' : 'var(--on-surface-variant)',
-                fontWeight: location.pathname === '/settings' ? 'var(--font-bold)' : 'var(--font-regular)',
-                background: location.pathname === '/settings' ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-                transition: 'all 0.2s'
-              }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>settings</span>
-                <span>Configurações</span>
-              </div>
-              <div onClick={() => handleItemClick('/help')} style={{
-                display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px var(--space-2)',
-                borderRadius: 'var(--radius-lg)', fontSize: 'var(--body-md)', cursor: 'pointer',
-                color: location.pathname === '/help' ? 'var(--primary)' : 'var(--on-surface-variant)',
-                fontWeight: location.pathname === '/help' ? 'var(--font-bold)' : 'var(--font-regular)',
-                background: location.pathname === '/help' ? 'rgba(0, 105, 51, 0.08)' : 'transparent',
-                transition: 'all 0.2s'
-              }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>help</span>
-                <span>Suporte</span>
-              </div>
-            </div>
             {/* Perfil */}
             <div style={{
               marginTop: 'var(--space-2)', marginBottom: 'var(--space-2)', padding: 'var(--space-2)',
+              borderTop: '1px solid var(--outline-variant)',
               background: 'var(--surface-container-highest)', borderRadius: 'var(--radius-xl)',
               display: 'flex', alignItems: 'center', gap: 'var(--space-1)'
             }}>
@@ -565,7 +523,7 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
                   cursor: loggingOut ? 'not-allowed' : 'pointer',
                   padding: '6px', borderRadius: 'var(--radius-md)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all 0.2s',
+                  transition: 'color 150ms ease, opacity 150ms ease, background-color 150ms ease',
                   opacity: loggingOut ? 0.6 : 1,
                   position: 'relative'
                 }}
@@ -591,18 +549,6 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)',
             padding: 'var(--space-2) 0', borderTop: '1px solid var(--outline-variant)'
           }}>
-            <div onClick={() => handleItemClick('/settings')} title="Configurações" style={{
-              color: location.pathname === '/settings' ? 'var(--primary)' : 'var(--on-surface-variant)',
-              padding: '6px', borderRadius: 'var(--radius-md)', cursor: 'pointer'
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>settings</span>
-            </div>
-            <div onClick={() => handleItemClick('/help')} title="Suporte" style={{
-              color: location.pathname === '/help' ? 'var(--primary)' : 'var(--on-surface-variant)',
-              padding: '6px', borderRadius: 'var(--radius-md)', cursor: 'pointer'
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>help</span>
-            </div>
             <div style={{
               width: '32px', height: '32px', borderRadius: 'var(--radius-full)',
               background: 'var(--primary)', color: 'var(--on-primary)',
@@ -612,6 +558,7 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
             <button
               onClick={handleLogout}
               disabled={loggingOut}
+              aria-label="Terminar sessão"
               title="Terminar sessão"
               style={{
                 background: 'none', border: 'none',
@@ -619,7 +566,7 @@ export function Sidebar({ expanded, mobileOpen, onCloseMobile, onExpand, isMobil
                 cursor: loggingOut ? 'not-allowed' : 'pointer',
                 padding: '4px', borderRadius: 'var(--radius-md)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.2s',
+                transition: 'color 150ms ease, opacity 150ms ease, background-color 150ms ease',
                 opacity: loggingOut ? 0.6 : 1,
                 position: 'relative'
               }}

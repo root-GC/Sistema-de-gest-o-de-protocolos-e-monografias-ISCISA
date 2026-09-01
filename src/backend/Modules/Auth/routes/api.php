@@ -18,6 +18,7 @@ use Modules\Auth\app\Http\Controllers\Admin\AdminUserController;
 use Modules\Auth\app\Http\Controllers\Admin\AdminOrganController;
 use Modules\Auth\app\Http\Controllers\Admin\AdminCoordinatorController;
 use Modules\Auth\app\Http\Controllers\Admin\AdminSecretaryController;
+use Modules\Auth\app\Http\Controllers\Admin\GeneralAdminDashboardController;
 use Modules\Auth\app\Http\Controllers\Admin\AdminTeacherController;
 use Modules\Auth\app\Http\Controllers\Admin\RoleController;
 use Modules\Auth\app\Http\Controllers\Admin\PermissionController;
@@ -77,6 +78,8 @@ Route::prefix('auth')->name('auth.')->group(function () {
 
 // ── Admin Técnico / Executivo ────────────────────────────────────────────
 Route::prefix('api/v1')->middleware(['auth:sanctum'])->group(function () {
+
+    Route::get('general-admin/dashboard', [GeneralAdminDashboardController::class, 'index'])->name('general-admin.dashboard');
 
     // 🆕 Rotas específicas PRIMEIRO
     // ⚠️ AdminUserController::invite() já não existe — foi absorvido pelo

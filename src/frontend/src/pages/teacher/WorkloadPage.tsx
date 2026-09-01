@@ -1,5 +1,5 @@
 // src/pages/WorkloadPage.tsx
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { supervisorService, type Supervisee } from '../../services/supervisorService'
 import { topicService, type Topic } from '../../services/topicService'
@@ -12,7 +12,7 @@ import '../../styles/global.css'
 // COMPONENTE
 // ============================================================
 export default function WorkloadPage() {
-  const { permissions } = useAuth()
+  const { roles } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,16 +25,16 @@ export default function WorkloadPage() {
   // Reviewer
   const [pendingEvaluations, setPendingEvaluations] = useState<EvaluationForm[]>([])
   const [completedEvaluations, setCompletedEvaluations] = useState<EvaluationForm[]>([])
-  const [upcomingMeetings, setUpcomingMeetings] = useState<any[]>([])
 
-  const isSupervisor = permissions.includes('supervision.view')
-  const isReviewer = permissions.includes('protocol.evaluate')
+  const isSupervisor = roles.includes('supervisor')
+  const isReviewer = roles.includes('reviewer')
+  const isTeacher = roles.includes('teacher')
+  const responsibilityLabel = [isTeacher && 'Docente', isSupervisor && 'Supervisor', isReviewer && 'Revisor']
+    .filter(Boolean)
+    .join(' · ')
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    await Promise.resolve()
     setLoading(true)
     setError(null)
     try {
@@ -53,14 +53,14 @@ export default function WorkloadPage() {
           (async () => {
             const data = await protocolService.listForSupervisor()
             setPendingProtocols((data.protocols || []).filter(p =>
-              p.status === 'protocol_pending_supervisor' || p.status === 'protocol_submitted'
+              p.status === 'protocol_pending_supervisor'
             ))
           })(),
           (async () => {
             try {
               const data = await monographService.list()
               setPendingMonographs((data.monographs || []).filter(m =>
-                m.status === 'monograph_pending_supervisor' || m.status === 'monograph_submitted'
+                m.status === 'submetida'
               ))
             } catch { setPendingMonographs([]) }
           })()
@@ -71,7 +71,7 @@ export default function WorkloadPage() {
         promises.push(
           (async () => {
             try {
-              const data = await evaluationService.listForReviewer()
+              const data = await evaluationService.listForReviewerAcrossCommittees()
               const forms = data.evaluation_forms || []
               setPendingEvaluations(
                 forms.filter(f => {
@@ -92,27 +92,6 @@ export default function WorkloadPage() {
               setPendingEvaluations([])
               setCompletedEvaluations([])
             }
-          })(),
-          (async () => {
-            try {
-              // Mock de reuniões - substituir por endpoint real quando disponível
-              setUpcomingMeetings([
-                {
-                  id: 1,
-                  title: 'Reunião do Núcleo de Investigação',
-                  description: 'Discussão de protocolos pendentes',
-                  date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-                  time: '14:00',
-                },
-                {
-                  id: 2,
-                  title: 'Sessão de Avaliação',
-                  description: 'Revisão de pareceres e fichas de avaliação',
-                  date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-                  time: '10:00',
-                },
-              ])
-            } catch { setUpcomingMeetings([]) }
           })()
         )
       }
@@ -123,7 +102,15 @@ export default function WorkloadPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [isReviewer, isSupervisor])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadData()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [loadData])
 
   if (loading) {
     return (
@@ -146,9 +133,7 @@ export default function WorkloadPage() {
   const totalPending = pendingTopics.length + pendingProtocols.length + pendingMonographs.length
 
   return (
-    <div style={{
-      width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)'
-    }}>
+    <main className="teacher-workspace teacher-workspace--workload">
 
       {/* Cabeçalho */}
       <div style={{
@@ -173,7 +158,7 @@ export default function WorkloadPage() {
           fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)'
         }}>
           <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>badge</span>
-          {isSupervisor && isReviewer ? 'Supervisor & Revisor' : isSupervisor ? 'Supervisor' : isReviewer ? 'Revisor' : 'Utilizador'}
+          {responsibilityLabel || 'Utilizador'}
         </div>
       </div>
 
@@ -194,11 +179,7 @@ export default function WorkloadPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
 
           {/* Cards de resumo */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 'var(--space-3)'
-          }}>
+          <div className="teacher-summary-grid">
             <SummaryCard
               icon="groups"
               label="Supervisionandos"
@@ -343,11 +324,7 @@ export default function WorkloadPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           
           {/* Cards de resumo do revisor */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 'var(--space-3)'
-          }}>
+          <div className="teacher-summary-grid">
             <SummaryCard
               icon="rate_review"
               label="Avaliações pendentes"
@@ -362,13 +339,6 @@ export default function WorkloadPage() {
               value={completedEvaluations.length}
               color="var(--primary)"
               bg="var(--primary-container)"
-            />
-            <SummaryCard
-              icon="event"
-              label="Reuniões agendadas"
-              value={upcomingMeetings.length}
-              color="var(--secondary)"
-              bg="var(--secondary-container)"
             />
             <SummaryCard
               icon="trending_up"
@@ -425,46 +395,6 @@ export default function WorkloadPage() {
             </div>
           )}
 
-          {/* Reuniões */}
-          {upcomingMeetings.length > 0 && (
-            <div className="card" style={{ padding: 'var(--space-4)' }}>
-              <h3 style={{
-                fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)',
-                marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)'
-              }}>
-                <span className="material-symbols-outlined" style={{ color: 'var(--secondary)' }}>event_upcoming</span>
-                Próximas reuniões
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                {upcomingMeetings.map((meeting, i) => (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-                    padding: '12px 16px', background: 'var(--surface-container-low)',
-                    borderRadius: 'var(--radius-lg)'
-                  }}>
-                    <div style={{
-                      width: '40px', height: '40px', borderRadius: 'var(--radius-lg)',
-                      background: 'var(--secondary-container)', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                    }}>
-                      <span className="material-symbols-outlined" style={{ color: 'var(--secondary)', fontSize: '20px' }}>event</span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontWeight: 'var(--font-semibold)', margin: 0 }}>{meeting.title || 'Reunião'}</p>
-                      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>{meeting.description || ''}</p>
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <p style={{ fontWeight: 'var(--font-semibold)', fontSize: 'var(--body-md)', color: 'var(--secondary)' }}>
-                        {meeting.date ? new Date(meeting.date).toLocaleDateString('pt-MZ') : ''}
-                      </p>
-                      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>{meeting.time || ''}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Últimas avaliações concluídas */}
           {completedEvaluations.length > 0 && (
             <div className="card" style={{ padding: 'var(--space-4)' }}>
@@ -498,14 +428,14 @@ export default function WorkloadPage() {
             </div>
           )}
 
-          {pendingEvaluations.length === 0 && upcomingMeetings.length === 0 && (
+          {pendingEvaluations.length === 0 && (
             <EmptyState icon="celebration" message="Sem tarefas pendentes. Bom trabalho!" />
           )}
         </div>
       )}
 
       {!isSupervisor && !isReviewer && (
-        <EmptyState icon="work" message="Sem responsabilidades de supervisão ou revisão atribuídas." />
+        <EmptyState icon="work" message="Ainda não existem responsabilidades de supervisão ou revisão atribuídas." />
       )}
 
       <style>{`
@@ -515,7 +445,7 @@ export default function WorkloadPage() {
           50% { opacity: 0.8; }
         }
       `}</style>
-    </div>
+    </main>
   )
 }
 
@@ -533,14 +463,7 @@ function SummaryCard({ icon, label, value, color, bg, urgent, detail }: {
   detail?: string
 }) {
   return (
-    <div style={{
-      padding: 'var(--space-4)',
-      background: 'var(--surface-container-lowest)',
-      borderRadius: 'var(--radius-xl)',
-      border: `1px solid ${urgent ? color : 'var(--outline-variant)'}`,
-      display: 'flex', flexDirection: 'column', gap: 'var(--space-2)',
-      position: 'relative', overflow: 'hidden'
-    }}>
+    <div className="teacher-summary-card" style={{ borderColor: urgent ? color : undefined }}>
       {urgent && (
         <div style={{
           position: 'absolute', top: 0, right: 0,
@@ -549,28 +472,10 @@ function SummaryCard({ icon, label, value, color, bg, urgent, detail }: {
           animation: 'pulse 2s infinite'
         }} />
       )}
-      <div style={{
-        width: '44px', height: '44px', borderRadius: 'var(--radius-lg)',
-        background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center'
-      }}>
-        <span className="material-symbols-outlined" style={{ color, fontSize: '24px' }}>{icon}</span>
-      </div>
-      <div>
-        <p style={{
-          fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)',
-          color: 'var(--on-surface)', lineHeight: 1, margin: 0
-        }}>
-          {value}
-        </p>
-        <p style={{ fontSize: 'var(--label-md)', color: 'var(--on-surface-variant)', margin: '4px 0 0' }}>
-          {label}
-        </p>
-        {detail && (
-          <p style={{ fontSize: 'var(--label-sm)', color: 'var(--outline)', margin: '2px 0 0' }}>
-            {detail}
-          </p>
-        )}
-      </div>
+      <span className="material-symbols-outlined" aria-hidden="true" style={{ color, background: bg, borderRadius: 'var(--radius-md)', padding: '4px' }}>{icon}</span>
+      <span className="teacher-summary-card__label">{label}</span>
+      <strong className="teacher-summary-card__value">{value}</strong>
+      {detail && <span className="teacher-summary-card__detail">{detail}</span>}
     </div>
   )
 }

@@ -1,47 +1,55 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createApiFileObjectUrl, downloadApiFile } from '../services/apiClient'
 
 interface PdfPreviewModalProps {
   url: string
   title: string
   filename?: string
+  closeLabel?: string
   onClose: () => void
 }
 
-export default function PdfPreviewModal({ url, title, filename, onClose }: PdfPreviewModalProps) {
+export default function PdfPreviewModal({ url, title, filename, closeLabel = 'Fechar', onClose }: PdfPreviewModalProps) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [resolvedFilename, setResolvedFilename] = useState(filename || 'documento.pdf')
+  const [mimeType, setMimeType] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const previewRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     let cancelled = false
     let revokeObjectUrl: (() => void) | null = null
 
-    setLoading(true)
-    setError(null)
-    setObjectUrl(null)
+    const requestId = window.setTimeout(() => {
+      setLoading(true)
+      setError(null)
+      setObjectUrl(null)
+      setMimeType('')
 
-    createApiFileObjectUrl(url, filename, true)
-      .then(file => {
-        if (cancelled) {
-          file.revoke()
-          return
-        }
+      createApiFileObjectUrl(url, filename, true)
+        .then(file => {
+          if (cancelled) {
+            file.revoke()
+            return
+          }
 
-        revokeObjectUrl = file.revoke
-        setObjectUrl(file.objectUrl)
-        setResolvedFilename(file.filename)
-      })
-      .catch(e => {
-        if (!cancelled) setError((e as Error).message)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+          revokeObjectUrl = file.revoke
+          setObjectUrl(file.objectUrl)
+          setResolvedFilename(file.filename)
+          setMimeType(file.mimeType)
+        })
+        .catch(e => {
+          if (!cancelled) setError((e as Error).message)
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }, 0)
 
     return () => {
       cancelled = true
+      window.clearTimeout(requestId)
       revokeObjectUrl?.()
     }
   }, [url, filename])
@@ -62,6 +70,15 @@ export default function PdfPreviewModal({ url, title, filename, onClose }: PdfPr
       setError((e as Error).message)
     }
   }
+
+  function handlePrint() {
+    previewRef.current?.contentWindow?.print()
+  }
+
+  const extension = resolvedFilename.split('.').pop()?.toLowerCase() || ''
+  const isPdf = mimeType === 'application/pdf' || extension === 'pdf'
+  const isImage = mimeType.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(extension)
+  const isPreviewable = isPdf || isImage
 
   return (
     <div
@@ -126,9 +143,15 @@ export default function PdfPreviewModal({ url, title, filename, onClose }: PdfPr
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
               Baixar
             </button>
+            {objectUrl && isPdf && (
+              <button type="button" onClick={handlePrint} className="btn btn-small">
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>print</span>
+                Imprimir
+              </button>
+            )}
             <button type="button" onClick={onClose} className="btn btn-small">
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
-              Fechar
+              {closeLabel}
             </button>
           </div>
         </div>
@@ -146,8 +169,9 @@ export default function PdfPreviewModal({ url, title, filename, onClose }: PdfPr
             </div>
           )}
 
-          {!loading && objectUrl && !error && (
+          {!loading && objectUrl && !error && isPreviewable && (
             <iframe
+              ref={previewRef}
               title={title}
               src={objectUrl}
               style={{
@@ -157,6 +181,23 @@ export default function PdfPreviewModal({ url, title, filename, onClose }: PdfPr
                 background: 'white'
               }}
             />
+          )}
+
+          {!loading && objectUrl && !error && !isPreviewable && (
+            <div style={{
+              display: 'grid',
+              height: '100%',
+              placeItems: 'center',
+              padding: 'var(--space-4)',
+              color: 'var(--on-surface-variant)',
+              textAlign: 'center',
+            }}>
+              <div>
+                <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: '42px', color: 'var(--primary)' }}>description</span>
+                <p style={{ marginTop: 'var(--space-2)', color: 'var(--on-surface)', fontWeight: 'var(--font-semibold)' }}>Este formato não tem pré-visualização disponível.</p>
+                <p style={{ marginTop: '6px' }}>Use “Baixar” para abrir o ficheiro na aplicação apropriada.</p>
+              </div>
+            </div>
           )}
         </div>
       </div>
