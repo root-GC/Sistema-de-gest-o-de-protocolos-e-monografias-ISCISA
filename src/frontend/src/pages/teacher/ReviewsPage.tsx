@@ -18,7 +18,7 @@ type ReviewItem = {
   assignedAt?: string | null
   completedAt?: string | null
   complete: boolean
-  daysRemaining?: number
+  daysRemaining?: number | null
   overdue?: boolean
   href: string
   protocol?: Protocol
@@ -227,7 +227,7 @@ export default function ReviewsPage() {
                   <span><span className="material-symbols-outlined" aria-hidden="true">event</span>Atribuída: {formatDate(item.assignedAt)}</span>
                   <span><span className="material-symbols-outlined" aria-hidden="true">schedule</span>{durationLabel(item.assignedAt, item.complete ? item.completedAt : null)}</span>
                   {!item.complete && item.type === 'protocols' && item.daysRemaining !== undefined && (
-                    <span className={item.overdue ? 'is-overdue' : ''}><span className="material-symbols-outlined" aria-hidden="true">timer</span>{item.overdue ? `Atrasado há ${Math.abs(item.daysRemaining)} dia(s)` : item.daysRemaining === 0 ? 'Prazo termina hoje' : `${item.daysRemaining} dia(s) restante(s)`}</span>
+                    <span className={item.overdue ? 'is-overdue' : ''}><span className="material-symbols-outlined" aria-hidden="true">timer</span>{item.daysRemaining === null ? 'Prazo começa após o encerramento da reunião' : item.overdue ? `Atrasado há ${Math.abs(item.daysRemaining)} dia(s)` : item.daysRemaining === 0 ? 'Prazo termina hoje' : `${item.daysRemaining} dia(s) restante(s)`}</span>
                   )}
                 </div>
               </div>

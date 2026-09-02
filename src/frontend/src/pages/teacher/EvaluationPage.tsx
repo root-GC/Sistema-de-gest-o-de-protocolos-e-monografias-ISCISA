@@ -349,11 +349,10 @@ export default function EvaluationPage() {
       const uid = user?.id ? Number(user.id) : null
       const me = evals.find(re => uid !== null && re.reviewer?.user?.id === uid)
       const concluded = formData.status === 'concluded'
-      const isDeliberation = formData.status === 'deliberation_pending' || formData.status === 'deliberation_scheduled' || formData.status === 'in_deliberation'
       const mySubmitted = isReviewerDone(me?.status, me?.is_evaluated)
 
       setFormConcluded(concluded)
-      setMyEvaluationSubmitted(mySubmitted || isDeliberation) // Em deliberação, considera como submetido
+      setMyEvaluationSubmitted(mySubmitted)
 
       // 5. Resetar campos
       setRecommendation('')
@@ -409,7 +408,7 @@ export default function EvaluationPage() {
 
   async function handleSaveCriterionReview(fcId: number) {
     if (!evaluationForm) return
-    if (myEvaluationSubmitted && evaluationForm.status !== 'in_deliberation') return
+    if (myEvaluationSubmitted && !['in_deliberation', 'deliberated'].includes(evaluationForm.status)) return
     if (formConcluded) return
     try {
       await evaluationService.saveCriterionReview(evaluationForm.id, fcId, criterionReviews[fcId] || null, organForEvaluation(evaluationForm))
@@ -487,15 +486,13 @@ export default function EvaluationPage() {
     const finalProtocolDecision = evaluationForm?.final_decision
     const isBioeticaForm = isBioeticaEvaluation(evaluationForm)
     const isSharedCommitteeForm = isSharedCommitteeEvaluation(evaluationForm)
-    const isPrimaryReviewer = Boolean(evaluationForm?.is_primary_reviewer)
     const canAccessForm = !isBioeticaForm || Boolean(evaluationForm?.can_access_form)
     const state = getEvaluationState(evaluationForm, myEvaluationSubmitted, isSharedCommitteeForm)
     const isInDeliberation = evaluationForm?.status === 'in_deliberation'
     const isReadyForFinalDecision = evaluationForm?.status === 'deliberated'
-    const canEdit = !formConcluded && canAccessForm && (!myEvaluationSubmitted || isInDeliberation)
+    const canEdit = !formConcluded && canAccessForm && (isInDeliberation || isReadyForFinalDecision)
     const canShowCriteria = !!evaluationForm && canAccessForm && (!isSharedCommitteeForm || isInDeliberation || evaluationForm.status === 'deliberated' || formConcluded)
-    const shouldShowInitialSubmission = !!evaluationForm && !formConcluded && !myEvaluationSubmitted && !isInDeliberation
-    const canStartOrSubmitDeliberation = !isBioeticaForm || isPrimaryReviewer
+    const shouldShowInitialSubmission = !!evaluationForm && !formConcluded && !myEvaluationSubmitted && !isReadyForFinalDecision
     const protocolCode = protocol.code || `ISC-P-${id}`
     const docFileName = protocol.latest_document?.file_name || `${protocolCode}.docx`
 
@@ -653,7 +650,7 @@ export default function EvaluationPage() {
                   <span className="material-symbols-outlined">groups</span>
                   <div>
                     <strong>Em Deliberação</strong>
-                    <p>Os comentários são partilhados. Editem em conjunto e submetam a decisão final.</p>
+                    <p>A ficha está editável para preparação. A decisão final fica disponível após a Secretaria registar consenso.</p>
                   </div>
                 </div>
               )}
@@ -697,7 +694,7 @@ export default function EvaluationPage() {
 	                  <h3><span className="material-symbols-outlined">rate_review</span>Revisão prévia</h3>
 	                  <div className="eval-state-description">
 	                    <span className="material-symbols-outlined">edit_document</span>
-	                    <p>Revise o documento no OnlyOffice com track changes e marque esta etapa como avaliada. A ficha do {committeeLabel(evaluationForm)} só fica disponível na deliberação{isBioeticaForm ? ' e apenas ao revisor principal.' : '.'}</p>
+	                    <p>Revise o documento no OnlyOffice com track changes e registe a sua avaliação. A ficha fica disponível quando a Secretaria iniciar a reunião.</p>
 	                  </div>
                   <div className="eval-field">
                     <label>Observação da revisão</label>
@@ -779,7 +776,7 @@ export default function EvaluationPage() {
                   )}
 
                   {/* ── Decisão final após a deliberação ── */}
-	                  {isReadyForFinalDecision && canStartOrSubmitDeliberation && (
+	                  {isReadyForFinalDecision && canAccessForm && (
 	                    <div className="eval-recommendation-section">
 	                      <h3><span className="material-symbols-outlined">gavel</span>Decisão Final da Deliberação</h3>
                       <div className="eval-field"><label>Resumo da deliberação</label><textarea value={deliberationSummary} onChange={e => setDeliberationSummary(e.target.value)} placeholder="Resumo da discussão..." rows={3} className="criterion-textarea" /></div>

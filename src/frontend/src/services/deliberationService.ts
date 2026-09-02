@@ -10,8 +10,8 @@ export interface DeliberationReviewer {
   is_primary: boolean
   is_me?: boolean
   assigned_at: string
-  due_at: string
-  days_remaining: number
+  due_at: string | null
+  days_remaining: number | null
   overdue: boolean
   review_status: 'reviewed' | 'not_reviewed'
   submitted_at?: string | null
@@ -46,7 +46,7 @@ export interface DeliberationMeetingItem {
   protocol: DeliberationProtocol
   form_status: string
   reviewers: DeliberationReviewer[]
-  can_operate: boolean
+  can_record_result: boolean
 }
 
 export interface DeliberationMeeting {
@@ -62,6 +62,8 @@ export interface DeliberationMeeting {
   cancelled_at?: string | null
   cancellation_reason?: string | null
   can_manage: boolean
+  can_start: boolean
+  can_complete: boolean
   items: DeliberationMeetingItem[]
 }
 
@@ -114,6 +116,12 @@ export const deliberationService = {
 
   closeItem: (meetingId: number, itemId: number, result: 'deliberated' | 'not_deliberated') =>
     req('POST', `/api/v1/deliberation-meetings/${meetingId}/items/${itemId}/close`, { result }) as Promise<{
+      message: string
+      meeting: DeliberationMeeting
+    }>,
+
+  completeMeeting: (meetingId: number) =>
+    req('POST', `/api/v1/deliberation-meetings/${meetingId}/complete`) as Promise<{
       message: string
       meeting: DeliberationMeeting
     }>,

@@ -55,6 +55,7 @@ Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () 
     Route::get('deliberation-meetings/{meeting}', [DeliberationMeetingController::class, 'show']);
     Route::patch('deliberation-meetings/{meeting}', [DeliberationMeetingController::class, 'update']);
     Route::post('deliberation-meetings/{meeting}/start', [DeliberationMeetingController::class, 'start']);
+    Route::post('deliberation-meetings/{meeting}/complete', [DeliberationMeetingController::class, 'complete']);
     Route::post('deliberation-meetings/{meeting}/cancel', [DeliberationMeetingController::class, 'cancel']);
     Route::post('deliberation-meetings/{meeting}/items/{item}/close', [DeliberationMeetingController::class, 'closeItem']);
     Route::get('agenda/events', [AgendaController::class, 'index']);

@@ -53,6 +53,8 @@ export default function MeetingPage() {
   const [cancelling, setCancelling] = useState<DeliberationMeeting | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [startingMeetingId, setStartingMeetingId] = useState<number | null>(null)
+  const [recordingItemId, setRecordingItemId] = useState<number | null>(null)
+  const [completing, setCompleting] = useState<DeliberationMeeting | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -201,6 +203,37 @@ export default function MeetingPage() {
     }
   }
 
+  async function recordResult(meeting: DeliberationMeeting, itemId: number, result: 'deliberated' | 'not_deliberated') {
+    setRecordingItemId(itemId)
+    setError(null)
+    try {
+      const response = await deliberationService.closeItem(meeting.id, itemId, result)
+      setMessage(response.message)
+      await loadData()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível registar o resultado do protocolo.')
+    } finally {
+      setRecordingItemId(null)
+    }
+  }
+
+  async function completeMeeting() {
+    if (!completing) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const response = await deliberationService.completeMeeting(completing.id)
+      setMessage(response.message)
+      setCompleting(null)
+      changeTab('completed')
+      await loadData()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível encerrar a reunião.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   if (!isCommittee) {
     return <main className="secretary-workspace"><EmptyState title="Deliberações indisponíveis" text="Os Núcleos tratam apenas de temas. As reuniões de protocolos pertencem aos comités." /></main>
   }
@@ -263,13 +296,14 @@ export default function MeetingPage() {
       ) : (
         <section className="deliberation-meeting-list" aria-live="polite">
           {visibleMeetings.length === 0 ? <EmptyState title="Sem reuniões neste estado" text="Os registos aparecerão aqui quando o fluxo avançar." /> : visibleMeetings.map(meeting => (
-            <MeetingCard key={meeting.id} meeting={meeting} currentTime={currentTime} onStart={() => void startMeeting(meeting)} starting={startingMeetingId === meeting.id} onEdit={() => openReschedule(meeting)} onCancel={() => setCancelling(meeting)} />
+            <MeetingCard key={meeting.id} meeting={meeting} currentTime={currentTime} onStart={() => void startMeeting(meeting)} starting={startingMeetingId === meeting.id} onEdit={() => openReschedule(meeting)} onCancel={() => setCancelling(meeting)} onRecordResult={(itemId, result) => void recordResult(meeting, itemId, result)} recordingItemId={recordingItemId} onComplete={() => setCompleting(meeting)} />
           ))}
         </section>
       )}
 
       {editing && <Modal title="Reagendar reunião" onClose={() => setEditing(null)}><form onSubmit={reschedule} className="deliberation-modal-form"><Field label="Data e hora" id="reschedule-at"><input id="reschedule-at" type="datetime-local" min={toMaputoInput(new Date().toISOString())} value={scheduledAt} onChange={event => setScheduledAt(event.target.value)} required autoFocus /></Field><Field label="Local" id="reschedule-location"><input id="reschedule-location" value={location} onChange={event => setLocation(event.target.value)} required /></Field><Field label="Notas" id="reschedule-notes"><textarea id="reschedule-notes" value={notes} onChange={event => setNotes(event.target.value)} rows={3} /></Field><div className="secretary-modal-actions"><button type="button" className="btn btn-outline" onClick={() => setEditing(null)}>Voltar</button><button className="btn btn-primary" disabled={submitting}>{submitting ? 'A guardar...' : 'Guardar'}</button></div></form></Modal>}
       {cancelling && <Modal title="Cancelar reunião" onClose={() => setCancelling(null)}><p>Os {cancelling.items.length} protocolos regressarão imediatamente à fila na posição original.</p><Field label="Motivo opcional" id="cancel-reason"><textarea id="cancel-reason" value={cancelReason} onChange={event => setCancelReason(event.target.value)} rows={3} autoFocus /></Field><div className="secretary-modal-actions"><button type="button" className="btn btn-outline" onClick={() => setCancelling(null)}>Manter reunião</button><button type="button" className="btn btn-danger" onClick={() => void cancelMeeting()} disabled={submitting}>{submitting ? 'A cancelar...' : 'Confirmar cancelamento'}</button></div></Modal>}
+      {completing && <Modal title="Encerrar reunião" onClose={() => setCompleting(null)}><p>Todos os protocolos já receberam um resultado. O encerramento confirma a ata da reunião e inicia o aviso de três dias apenas para os protocolos deliberados.</p><div className="secretary-modal-actions"><button type="button" className="btn btn-outline" onClick={() => setCompleting(null)}>Voltar</button><button type="button" className="btn btn-primary" onClick={() => void completeMeeting()} disabled={submitting}>{submitting ? 'A encerrar...' : 'Encerrar reunião'}</button></div></Modal>}
     </main>
   )
 }
@@ -281,10 +315,11 @@ function QueueRow({ item, position, checked, onToggle }: { item: DeliberationQue
   return <article className={`deliberation-queue-row${checked ? ' is-selected' : ''}`}><label className="deliberation-select"><input type="checkbox" checked={checked} onChange={onToggle} /><span className="deliberation-position" aria-label={`Posição ${position}`}>{position}</span></label><div className="deliberation-protocol"><strong>{item.protocol.code}</strong><span>{item.protocol.title || 'Sem tema registado'}</span><small>Na lista desde {formatDateTime(item.queue_entered_at)} · {item.waiting_days} dia(s) em espera</small>{isOverdue && <small className="is-overdue">Atrasado há {overdueDays} dia(s)</small>}</div><div className="deliberation-reviewers">{item.reviewers.map(reviewer => <div key={reviewer.id} className="deliberation-reviewer"><span><strong>{reviewer.name}</strong>{reviewer.is_primary && <small>Principal</small>}</span><span className={reviewer.review_status === 'reviewed' ? 'is-reviewed' : 'is-pending'}>{reviewer.review_status === 'reviewed' ? 'Revisto' : 'Não revisto'}</span></div>)}</div></article>
 }
 
-function MeetingCard({ meeting, currentTime, starting, onStart, onEdit, onCancel }: { meeting: DeliberationMeeting; currentTime: number; starting: boolean; onStart: () => void; onEdit: () => void; onCancel: () => void }) {
+function MeetingCard({ meeting, currentTime, starting, onStart, onEdit, onCancel, onRecordResult, recordingItemId, onComplete }: { meeting: DeliberationMeeting; currentTime: number; starting: boolean; onStart: () => void; onEdit: () => void; onCancel: () => void; onRecordResult: (itemId: number, result: 'deliberated' | 'not_deliberated') => void; recordingItemId: number | null; onComplete: () => void }) {
   const canStart = new Date(meeting.scheduled_at).getTime() <= currentTime
+  const allClassified = meeting.items.every(item => item.status === 'deliberated' || item.status === 'not_deliberated')
 
-  return <article className="deliberation-meeting-card"><div className="deliberation-meeting-card__header"><div><span className="secretary-eyebrow">Reunião #{meeting.id}</span><h2>{formatDateTime(meeting.scheduled_at)}</h2><p><span className="material-symbols-outlined" aria-hidden="true">location_on</span>{meeting.location}</p></div><span className={`secretary-status-badge is-${meeting.status}`}>{meeting.status === 'scheduled' ? 'Agendada' : meeting.status === 'in_progress' ? 'Em andamento' : 'Concluída'}</span></div>{meeting.notes && <p className="deliberation-notes">{meeting.notes}</p>}<div className="deliberation-agenda-list">{meeting.items.map((item, index) => <div key={item.id}><span>{index + 1}</span><div><strong>{item.protocol.code}</strong><small>{item.protocol.title}</small></div><span className={`secretary-status-badge is-${item.status}`}>{item.status === 'scheduled' ? 'Agendado' : item.status === 'in_progress' ? 'Em deliberação' : item.status === 'deliberated' ? 'Deliberado' : 'Sem consenso'}</span></div>)}</div>{meeting.status === 'scheduled' && meeting.can_manage && <div className="deliberation-card-actions"><button className="btn btn-sm btn-primary" type="button" onClick={onStart} disabled={starting || !canStart}><span className="material-symbols-outlined" aria-hidden="true">play_circle</span>{starting ? 'A iniciar...' : canStart ? 'Iniciar reunião' : 'Aguardar horário'}</button><button className="btn btn-sm btn-outline" type="button" onClick={onEdit}><span className="material-symbols-outlined" aria-hidden="true">edit_calendar</span>Reagendar</button><button className="btn btn-sm btn-danger" type="button" onClick={onCancel}><span className="material-symbols-outlined" aria-hidden="true">event_busy</span>Cancelar</button></div>}</article>
+  return <article className="deliberation-meeting-card"><div className="deliberation-meeting-card__header"><div><span className="secretary-eyebrow">Reunião #{meeting.id}</span><h2>{formatDateTime(meeting.scheduled_at)}</h2><p><span className="material-symbols-outlined" aria-hidden="true">location_on</span>{meeting.location}</p></div><span className={`secretary-status-badge is-${meeting.status}`}>{meeting.status === 'scheduled' ? 'Agendada' : meeting.status === 'in_progress' ? 'Em andamento' : 'Concluída'}</span></div>{meeting.notes && <p className="deliberation-notes">{meeting.notes}</p>}<div className="deliberation-agenda-list">{meeting.items.map((item, index) => <div key={item.id}><span>{index + 1}</span><div><strong>{item.protocol.code}</strong><small>{item.protocol.title}</small><small>{item.reviewers.map(reviewer => `${reviewer.name}: ${reviewer.review_status === 'reviewed' ? 'revisto' : 'não revisto'}`).join(' · ')}</small></div><span className={`secretary-status-badge is-${item.status}`}>{item.status === 'scheduled' ? 'Agendado' : item.status === 'in_progress' ? 'Aguardar resultado' : item.status === 'deliberated' ? 'Deliberado' : 'Não deliberado'}</span>{meeting.status === 'in_progress' && item.status === 'in_progress' && item.can_record_result && <div className="deliberation-card-actions"><button className="btn btn-sm btn-primary" type="button" onClick={() => onRecordResult(item.id, 'deliberated')} disabled={recordingItemId === item.id}>{recordingItemId === item.id ? 'A guardar...' : 'Deliberado'}</button><button className="btn btn-sm btn-outline" type="button" onClick={() => onRecordResult(item.id, 'not_deliberated')} disabled={recordingItemId === item.id}>Não deliberado</button></div>}</div>)}</div>{meeting.status === 'scheduled' && (meeting.can_start || meeting.can_manage) && <div className="deliberation-card-actions">{meeting.can_start && <button className="btn btn-sm btn-primary" type="button" onClick={onStart} disabled={starting || !canStart}><span className="material-symbols-outlined" aria-hidden="true">play_circle</span>{starting ? 'A iniciar...' : canStart ? 'Iniciar reunião' : 'Aguardar horário'}</button>}{meeting.can_manage && <><button className="btn btn-sm btn-outline" type="button" onClick={onEdit}><span className="material-symbols-outlined" aria-hidden="true">edit_calendar</span>Reagendar</button><button className="btn btn-sm btn-danger" type="button" onClick={onCancel}><span className="material-symbols-outlined" aria-hidden="true">event_busy</span>Cancelar</button></>}</div>}{meeting.status === 'in_progress' && meeting.can_complete && <div className="deliberation-card-actions"><button className="btn btn-primary" type="button" onClick={onComplete} disabled={!allClassified}>Encerrar reunião</button>{!allClassified && <small>Registe o resultado de todos os protocolos antes de encerrar.</small>}</div>}</article>
 }
 
 function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) { return <div className="secretary-field"><label htmlFor={id}>{label}</label>{children}</div> }

@@ -35,7 +35,7 @@ class DeliberationMeetingFlowTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_meeting_can_be_scheduled_before_reviews_and_closed_with_an_incomplete_reviewer(): void
+    public function test_secretary_records_results_and_explicitly_completes_a_meeting_with_incomplete_reviews(): void
     {
         Event::fake([DeliberationMeetingChanged::class]);
         Carbon::setTestNow('2026-08-28 08:00:00 UTC');
@@ -45,7 +45,7 @@ class DeliberationMeetingFlowTest extends TestCase
 
         $queue = $service->queue($secretary);
         $this->assertCount(1, $queue);
-        $this->assertSame(1, $queue->first()['reviewers'][0]['days_remaining']);
+        $this->assertNull($queue->first()['reviewers'][0]['days_remaining']);
         $this->assertSame('not_reviewed', $queue->first()['reviewers'][0]['review_status']);
 
         $meeting = $service->create($secretary, [
@@ -91,18 +91,71 @@ class DeliberationMeetingFlowTest extends TestCase
         $this->assertSame(DeliberationMeetingItem::STATUS_IN_PROGRESS, $meeting->items->first()->status);
         $this->assertSame(EvaluationForm::STATUS_IN_DELIBERATION, $form->fresh()->status);
 
+        try {
+            $service->closeItem(
+                $meeting,
+                $meeting->items->first(),
+                $reviewer,
+                DeliberationMeetingItem::STATUS_NOT_DELIBERATED
+            );
+            $this->fail('Um revisor não pode registar o resultado da reunião.');
+        } catch (HttpResponseException $exception) {
+            $this->assertSame(403, $exception->getResponse()->getStatusCode());
+        }
+
+        try {
+            $service->completeMeeting($meeting, $secretary);
+            $this->fail('A reunião não pode terminar sem resultado para todos os protocolos.');
+        } catch (HttpResponseException $exception) {
+            $this->assertSame(422, $exception->getResponse()->getStatusCode());
+        }
+
         $meeting = $service->closeItem(
             $meeting,
             $meeting->items->first(),
-            $reviewer,
+            $secretary,
             DeliberationMeetingItem::STATUS_NOT_DELIBERATED
         );
 
-        $this->assertSame('completed', $meeting->status);
+        $this->assertSame('in_progress', $meeting->status);
         $this->assertSame(EvaluationForm::STATUS_NOT_DELIBERATED, $form->fresh()->status);
         $this->assertSame(2, $form->reviewerEvaluations()->where('status', ReviewerEvaluation::STATUS_PENDING)->count());
+        $this->assertCount(0, $service->queue($secretary));
+
+        $meeting = $service->completeMeeting($meeting, $secretary);
+        $this->assertSame('completed', $meeting->status);
         $this->assertCount(1, $service->queue($secretary));
         $this->assertTrue(Carbon::parse($service->queue($secretary)->first()['queue_entered_at'])->equalTo(now()));
+    }
+
+    public function test_three_day_notice_starts_only_after_a_consensual_meeting_is_completed(): void
+    {
+        Carbon::setTestNow('2026-08-28 08:00:00 UTC');
+
+        [$secretary, , $form] = $this->scenario();
+        $service = app(DeliberationMeetingService::class);
+        $meeting = $service->create($secretary, [
+            'scheduled_at' => '2026-08-29 10:00:00 UTC',
+            'location' => 'Sala do Comité Científico',
+            'evaluation_form_ids' => [$form->id],
+        ]);
+
+        Carbon::setTestNow('2026-08-29 10:00:00 UTC');
+        $meeting = $service->startMeeting($meeting, $secretary);
+        $meeting = $service->closeItem(
+            $meeting,
+            $meeting->items->first(),
+            $secretary,
+            DeliberationMeetingItem::STATUS_DELIBERATED
+        );
+        $meeting = $service->completeMeeting($meeting, $secretary);
+
+        $meetingData = $service->show($meeting, $secretary);
+        $deadline = $meetingData['items'][0]['reviewers'][0]['due_at'];
+
+        $this->assertSame(EvaluationForm::STATUS_DELIBERATED, $form->fresh()->status);
+        $this->assertNotNull($deadline);
+        $this->assertTrue(Carbon::parse($deadline)->equalTo(now()->addDays(3)));
     }
 
     private function scenario(): array

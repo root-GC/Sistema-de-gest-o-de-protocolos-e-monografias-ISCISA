@@ -4,8 +4,10 @@ namespace Modules\Protocol\app\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Modules\Protocol\app\Models\ReviewerEvaluation;
 use Illuminate\Support\Carbon;
+use Modules\Protocol\app\Models\DeliberationMeeting;
+use Modules\Protocol\app\Models\DeliberationMeetingItem;
+use Modules\Protocol\app\Models\ReviewerEvaluation;
 
 class ReviewerEvaluationResource extends JsonResource
 {
@@ -19,9 +21,19 @@ class ReviewerEvaluationResource extends JsonResource
         $assignedAt = $this->protocolReviewAssignment?->assigned_at
             ? Carbon::parse($this->protocolReviewAssignment->assigned_at)
             : Carbon::parse($this->created_at);
-        $dueAt = $assignedAt->copy()->addDays(7);
-        $overdue = now()->gt($dueAt) && $this->status !== ReviewerEvaluation::STATUS_SUBMITTED;
-        $days = (int) ceil(abs(now()->diffInSeconds($dueAt, false)) / 86400);
+        $completedMeetingItem = DeliberationMeetingItem::query()
+            ->where('evaluation_form_id', $this->evaluation_form_id)
+            ->where('status', DeliberationMeetingItem::STATUS_DELIBERATED)
+            ->whereHas('meeting', fn ($query) => $query
+                ->where('status', DeliberationMeeting::STATUS_COMPLETED)
+                ->whereNotNull('completed_at'))
+            ->with('meeting:id,status,completed_at')
+            ->latest('id')
+            ->first();
+        $deadlineStart = $completedMeetingItem?->meeting?->completed_at;
+        $dueAt = $deadlineStart ? Carbon::parse($deadlineStart)->addDays(3) : null;
+        $overdue = $dueAt && now()->gt($dueAt) && $this->status !== ReviewerEvaluation::STATUS_SUBMITTED;
+        $days = $dueAt ? (int) ceil(abs(now()->diffInSeconds($dueAt, false)) / 86400) : null;
 
         $base = [
             'id' => $this->id,
@@ -35,8 +47,8 @@ class ReviewerEvaluationResource extends JsonResource
             'evaluated_at' => $this->submitted_at,
             'assigned_at' => $assignedAt,
             'due_at' => $dueAt,
-            'days_remaining' => $overdue ? -$days : $days,
-            'overdue' => $overdue,
+            'days_remaining' => $days === null ? null : ($overdue ? -$days : $days),
+            'overdue' => (bool) $overdue,
             'review_status' => $this->status === ReviewerEvaluation::STATUS_SUBMITTED ? 'reviewed' : 'not_reviewed',
             'reviewer' => $this->whenLoaded('reviewer', fn() => [
                 'id' => $this->reviewer->id,

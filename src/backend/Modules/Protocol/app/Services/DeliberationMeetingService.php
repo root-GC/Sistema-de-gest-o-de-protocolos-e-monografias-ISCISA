@@ -45,6 +45,10 @@ class DeliberationMeetingService
                 'deliberationMeetingItems',
                 fn ($query) => $query->whereIn('status', self::ACTIVE_ITEM_STATUSES)
             )
+            ->whereDoesntHave(
+                'deliberationMeetingItems.meeting',
+                fn ($query) => $query->where('status', DeliberationMeeting::STATUS_IN_PROGRESS)
+            )
             ->with($this->formRelations())
             ->get()
             ->map(fn (EvaluationForm $form) => $this->queueEntry($form, $organ))
@@ -245,7 +249,7 @@ class DeliberationMeetingService
         string $result
     ): DeliberationMeeting {
         $this->assertItemBelongsToMeeting($meeting, $item);
-        $this->assertReviewerCanOperate($item->evaluationForm, $user);
+        $this->assertSecretaryCanStart($meeting, $user);
 
         return DB::transaction(function () use ($meeting, $item, $user, $result) {
             $meeting = DeliberationMeeting::lockForUpdate()->findOrFail($meeting->id);
@@ -265,9 +269,45 @@ class DeliberationMeetingService
                 'result' => $result,
             ]);
 
-            if (! $meeting->items()->whereIn('status', self::ACTIVE_ITEM_STATUSES)->exists()) {
-                $meeting->update(['status' => DeliberationMeeting::STATUS_COMPLETED, 'completed_at' => now()]);
+            return $meeting->fresh()->load($this->meetingRelations());
+        });
+    }
+
+    public function completeMeeting(DeliberationMeeting $meeting, User $user): DeliberationMeeting
+    {
+        $this->assertSecretaryCanStart($meeting, $user);
+
+        return DB::transaction(function () use ($meeting, $user) {
+            $meeting = DeliberationMeeting::lockForUpdate()->findOrFail($meeting->id);
+            if ($meeting->status !== DeliberationMeeting::STATUS_IN_PROGRESS) {
+                $this->fail('Apenas reuniões em andamento podem ser encerradas.');
             }
+
+            $items = $meeting->items()
+                ->lockForUpdate()
+                ->with('evaluationForm')
+                ->orderBy('queue_entered_at')
+                ->get();
+
+            if ($items->contains(fn (DeliberationMeetingItem $item) => in_array($item->status, self::ACTIVE_ITEM_STATUSES, true))) {
+                $this->fail('Registe o resultado de todos os protocolos antes de encerrar a reunião.');
+            }
+
+            $completedAt = now();
+            $meeting->update([
+                'status' => DeliberationMeeting::STATUS_COMPLETED,
+                'completed_at' => $completedAt,
+            ]);
+
+            foreach ($items as $item) {
+                $this->recordHistory($item->evaluationForm, $meeting, $user, 'deliberation_meeting_completed', 'Reunião de deliberação encerrada pela secretaria.', [
+                    'meeting_item_id' => $item->id,
+                    'result' => $item->status,
+                    'completed_at' => $completedAt->toIso8601String(),
+                ]);
+            }
+
+            event(new DeliberationMeetingChanged($meeting, 'completed'));
 
             return $meeting->fresh()->load($this->meetingRelations());
         });
@@ -320,7 +360,7 @@ class DeliberationMeetingService
             'queue_entered_at' => $enteredAt->toIso8601String(),
             'waiting_days' => (int) max(0, $enteredAt->diffInDays(now())),
             'form_status' => $form->status,
-            'reviewers' => $form->reviewerEvaluations->map(fn ($evaluation) => $this->reviewerData($evaluation))->values(),
+            'reviewers' => $form->reviewerEvaluations->map(fn ($evaluation) => $this->reviewerData($evaluation, $form))->values(),
         ];
     }
 
@@ -343,15 +383,16 @@ class DeliberationMeetingService
         return Carbon::parse($assignedAt ?: $form->created_at);
     }
 
-    private function reviewerData(ReviewerEvaluation $evaluation): array
+    private function reviewerData(ReviewerEvaluation $evaluation, ?EvaluationForm $form = null): array
     {
         $assignedAt = $evaluation->protocolReviewAssignment?->assigned_at
             ? Carbon::parse($evaluation->protocolReviewAssignment->assigned_at)
             : Carbon::parse($evaluation->created_at);
-        $dueAt = $assignedAt->copy()->addDays(7);
-        $overdue = now()->gt($dueAt) && $evaluation->status !== ReviewerEvaluation::STATUS_SUBMITTED;
-        $seconds = abs(now()->diffInSeconds($dueAt, false));
-        $days = (int) ceil($seconds / 86400);
+        $deadlineStart = $form ? $this->reviewDeadlineStart($form) : null;
+        $dueAt = $deadlineStart?->copy()->addDays(3);
+        $overdue = $dueAt && now()->gt($dueAt) && $evaluation->status !== ReviewerEvaluation::STATUS_SUBMITTED;
+        $seconds = $dueAt ? abs(now()->diffInSeconds($dueAt, false)) : null;
+        $days = $seconds === null ? null : (int) ceil($seconds / 86400);
 
         return [
             'id' => $evaluation->reviewer_id,
@@ -359,9 +400,9 @@ class DeliberationMeetingService
             'email' => $evaluation->reviewer?->user?->email,
             'is_primary' => (bool) $evaluation->protocolReviewAssignment?->is_primary,
             'assigned_at' => $assignedAt->toIso8601String(),
-            'due_at' => $dueAt->toIso8601String(),
-            'days_remaining' => $overdue ? -$days : $days,
-            'overdue' => $overdue,
+            'due_at' => $dueAt?->toIso8601String(),
+            'days_remaining' => $days === null ? null : ($overdue ? -$days : $days),
+            'overdue' => (bool) $overdue,
             'review_status' => $evaluation->status === ReviewerEvaluation::STATUS_SUBMITTED ? 'reviewed' : 'not_reviewed',
             'submitted_at' => $evaluation->submitted_at?->toIso8601String(),
         ];
@@ -395,7 +436,11 @@ class DeliberationMeetingService
             'cancelled_at' => $meeting->cancelled_at?->toIso8601String(),
             'cancellation_reason' => $meeting->cancellation_reason,
             'can_manage' => $this->canManageOrgan($user, $meeting->organ_id),
-            'items' => $items->sortBy('queue_entered_at')->values()->map(function ($item) use ($user) {
+            'can_start' => $meeting->status === DeliberationMeeting::STATUS_SCHEDULED
+                && $this->canSecretaryOperate($meeting->organ_id, $user),
+            'can_complete' => $meeting->status === DeliberationMeeting::STATUS_IN_PROGRESS
+                && $this->canSecretaryOperate($meeting->organ_id, $user),
+            'items' => $items->sortBy('queue_entered_at')->values()->map(function ($item) use ($user, $meeting) {
                 $form = $item->evaluationForm;
 
                 return [
@@ -409,10 +454,10 @@ class DeliberationMeetingService
                     'protocol' => $this->protocolData($form),
                     'form_status' => $form->status,
                     'reviewers' => $form->reviewerEvaluations->map(fn ($evaluation) => array_merge(
-                        $this->reviewerData($evaluation),
+                        $this->reviewerData($evaluation, $form),
                         ['is_me' => (int) $evaluation->reviewer_id === (int) $user->teacherProfile?->id]
                     ))->values(),
-                    'can_operate' => $this->reviewerCanOperate($form, $user),
+                    'can_record_result' => $this->canSecretaryOperate($meeting->organ_id, $user),
                 ];
             }),
         ];
@@ -443,7 +488,7 @@ class DeliberationMeetingService
             'protocol.student:id,name,email',
             'reviewerEvaluations.protocolReviewAssignment',
             'reviewerEvaluations.reviewer.user:id,name,email',
-            'deliberationMeetingItems',
+            'deliberationMeetingItems.meeting:id,status,completed_at',
         ];
     }
 
@@ -543,6 +588,25 @@ class DeliberationMeetingService
         }
     }
 
+    private function canSecretaryOperate(int $organId, User $user): bool
+    {
+        $user->loadMissing('secretaryProfile');
+
+        return $user->hasPermission('protocol.assign')
+            && (int) $user->secretaryProfile?->organ_id === $organId;
+    }
+
+    private function reviewDeadlineStart(EvaluationForm $form): ?Carbon
+    {
+        $item = $form->deliberationMeetingItems
+            ->filter(fn (DeliberationMeetingItem $item) => $item->status === DeliberationMeetingItem::STATUS_DELIBERATED)
+            ->filter(fn (DeliberationMeetingItem $item) => $item->meeting?->status === DeliberationMeeting::STATUS_COMPLETED && $item->meeting?->completed_at)
+            ->sortByDesc(fn (DeliberationMeetingItem $item) => $item->meeting->completed_at)
+            ->first();
+
+        return $item?->meeting?->completed_at ? Carbon::parse($item->meeting->completed_at) : null;
+    }
+
     private function assertCanView(DeliberationMeeting $meeting, User $user): void
     {
         if ($this->canManageOrgan($user, $meeting->organ_id) || $this->isGlobalAdmin($user)) {
@@ -557,29 +621,6 @@ class DeliberationMeetingService
         }
 
         $this->fail('Não tem acesso a esta reunião.', 403);
-    }
-
-    private function assertReviewerCanOperate(EvaluationForm $form, User $user): void
-    {
-        if (! $this->reviewerCanOperate($form, $user)) {
-            $this->fail('Não tem permissão para operar esta deliberação.', 403);
-        }
-    }
-
-    private function reviewerCanOperate(EvaluationForm $form, User $user): bool
-    {
-        $teacherId = $user->teacherProfile?->id;
-        if (! $teacherId || ! $user->hasPermission('protocol.evaluate')) {
-            return false;
-        }
-        $evaluation = $form->reviewerEvaluations->firstWhere('reviewer_id', $teacherId)
-            ?? $form->reviewerEvaluations()->with('protocolReviewAssignment')->where('reviewer_id', $teacherId)->first();
-        if (! $evaluation) {
-            return false;
-        }
-
-        return $form->organ !== Protocol::ORGAN_COMITE_BIOETICA
-            || (bool) $evaluation->protocolReviewAssignment?->is_primary;
     }
 
     private function assertItemBelongsToMeeting(DeliberationMeeting $meeting, DeliberationMeetingItem $item): void

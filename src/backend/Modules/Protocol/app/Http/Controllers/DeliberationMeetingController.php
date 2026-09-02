@@ -92,6 +92,16 @@ class DeliberationMeetingController extends Controller
         ]);
     }
 
+    public function complete(Request $request, DeliberationMeeting $meeting)
+    {
+        $meeting = $this->meetings->completeMeeting($meeting, $request->user());
+
+        return response()->json([
+            'message' => 'Reunião de deliberação encerrada.',
+            'meeting' => $this->meetings->show($meeting, $request->user()),
+        ]);
+    }
+
     public function closeItem(
         Request $request,
         DeliberationMeeting $meeting,
@@ -104,8 +114,8 @@ class DeliberationMeetingController extends Controller
 
         return response()->json([
             'message' => $validated['result'] === 'deliberated'
-                ? 'Protocolo encerrado com deliberação.'
-                : 'Protocolo encerrado sem consenso e reenviado para o fim da fila.',
+                ? 'Resultado da deliberação registado.'
+                : 'Resultado sem consenso registado. O protocolo regressará à lista.',
             'meeting' => $this->meetings->show($meeting, $request->user()),
         ]);
     }

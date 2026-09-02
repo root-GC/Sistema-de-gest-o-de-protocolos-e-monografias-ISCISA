@@ -16,8 +16,9 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('pt-MZ', {
   dateStyle: 'full', timeStyle: 'short', timeZone: 'Africa/Maputo',
 }).format(new Date(value))
 
-function deadline(days: number, overdue: boolean, reviewed: boolean) {
+function deadline(days: number | null, overdue: boolean, reviewed: boolean) {
   if (reviewed) return 'Revisão submetida'
+  if (days === null) return 'Prazo começa após o encerramento'
   if (overdue) return `Atrasado há ${Math.abs(days)} dia(s)`
   if (days === 0) return 'Prazo termina hoje'
   return `${days} dia(s) restante(s)`

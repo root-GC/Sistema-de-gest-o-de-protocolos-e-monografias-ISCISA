@@ -256,57 +256,9 @@ class EvaluationFormController extends Controller
 
     public function submitDeliberation(Request $request, EvaluationForm $form)
     {
-        $this->ensureRouteMatchesForm($request, $form);
-        $this->authorize('submitEvaluation', $form);
-
-        $validated = $request->validate([
-            'decision' => 'required|string|in:approved,not_approved',
-            'conclusion_summary' => 'nullable|string|max:5000',
-        ]);
-
-        $result = $this->evaluationService->submitDeliberation(
-            $form,
-            $request->user(),
-            $validated['decision'],
-            $validated['conclusion_summary'] ?? null
-        );
-
-        $protocol = $result['evaluation_form']->protocol;
-
-        if (! $result['opinion']) {
-            return response()->json([
-                'message' => 'Ficha de deliberação submetida. Aguardando decisão final.',
-                'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
-            ]);
-        }
-
-        $opinion = $result['opinion'];
-        $path = app(DocumentGenerationService::class)->generateOpinionPdf($opinion);
-        $opinion->update(['document_path' => $path]);
-
-        $messages = [
-            Protocol::STATUS_PENDING_COMITE_CIENTIFICO => 'Protocolo aprovado e encaminhado ao Comité Científico.',
-            Protocol::STATUS_DOCUMENTS_PENDING_CIBS => 'Protocolo aprovado. Aguardando validação dos anexos pelo Comité de Bioética.',
-                Protocol::STATUS_PENDING_COMITE_BIOETICA => 'Protocolo aprovado e encaminhado ao Comité de Bioética.',
-            Protocol::STATUS_APPROVED_FINAL => 'Protocolo aprovado definitivamente.',
-            Protocol::STATUS_REJECTED_NUCLEO => 'Protocolo não aprovado pelo Núcleo Científico.',
-            Protocol::STATUS_REJECTED_CC => 'Protocolo não aprovado pelo Comité Científico.',
-            Protocol::STATUS_REJECTED_BIOETICA => 'Protocolo não aprovado pelo Comité de Bioética.',
-            Protocol::STATUS_REJECTED_FINAL => 'Protocolo não aprovado.',
-        ];
-
         return response()->json([
-            'message' => $messages[$protocol->status] ?? 'Deliberação concluída.',
-            'evaluation_form' => EvaluationFormResource::make($result['evaluation_form']),
-            'opinion' => [
-                'id' => $opinion->id,
-                'version' => $opinion->effectiveVersion(),
-                'decision' => $opinion->decision,
-                'issued_at' => $opinion->issued_at,
-                'download_url' => url("api/v1/opinions/{$opinion->id}/download"),
-                'evaluation_form_download_url' => url("api/v1/evaluation-forms/{$form->id}/download"),
-            ],
-        ]);
+            'message' => 'A Secretaria deve registar o resultado da reunião. A decisão final é submetida na ficha após consenso.',
+        ], 410);
     }
 
     public function decide(
@@ -534,35 +486,11 @@ class EvaluationFormController extends Controller
 
 // Function to close the deliberation meeting, setting the status to either deliberated or not deliberated based on the outcome
     public function closeMeeting(Request $request, EvaluationForm $form)
-{
-    $this->ensureRouteMatchesForm($request, $form);
-    $this->authorize('submitEvaluation', $form);
-
-    $validated = $request->validate([
-        'result' => 'nullable|string|in:deliberated,not_deliberated',
-    ]);
-
-    $item = $this->meetingService->activeItemForForm($form);
-    if (! $item) {
-        return response()->json(['message' => 'A ficha não pertence a uma reunião ativa.'], 422);
+    {
+        return response()->json([
+            'message' => 'O resultado da reunião é registado exclusivamente pela Secretaria na agenda de deliberações.',
+        ], 410);
     }
-    $result = $validated['result'] ?? (
-        $form->reviewerEvaluations()->pluck('decision')->filter()->unique()->count() === 1
-            ? EvaluationForm::STATUS_DELIBERATED
-            : EvaluationForm::STATUS_NOT_DELIBERATED
-    );
-    $meeting = $this->meetingService->closeItem($item->meeting, $item, $request->user(), $result);
-    $form = $meeting->items->firstWhere('evaluation_form_id', $form->id)?->evaluationForm ?? $form->fresh();
-
-    $message = $form->status === EvaluationForm::STATUS_DELIBERATED
-        ? 'Reunião encerrada com deliberação. Abra a ficha de avaliação para registar a decisão final.'
-        : 'Reunião encerrada sem consenso. Aguardando agendamento de nova reunião pela secretaria.';
-
-    return response()->json([
-        'message' => $message,
-        'evaluation_form' => EvaluationFormResource::make($form),
-    ]);
-}
 
 
 public function getPendingFinalDecision(Request $request)

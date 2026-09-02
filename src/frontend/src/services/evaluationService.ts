@@ -56,7 +56,7 @@ export interface ReviewerEvaluation {
   evaluated_at?: string | null
   assigned_at?: string | null
   due_at?: string | null
-  days_remaining?: number
+  days_remaining?: number | null
   overdue?: boolean
   review_status?: 'reviewed' | 'not_reviewed'
   criterion_reviews?: CriterionReview[]

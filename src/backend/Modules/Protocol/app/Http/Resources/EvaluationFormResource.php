@@ -21,7 +21,7 @@ class EvaluationFormResource extends JsonResource
             : null;
         $isPrimaryReviewer = (bool) $myReviewerEvaluation?->protocolReviewAssignment?->is_primary;
         $canAccessForm = $this->organ !== Protocol::ORGAN_COMITE_BIOETICA
-            || $isPrimaryReviewer
+            || $isReviewer
             || ($user?->hasPermission('protocol.assign') ?? false);
         $isSharedCommittee = in_array($this->organ, [
             Protocol::ORGAN_COMITE_CIENTIFICO,

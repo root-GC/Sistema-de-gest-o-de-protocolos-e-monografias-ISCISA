@@ -6,7 +6,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Modules\Protocol\app\Models\DeliberationMeeting;
+use Modules\Protocol\app\Models\DeliberationMeetingItem;
 use Modules\Protocol\app\Models\EvaluationForm;
 use Modules\Protocol\app\Models\OrganDocumentRequirement;
 use Modules\Protocol\app\Models\OrganDocumentRequirementEvent;
@@ -291,7 +294,11 @@ class OrganWorkspaceController extends Controller
         $protocols = $this->protocolsForOrgan($organ);
         $evaluations = ReviewerEvaluation::query()
             ->whereHas('protocolReviewAssignment', fn (Builder $query) => $query->where('organ_id', $organ->id))
-            ->with(['reviewer.user:id,name,email', 'protocolReviewAssignment'])
+            ->with([
+                'reviewer.user:id,name,email',
+                'protocolReviewAssignment',
+                'evaluationForm.deliberationMeetingItems.meeting:id,status,completed_at',
+            ])
             ->get();
 
         return [
@@ -456,7 +463,7 @@ class OrganWorkspaceController extends Controller
             $reviewer = $items->first()->reviewer;
             $completed = $items->where('status', ReviewerEvaluation::STATUS_SUBMITTED);
             $pending = $items->reject(fn (ReviewerEvaluation $evaluation) => $evaluation->status === ReviewerEvaluation::STATUS_SUBMITTED);
-            $overdue = $pending->filter(fn (ReviewerEvaluation $evaluation) => $evaluation->protocolReviewAssignment?->assigned_at?->copy()->addDays(7)->isPast());
+            $overdue = $pending->filter(fn (ReviewerEvaluation $evaluation) => $this->reviewDeadline($evaluation)?->isPast());
             return [
                 'reviewer_id' => $reviewer?->id,
                 'name' => $reviewer?->user?->name,
@@ -474,6 +481,19 @@ class OrganWorkspaceController extends Controller
     {
         $days = $periods->filter(fn ($period) => $period[0] && $period[1])->map(fn ($period) => $period[0]->diffInHours($period[1]) / 24);
         return $days->isEmpty() ? null : round($days->avg(), 1);
+    }
+
+    private function reviewDeadline(ReviewerEvaluation $evaluation): ?Carbon
+    {
+        $item = $evaluation->evaluationForm?->deliberationMeetingItems
+            ?->filter(fn (DeliberationMeetingItem $item) => $item->status === DeliberationMeetingItem::STATUS_DELIBERATED)
+            ->filter(fn (DeliberationMeetingItem $item) => $item->meeting?->status === DeliberationMeeting::STATUS_COMPLETED && $item->meeting?->completed_at)
+            ->sortByDesc(fn (DeliberationMeetingItem $item) => $item->meeting->completed_at)
+            ->first();
+
+        return $item?->meeting?->completed_at
+            ? Carbon::parse($item->meeting->completed_at)->addDays(3)
+            : null;
     }
 
     private function activityPayload($event): array

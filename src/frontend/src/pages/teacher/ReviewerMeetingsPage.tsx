@@ -1,6 +1,6 @@
 // src/pages/reviewer/ReviewerMeetingsPage.tsx
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useNavigate, useParams, Link, useSearchParams } from 'react-router-dom'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { evaluationService, type EvaluationForm, type EvaluationOrgan, type FormCriterion } from '../../services/evaluationService'
 import { deliberationService, type DeliberationMeeting, type DeliberationMeetingItem } from '../../services/deliberationService'
@@ -34,9 +34,9 @@ function getMeetingState(evaluationForm: EvaluationForm | null): {
     
     case 'deliberated':
       return {
-        label: 'Reunião Encerrada',
+        label: 'Deliberado',
         className: 'is-deliberated',
-        description: 'Houve deliberação. A decisão final é registada na ficha de avaliação.',
+        description: '',
       }
     
     case 'not_deliberated':
@@ -99,7 +99,6 @@ const DEFAULT_SPLIT = 50
 
 // ── Componente Principal ──────────────────────────────
 export default function ReviewerMeetingsPage() {
-  const navigate = useNavigate()
   const { protocolId } = useParams<{ protocolId: string }>()
   const [searchParams] = useSearchParams()
   const id = Number(protocolId)
@@ -113,14 +112,12 @@ export default function ReviewerMeetingsPage() {
   const [meetingItem, setMeetingItem] = useState<DeliberationMeetingItem | null>(null)
   const [criterionReviews, setCriterionReviews] = useState<Record<number, string>>({})
   const [finalDecision, setFinalDecision] = useState<string | null>(null)
-
-  // ── Deliberation state ──
-  const [isClosingMeeting, setIsClosingMeeting] = useState(false)
-  const [closingResult, setClosingResult] = useState<'deliberated' | 'not_deliberated' | null>(null)
+  const [deliberationDecision, setDeliberationDecision] = useState<'approved' | 'not_approved' | ''>('')
+  const [deliberationSummary, setDeliberationSummary] = useState('')
+  const [submittingDecision, setSubmittingDecision] = useState(false)
 
   // ── Shared state ──
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   // ── OnlyOffice state ──
@@ -227,14 +224,6 @@ export default function ReviewerMeetingsPage() {
     return () => window.removeEventListener('keydown', k)
   }, [onlyOfficeFullscreen, toggleDocumentFullscreen, toggleFormFullscreen])
 
-  // ═══════════════════════════════════════════════
-  // LIFECYCLE
-  // ═══════════════════════════════════════════════
-  useEffect(() => {
-    if (id) loadMeetingData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, requestedMeetingId, requestedItemId])
-
   async function loadMeetingData() {
     setLoading(true)
     setError(null)
@@ -284,8 +273,8 @@ export default function ReviewerMeetingsPage() {
 
       setEvaluationForm(formData)
       setFinalDecision(formData.final_decision || null)
-      setClosingResult(null)
-
+      setDeliberationDecision('')
+      setDeliberationSummary(formData.conclusion_summary || '')
       const reviews: Record<number, string> = {}
       if (isSharedCommitteeEvaluation(formData) && formData.criteria_comments) {
         formData.criteria_comments.forEach(item => {
@@ -315,26 +304,14 @@ export default function ReviewerMeetingsPage() {
     }
   }
 
-  async function handleCloseMeeting(result: 'deliberated' | 'not_deliberated') {
-    if (!evaluationForm || !meeting || !meetingItem) return
-    setIsClosingMeeting(true)
-    setClosingResult(result)
-    setError(null)
-    try {
-      const { message } = await deliberationService.closeItem(meeting.id, meetingItem.id, result)
-      setSuccess(message)
-      if (result === 'deliberated') {
-        navigate(`/reviews/protocols/${evaluationForm.protocol_id}`)
-        return
-      }
-      await loadMeetingData()
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível encerrar a reunião.')
-    } finally {
-      setIsClosingMeeting(false)
-      setClosingResult(null)
-    }
-  }
+  useEffect(() => {
+    const requestId = window.setTimeout(() => {
+      if (id) void loadMeetingData()
+    }, 0)
+
+    return () => window.clearTimeout(requestId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, requestedMeetingId, requestedItemId])
 
   async function openFile(url: string | null | undefined) {
     if (!url) return
@@ -347,11 +324,30 @@ export default function ReviewerMeetingsPage() {
   }
 
   async function handleSaveCriterionReview(fcId: number) {
-    if (!evaluationForm || evaluationForm.status !== 'in_deliberation') return
+    if (!evaluationForm || !['in_deliberation', 'deliberated'].includes(evaluationForm.status)) return
     try {
       await evaluationService.saveCriterionReview(evaluationForm.id, fcId, criterionReviews[fcId] || null, organForEvaluation(evaluationForm))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível guardar o critério.')
+    }
+  }
+
+  async function handleSubmitDecision() {
+    if (!evaluationForm || !deliberationDecision) return
+    setSubmittingDecision(true)
+    setError(null)
+    try {
+      await evaluationService.decide(
+        evaluationForm.id,
+        deliberationDecision,
+        deliberationSummary || null,
+        organForEvaluation(evaluationForm),
+      )
+      await loadMeetingData()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível registar a decisão final.')
+    } finally {
+      setSubmittingDecision(false)
     }
   }
 
@@ -383,9 +379,9 @@ export default function ReviewerMeetingsPage() {
     const state = meetingItem?.status === 'scheduled'
       ? { label: 'Agendada', className: 'is-deliberation-scheduled', description: `Reunião marcada para ${formatDate(meeting?.scheduled_at)} em ${meeting?.location || 'local a definir'}.` }
       : meetingItem?.status === 'in_progress'
-        ? { label: 'Em Deliberação', className: 'is-deliberation-active', description: 'Reunião em andamento. Registe o resultado da deliberação.' }
+        ? { label: 'Em Deliberação', className: 'is-deliberation-active', description: 'Reunião em andamento. A ficha está disponível para preparação.' }
         : meetingItem?.status === 'deliberated'
-          ? { label: 'Reunião Encerrada', className: 'is-deliberated', description: 'Houve deliberação. Registe a decisão final na ficha de avaliação.' }
+          ? { label: 'Deliberado', className: 'is-deliberated', description: '' }
           : meetingItem?.status === 'not_deliberated'
             ? { label: 'Sem Consenso', className: 'is-not-deliberated', description: 'O protocolo regressou ao fim da fila.' }
             : getMeetingState(evaluationForm)
@@ -396,8 +392,7 @@ export default function ReviewerMeetingsPage() {
     const isNotDeliberated = meetingItem?.status === 'not_deliberated'
     const isBioeticaForm = isBioeticaEvaluation(evaluationForm)
     const canAccessForm = !isBioeticaForm || Boolean(evaluationForm.can_access_form)
-    const canManageMeeting = Boolean(meetingItem?.can_operate)
-    const canEditCriteria = isInDeliberation && !isConcluded && canAccessForm && canManageMeeting
+    const canEditCriteria = (isInDeliberation || isDeliberated) && !isConcluded && canAccessForm
     
     const protocolCode = protocol.code || `ISC-P-${id}`
     const docFileName = protocol.latest_document?.file_name || `${protocolCode}.docx`
@@ -559,7 +554,6 @@ export default function ReviewerMeetingsPage() {
                 )}
               </div>
 
-              {success && <div className="eval-notice eval-notice--success"><span className="material-symbols-outlined">check_circle</span>{success}</div>}
               {error && <div className="eval-notice eval-notice--error"><span className="material-symbols-outlined">error</span>{error}</div>}
 
               {/* ── Agendada ── */}
@@ -580,18 +574,7 @@ export default function ReviewerMeetingsPage() {
                   <span className="material-symbols-outlined">groups</span>
                   <div>
                     <strong>Reunião em Andamento</strong>
-                    <p>Documento partilhado para edição conjunta. Registe o resultado da deliberação.</p>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Deliberado ── */}
-              {isDeliberated && (
-                <div className="deliberation-info-banner" style={{ borderColor: 'var(--primary)', background: 'var(--primary-container)' }}>
-                  <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>task_alt</span>
-                  <div>
-                    <strong>Reunião Encerrada com Deliberação</strong>
-                    <p>Abra a ficha de avaliação para registar a decisão final.</p>
+                    <p>Documento e ficha disponíveis para preparação. A Secretaria registará o resultado da reunião.</p>
                   </div>
                 </div>
               )}
@@ -695,132 +678,24 @@ export default function ReviewerMeetingsPage() {
                     </div>
                   ))}
 
-                  {/* ── Encerrar Reunião (2 botões) ── */}
-                  {isInDeliberation && canManageMeeting && (
+                  {isDeliberated && !isConcluded && canAccessForm && (
                     <div className="eval-recommendation-section">
-                      <h3>
-                        <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>gavel</span>
-                        Resultado da Deliberação
-                      </h3>
-                      <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
-                        Registe o resultado final da reunião.
-                      </p>
-                      
-                      <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-                        {/* Botão Deliberado */}
-                        <button
-                          onClick={() => handleCloseMeeting('deliberated')}
-                          disabled={isClosingMeeting}
-                          style={{
-                            flex: 1,
-                            minWidth: '200px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--space-2)',
-                            padding: 'var(--space-2) var(--space-3)',
-                            background: closingResult === 'deliberated'
-                              ? 'var(--primary)'
-                              : 'var(--primary-container)',
-                            color: closingResult === 'deliberated'
-                              ? 'var(--on-primary)'
-                              : 'var(--on-primary-container)',
-                            border: `2px solid var(--primary)`,
-                            borderRadius: 'var(--radius-lg)',
-                            fontFamily: 'var(--font-family)',
-                            fontSize: 'var(--body-md)',
-                            fontWeight: 'var(--font-semibold)',
-                            cursor: isClosingMeeting ? 'wait' : 'pointer',
-                            transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease',
-                            opacity: isClosingMeeting && closingResult !== 'deliberated' ? 0.6 : 1,
-                          }}
-                          onMouseEnter={e => {
-                            if (!isClosingMeeting) {
-                              e.currentTarget.style.background = 'var(--primary)'
-                              e.currentTarget.style.color = 'var(--on-primary)'
-                              e.currentTarget.style.boxShadow = 'var(--elevation-2)'
-                            }
-                          }}
-                          onMouseLeave={e => {
-                            if (!isClosingMeeting) {
-                              e.currentTarget.style.background = closingResult === 'deliberated'
-                                ? 'var(--primary)'
-                                : 'var(--primary-container)'
-                              e.currentTarget.style.color = closingResult === 'deliberated'
-                                ? 'var(--on-primary)'
-                                : 'var(--on-primary-container)'
-                              e.currentTarget.style.boxShadow = 'var(--elevation-1)'
-                            }
-                          }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>
-                            {closingResult === 'deliberated' && isClosingMeeting ? 'hourglass_top' : 'check_circle'}
-                          </span>
-                          <span>
-                            {closingResult === 'deliberated' && isClosingMeeting ? 'A processar...' : 'Deliberado'}
-                          </span>
-                        </button>
-
-                        {/* Botão Não Deliberado */}
-                        <button
-                          onClick={() => handleCloseMeeting('not_deliberated')}
-                          disabled={isClosingMeeting}
-                          style={{
-                            flex: 1,
-                            minWidth: '200px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--space-2)',
-                            padding: 'var(--space-2) var(--space-3)',
-                            background: closingResult === 'not_deliberated'
-                              ? 'var(--error)'
-                              : 'var(--error-container)',
-                            color: closingResult === 'not_deliberated'
-                              ? 'var(--on-error)'
-                              : 'var(--on-error-container)',
-                            border: `2px solid var(--error)`,
-                            borderRadius: 'var(--radius-lg)',
-                            fontFamily: 'var(--font-family)',
-                            fontSize: 'var(--body-md)',
-                            fontWeight: 'var(--font-semibold)',
-                            cursor: isClosingMeeting ? 'wait' : 'pointer',
-                            transition: 'background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease',
-                            opacity: isClosingMeeting && closingResult !== 'not_deliberated' ? 0.6 : 1,
-                          }}
-                          onMouseEnter={e => {
-                            if (!isClosingMeeting) {
-                              e.currentTarget.style.background = 'var(--error)'
-                              e.currentTarget.style.color = 'var(--on-error)'
-                              e.currentTarget.style.boxShadow = 'var(--elevation-2)'
-                            }
-                          }}
-                          onMouseLeave={e => {
-                            if (!isClosingMeeting) {
-                              e.currentTarget.style.background = closingResult === 'not_deliberated'
-                                ? 'var(--error)'
-                                : 'var(--error-container)'
-                              e.currentTarget.style.color = closingResult === 'not_deliberated'
-                                ? 'var(--on-error)'
-                                : 'var(--on-error-container)'
-                              e.currentTarget.style.boxShadow = 'var(--elevation-1)'
-                            }
-                          }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>
-                            {closingResult === 'not_deliberated' && isClosingMeeting ? 'hourglass_top' : 'cancel'}
-                          </span>
-                          <span>
-                            {closingResult === 'not_deliberated' && isClosingMeeting ? 'A processar...' : 'Não Deliberado'}
-                          </span>
-                        </button>
+                      <h3><span className="material-symbols-outlined">gavel</span>Decisão final</h3>
+                      <div className="eval-field"><label htmlFor="meeting-decision-summary">Resumo da decisão</label><textarea id="meeting-decision-summary" value={deliberationSummary} onChange={event => setDeliberationSummary(event.target.value)} rows={3} className="criterion-textarea" /></div>
+                      <div className="recommendation-choices">
+                        <label className={`recommendation-choice ${deliberationDecision === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="meeting-decision" checked={deliberationDecision === 'approved'} onChange={() => setDeliberationDecision('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovar</label>
+                        <label className={`recommendation-choice ${deliberationDecision === 'not_approved' ? 'is-rejected' : ''}`}><input type="radio" name="meeting-decision" checked={deliberationDecision === 'not_approved'} onChange={() => setDeliberationDecision('not_approved')} /><span className="material-symbols-outlined">cancel</span>Não aprovar</label>
                       </div>
+                      <button className="btn btn-primary btn-block btn-lg" type="button" onClick={() => void handleSubmitDecision()} disabled={!deliberationDecision || submittingDecision}>{submittingDecision ? 'A registar...' : 'Registar decisão final'}</button>
                     </div>
                   )}
+
                 </div>
               )}
               {evaluationForm && !canAccessForm && (
                 <div className="eval-notice eval-notice--warning">
                   <span className="material-symbols-outlined">lock</span>
-                  O preenchimento da ficha do Comité de Bioética está disponível apenas para o revisor principal.
+                  Esta ficha não está disponível para o seu perfil de revisor.
                 </div>
               )}
               <div style={{ height: 40 }} />
