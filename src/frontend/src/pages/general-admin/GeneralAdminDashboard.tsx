@@ -1,228 +1,55 @@
-// src/pages/general-admin/GeneralAdminDashboard.tsx
 import { useCallback, useEffect, useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
-import { generalAdminService, type DashboardStats } from '../../services/generalAdminService'
-import '../../styles/global.css'
+import { Link } from 'react-router-dom'
+import { scientificDirectionService, type ScientificDirectionDashboard } from '../../services/scientificDirectionService'
+import './scientificDirection.css'
+
+function number(value?: number | null, suffix = '') { return value === null || value === undefined ? 'Sem dados' : `${value}${suffix}` }
+function organKind(type: string) { return type === 'nucleus' ? 'Núcleo Científico' : type === 'scientific_committee' ? 'Comité Científico' : 'Comité de Bioética' }
 
 export default function GeneralAdminDashboard() {
-  const { user } = useAuth()
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<ScientificDirectionDashboard | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const loadStats = useCallback(async () => {
-    setLoading(true)
-    try {
-      setStats(await generalAdminService.getDashboard())
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
+  const load = useCallback(async () => {
+    setError(null)
+    try { setData(await scientificDirectionService.dashboard()) }
+    catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar a atividade dos órgãos.') }
   }, [])
 
   useEffect(() => {
-    const requestId = window.setTimeout(() => { void loadStats() }, 0)
+    const requestId = window.setTimeout(() => { void load() }, 0)
     return () => window.clearTimeout(requestId)
-  }, [loadStats])
+  }, [load])
+  if (!data && !error) return <main className="direction-loading" aria-live="polite">A carregar atividade dos órgãos…</main>
+  if (error) return <main className="direction-error" role="alert"><strong>Não foi possível carregar o painel.</strong><span>{error}</span><button type="button" className="btn btn-primary" onClick={() => void load()}>Tentar novamente</button></main>
+  if (!data) return null
 
-  if (loading) return <Loader />
+  return <main className="direction-workspace" aria-labelledby="direction-title">
+    <header className="direction-header">
+      <div><p className="direction-eyebrow">Direção Científica</p><h1 id="direction-title">Atividade dos Órgãos</h1><p>Visão consolidada de Núcleos, Comité Científico e CIBS.</p></div>
+      <span className="direction-period"><span className="material-symbols-outlined" aria-hidden="true">date_range</span>{data.period.label}</span>
+    </header>
 
-  return (
-    <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
-      
-      {/* Cabeçalho com info do Admin */}
-      <div style={{
-        background: 'var(--surface-container-low)',
-        borderRadius: 'var(--radius-xl)',
-        padding: 'var(--space-4)',
-        marginBottom: 'var(--space-4)',
-        border: '1px solid var(--outline-variant)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-          {/* Avatar */}
-          <div style={{
-            width: '56px', height: '56px', borderRadius: '50%',
-            background: 'var(--primary-container)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', flexShrink: 0
-          }}>
-            <span className="material-symbols-outlined" style={{ color: 'var(--on-primary-container)', fontSize: '28px' }}>
-              shield_person
-            </span>
-          </div>
-          
-          {/* Nome e cargo */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ 
-              fontSize: 'var(--label-sm)', 
-              background: 'var(--tertiary-container)', 
-              color: 'var(--on-tertiary-container)', 
-              padding: '2px 10px', 
-              borderRadius: 'var(--radius-full)',
-              fontWeight: 'var(--font-medium)'
-            }}>
-              Administrador Geral
-            </span>
-            <h1 style={{ 
-              fontSize: 'var(--headline-lg)', 
-              fontWeight: 'var(--font-semibold)', 
-              margin: 'var(--space-1) 0 0 0',
-              color: 'var(--on-surface)'
-            }}>
-              {user?.name || 'Administrador'}
-            </h1>
-            <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
-              Direção Científica • {user?.email}
-            </p>
-          </div>
+    <section className="direction-summary-grid" aria-label="Resumo geral">
+      <Metric icon="account_tree" label="Processos recebidos" value={number(data.summary.processes)} />
+      <Metric icon="event" label="Reuniões" value={number(data.summary.meetings)} />
+      <Metric icon="fact_check" label="Avaliações submetidas" value={number(data.summary.review_rate, '%')} />
+      <Metric icon="schedule" label="Duração média" value={number(data.summary.average_duration_days, ' dias')} />
+    </section>
 
-          {/* Estatísticas rápidas no cabeçalho */}
-          <div style={{ 
-            display: 'flex', 
-            gap: 'var(--space-3)', 
-            flexShrink: 0,
-            flexWrap: 'wrap'
-          }}>
-            <div style={{ textAlign: 'center', padding: 'var(--space-2) var(--space-3)', background: 'var(--surface-container)', borderRadius: 'var(--radius-lg)' }}>
-              <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color: 'var(--primary)', margin: 0 }}>
-                {stats?.total_students || 0}
-              </p>
-              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>Estudantes</p>
-            </div>
-            <div style={{ textAlign: 'center', padding: 'var(--space-2) var(--space-3)', background: 'var(--surface-container)', borderRadius: 'var(--radius-lg)' }}>
-              <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color: 'var(--tertiary)', margin: 0 }}>
-                {stats?.total_teachers || 0}
-              </p>
-              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>Docentes</p>
-            </div>
-            <div style={{ textAlign: 'center', padding: 'var(--space-2) var(--space-3)', background: 'var(--surface-container)', borderRadius: 'var(--radius-lg)' }}>
-              <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color: 'var(--secondary)', margin: 0 }}>
-                {(stats?.total_coordinators || 0) + (stats?.total_secretaries || 0) + (stats?.total_presidents || 0)}
-              </p>
-              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>Gestores</p>
-            </div>
-          </div>
-        </div>
+    <section className="direction-section" aria-labelledby="direction-organs-title">
+      <div className="direction-section__header"><div><p className="direction-eyebrow">Acompanhamento institucional</p><h2 id="direction-organs-title">Órgãos</h2></div><span>{data.organs.length} órgãos ativos</span></div>
+      <div className="direction-organ-grid">
+        {data.organs.map(organ => <Link key={organ.id} to={`/general-admin/organs/${organ.id}`} className="direction-organ-card" aria-label={`Abrir atividade de ${organ.name}`}>
+          <div className="direction-organ-card__header"><div><span className="direction-organ-card__kind">{organKind(organ.type)}</span><h3>{organ.name}</h3></div><span className="material-symbols-outlined" aria-hidden="true">arrow_forward</span></div>
+          <div className="direction-organ-card__metrics"><Metric label={organ.kind === 'topics' ? 'Temas' : 'Protocolos'} value={number(organ.processes)} compact /><Metric label="Taxa de avaliação" value={number(organ.review_rate, '%')} compact /><Metric label="Duração média" value={number(organ.average_duration_days, ' dias')} compact /></div>
+          <div className="direction-rate"><span>Avaliações submetidas</span><strong>{number(organ.review_rate, '%')}</strong><div aria-label={`Taxa de avaliação ${number(organ.review_rate, '%')}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={organ.review_rate ?? undefined}><i style={{ width: `${organ.review_rate ?? 0}%` }} /></div></div>
+          <div className="direction-state-list"><span>Pendentes <strong>{organ.states.pending ?? 0}</strong></span><span>Em revisão <strong>{organ.states.in_review ?? 0}</strong></span><span>Decididos <strong>{organ.states.decided ?? 0}</strong></span>{organ.type !== 'nucleus' && <span>Reuniões <strong>{organ.meetings.total}</strong></span>}</div>
+        </Link>)}
       </div>
-
-      {error && <Alert type="error">{error}</Alert>}
-
-      {/* Cards de Estatísticas */}
-      <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', color: 'var(--on-surface)' }}>
-        Pessoal
-      </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-        <StatCard icon="person_check" label="Coordenadores" count={stats?.total_coordinators || 0} color="var(--primary)" />
-        <StatCard icon="assignment" label="Secretários" count={stats?.total_secretaries || 0} color="var(--tertiary)" />
-        <StatCard icon="shield" label="Presidentes de Órgão" count={stats?.total_presidents || 0} color="var(--secondary)" />
-        <StatCard icon="group" label="Estudantes" count={stats?.total_students || 0} color="var(--primary)" />
-        <StatCard icon="school" label="Docentes" count={stats?.total_teachers || 0} color="var(--tertiary)" />
-      </div>
-
-      {/* Estrutura Académica */}
-      <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', color: 'var(--on-surface)' }}>
-        Estrutura Académica
-      </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-        <StatCard icon="account_balance" label="Órgãos" count={stats?.total_organs || 0} color="var(--primary)" />
-        <StatCard icon="science" label="Áreas Científicas" count={stats?.total_areas || 0} color="var(--tertiary)" />
-        <StatCard icon="menu_book" label="Cursos" count={stats?.total_courses || 0} color="var(--secondary)" />
-      </div>
-
-      {/* Atividades Recentes */}
-      <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', color: 'var(--on-surface)' }}>
-        Atividades Recentes
-      </h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-        {(stats?.recent_activities || []).length === 0 ? (
-          <div className="card" style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--on-surface-variant)' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '32px', marginBottom: 'var(--space-1)', display: 'block' }}>history</span>
-            <p style={{ fontSize: 'var(--body-md)' }}>Nenhuma atividade recente</p>
-          </div>
-        ) : (
-          (stats?.recent_activities || []).map(activity => (
-            <div key={activity.id} className="card" style={{ 
-              padding: 'var(--space-3) var(--space-4)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 'var(--space-3)' 
-            }}>
-              <div style={{
-                width: '40px', height: '40px', borderRadius: '50%',
-                background: 'var(--primary-container)', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', flexShrink: 0
-              }}>
-                <span className="material-symbols-outlined" style={{ color: 'var(--primary)', fontSize: '20px' }}>history</span>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-medium)', margin: 0 }}>
-                  {activity.description}
-                </p>
-                <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: '2px 0 0' }}>
-                  {new Date(activity.created_at).toLocaleString('pt-MZ', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
-              </div>
-              <span className="material-symbols-outlined" style={{ color: 'var(--outline)', fontSize: '20px' }}>chevron_right</span>
-            </div>
-          ))
-        )}
-      </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  )
+    </section>
+  </main>
 }
 
-// ============================================================
-// COMPONENTES AUXILIARES
-// ============================================================
-function Loader() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <span style={{ 
-        width: '24px', height: '24px', 
-        border: '3px solid var(--outline-variant)', 
-        borderTopColor: 'var(--primary)', 
-        borderRadius: '50%', 
-        animation: 'spin 0.8s linear infinite' 
-      }} />
-    </div>
-  )
-}
-
-function Alert({ type, children }: { type: 'error' | 'success'; children: React.ReactNode }) {
-  return (
-    <div style={{ 
-      padding: 'var(--space-2) var(--space-3)', 
-      marginBottom: 'var(--space-4)', 
-      borderRadius: 'var(--radius-lg)', 
-      background: type === 'error' ? 'var(--error-container)' : 'var(--primary-container)', 
-      color: type === 'error' ? 'var(--on-error-container)' : 'var(--on-primary-container)', 
-      fontSize: 'var(--body-md)' 
-    }}>
-      {children}
-    </div>
-  )
-}
-
-function StatCard({ icon, label, count, color }: { icon: string; label: string; count: number; color: string }) {
-  return (
-    <div className="card" style={{ padding: 'var(--space-3)', textAlign: 'center', border: `1px solid ${color}` }}>
-      <span className="material-symbols-outlined" style={{ fontSize: '32px', color, marginBottom: 'var(--space-1)' }}>
-        {icon}
-      </span>
-      <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color, margin: 0 }}>
-        {count}
-      </p>
-      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 'var(--space-1) 0 0' }}>
-        {label}
-      </p>
-    </div>
-  )
+function Metric({ icon, label, value, compact = false }: { icon?: string; label: string; value: string; compact?: boolean }) {
+  return <article className={compact ? 'direction-metric direction-metric--compact' : 'direction-metric'}>{icon && <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>}<div><span>{label}</span><strong>{value}</strong></div></article>
 }

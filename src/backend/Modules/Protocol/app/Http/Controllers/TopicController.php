@@ -277,9 +277,9 @@ public function getComments(Request $request, Topic $topic)
 
     private function canViewComments($user, Topic $topic): bool
     {
-        $user->loadMissing(['teacherProfile', 'secretaryProfile']);
+        $user->loadMissing(['teacherProfile', 'secretaryProfile', 'adminProfile.organ']);
 
-        if ((int) $topic->student_id === (int) $user->id || $user->hasPermission('topic.view.all')) {
+        if ((int) $topic->student_id === (int) $user->id || $user->hasPermission('topic.view.all') || $this->isScientificDirection($user)) {
             return true;
         }
 
@@ -294,6 +294,13 @@ public function getComments(Request $request, Topic $topic)
 
         return $user->secretaryProfile?->organ_id
             && (int) $topic->scientificArea()->value('organ_id') === (int) $user->secretaryProfile->organ_id;
+    }
+
+    private function isScientificDirection($user): bool
+    {
+        return $user->hasPermission('admin.organs')
+            && $user->adminProfile?->access_scope === 'organ'
+            && $user->adminProfile?->organ?->type === 'scientific_direction';
     }
 
     /**

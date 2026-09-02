@@ -13,6 +13,7 @@ use Modules\Protocol\app\Http\Controllers\DeliberationMeetingController;
 use Modules\Protocol\app\Http\Controllers\LegacyNucleusProtocolController;
 use Modules\Protocol\app\Http\Controllers\SystemStatusController;
 use Modules\Protocol\app\Http\Controllers\OrganWorkspaceController;
+use Modules\Protocol\app\Http\Controllers\ScientificDirectionActivityController;
 
 Route::prefix('api')->middleware(['api'])->group(function () {
     Route::get('/onlyoffice/documents/{document}', [OnlyOfficeController::class, 'downloadDocumentForOnlyOffice']);
@@ -37,6 +38,12 @@ Route::prefix('api')->middleware(['api'])->group(function () {
 
 
 Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () {
+
+    Route::get('scientific-direction/dashboard', [ScientificDirectionActivityController::class, 'dashboard']);
+    Route::get('scientific-direction/organs/{organ}/processes', [ScientificDirectionActivityController::class, 'processes']);
+    Route::get('scientific-direction/organs/{organ}/protocols/{protocol}', [ScientificDirectionActivityController::class, 'protocol']);
+    Route::get('scientific-direction/organs/{organ}/topics/{topic}', [ScientificDirectionActivityController::class, 'topic']);
+    Route::get('scientific-direction/document-revisions/{revision}/download', [ScientificDirectionActivityController::class, 'downloadRevision']);
 
     Route::get('protocol-submission-requirements', [OrganWorkspaceController::class, 'submissionRequirements']);
     Route::get('organ-workspace/dashboard', [OrganWorkspaceController::class, 'dashboard']);

@@ -64,6 +64,8 @@ const SystemStatusPage = lazy(() => import('./pages/system-admin/SystemStatusPag
 
 // Admin general
 const GeneralAdminDashboard = lazy(() => import('./pages/general-admin/GeneralAdminDashboard'))
+const ScientificDirectionOrganPage = lazy(() => import('./pages/general-admin/ScientificDirectionOrganPage'))
+const ScientificDirectionProcessDetailPage = lazy(() => import('./pages/general-admin/ScientificDirectionProcessDetailPage'))
 const ManagePersonnelPage = lazy(() => import('./pages/general-admin/ManagePersonnelPage'))
 const CoursesManagementPage = lazy(() => import('./pages/general-admin/CoursesManagementPage'))
 
@@ -210,6 +212,8 @@ export default function App() {
               {/* ── General Admin / Direção Científica ──────── */}
               <Route element={<ProtectedRoute permission="admin.organs" roles={['admin']} adminScope="organ" organTypes={['scientific_direction']} />}>
                 <Route path="/general-admin" element={<GeneralAdminDashboard />} />
+                <Route path="/general-admin/organs/:organId" element={<ScientificDirectionOrganPage />} />
+                <Route path="/general-admin/organs/:organId/:kind/:processId" element={<ScientificDirectionProcessDetailPage />} />
                 <Route path="/general-admin/personnel" element={<ManagePersonnelPage />} />
                 <Route path="/general-admin/courses" element={<CoursesManagementPage />} />
               </Route>

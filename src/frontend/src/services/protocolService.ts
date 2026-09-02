@@ -55,6 +55,7 @@ export interface Protocol {
   review_assignments?: ReviewAssignment[];
   reviewer_attachments?: ReviewerProtocolAttachment[];
   review_history?: ReviewerProtocolHistory[];
+  committee_evaluation?: CommitteeEvaluation | null;
 }
 
 export interface ReviewerProtocolAttachment {
@@ -131,6 +132,20 @@ export interface ProtocolOrganTracking {
     signed_by?: string | null;
     signed_download_url?: string | null;
   } | null;
+}
+
+export interface CommitteeEvaluation {
+  id: number;
+  status: string;
+  final_decision?: string | null;
+  decided_at?: string | null;
+  reviewers: Array<{
+    reviewer_id: number;
+    name?: string | null;
+    status: string;
+    decision?: string | null;
+    submitted_at?: string | null;
+  }>;
 }
 
 export interface Document {

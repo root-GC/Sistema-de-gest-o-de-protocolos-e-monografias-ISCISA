@@ -22,6 +22,8 @@ interface HistoryRow {
   newStatus?: string | null
   actor?: string | null
   occurredAt: string
+  history?: ProtocolHistory[]
+  reviewerNames?: string[]
 }
 
 function formatDateTime(value: string) {
@@ -72,6 +74,7 @@ export default function HistoryPage() {
   const [protocols, setProtocols] = useState<Protocol[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedProtocolHistory, setSelectedProtocolHistory] = useState<HistoryRow | null>(null)
 
   const query = searchParams.get('q') ?? ''
   const action = searchParams.get('action') ?? 'all'
@@ -126,16 +129,23 @@ export default function HistoryPage() {
 
     const protocolRows = protocols.flatMap(protocol => {
       const entries = protocol.organ_tracking?.history ?? protocol.histories ?? []
+      const latest = [...entries].sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime())[0]
+      if (!latest) return []
 
-      return entries.map(entry => ({
-        id: `protocol-${protocol.id}-${entry.id}`,
+      return [{
+        id: `protocol-${protocol.id}`,
         source: 'protocol' as const,
         itemId: protocol.id,
         code: protocol.code || `Protocolo #${protocol.id}`,
         title: protocol.topic?.title || 'Protocolo sem tema associado',
         context: protocol.student?.name || protocol.organ_tracking?.organ_name || organLabel(organType),
-        ...mapHistoryEntry(entry, protocol.organ_tracking?.status_label || protocol.status_label || protocol.status),
-      }))
+        ...mapHistoryEntry(latest, protocol.organ_tracking?.status_label || protocol.status_label || protocol.status),
+        history: entries,
+        reviewerNames: protocol.review_assignments?.flatMap(assignment => [
+          assignment.reviewer_one?.name || assignment.reviewer_one?.user?.name,
+          assignment.reviewer_two?.name || assignment.reviewer_two?.user?.name,
+        ].filter((name): name is string => Boolean(name))) ?? [],
+      }]
     })
 
     return [...topicRows, ...protocolRows]
@@ -168,7 +178,7 @@ export default function HistoryPage() {
       {error && <div className="secretary-alert secretary-alert--error" role="alert" aria-live="polite"><span className="material-symbols-outlined" aria-hidden="true">error</span><span>{error}</span></div>}
 
       <section className="secretary-summary-grid" aria-label="Resumo do histórico">
-        <div className="secretary-stat"><span className="secretary-stat__label">Registos</span><strong className="secretary-stat__value">{rows.length}</strong></div>
+        <div className="secretary-stat"><span className="secretary-stat__label">Registos resumidos</span><strong className="secretary-stat__value">{rows.length}</strong></div>
         <div className="secretary-stat"><span className="secretary-stat__label">{isNucleus ? 'Temas' : 'Protocolos'}</span><strong className="secretary-stat__value">{isNucleus ? topics.length : protocols.length}</strong></div>
         <div className="secretary-stat"><span className="secretary-stat__label">Eventos filtrados</span><strong className="secretary-stat__value">{filtered.length}</strong></div>
       </section>
@@ -205,12 +215,46 @@ export default function HistoryPage() {
                 <span className="secretary-status-badge secretary-status-badge--complete">{row.actionLabel}</span>
                 <time dateTime={row.occurredAt}>{formatDateTime(row.occurredAt)}</time>
                 <small>{row.actor || 'Sistema'}</small>
-                <Link className="btn btn-outline btn-sm" to={`/secretary/protocols?type=${row.source === 'topic' ? 'topics' : 'protocols'}&status=all&item=${row.itemId}`}>Ver submissão</Link>
+                {row.source === 'protocol' ? <button type="button" className="btn btn-outline btn-sm" onClick={() => setSelectedProtocolHistory(row)}>Ver detalhes</button> : <Link className="btn btn-outline btn-sm" to={`/secretary/protocols?type=topics&status=all&item=${row.itemId}`}>Ver submissão</Link>}
               </div>
             </article>
           ))}
         </section>
       )}
+      {selectedProtocolHistory && <ProtocolHistoryModal row={selectedProtocolHistory} onClose={() => setSelectedProtocolHistory(null)} />}
     </main>
   )
+}
+
+function meetingVerdict(history: ProtocolHistory[]) {
+  const result = [...history].reverse().find(entry => entry.action === 'deliberation_meeting_item_closed')
+  const value = result?.metadata?.result
+  if (value === 'deliberated') return 'Deliberado'
+  if (value === 'not_deliberated') return 'Não deliberado'
+  return result?.new_status_label || result?.description || 'Sem veredito registado'
+}
+
+function meetingDuration(history: ProtocolHistory[]) {
+  const started = history.find(entry => entry.action === 'deliberation_meeting_started')
+  const completed = [...history].reverse().find(entry => entry.action === 'deliberation_meeting_completed')
+  if (!started || !completed) return 'Não registado'
+  const minutes = Math.max(0, Math.round((new Date(completed.occurred_at).getTime() - new Date(started.occurred_at).getTime()) / 60_000))
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`
+}
+
+function ProtocolHistoryModal({ row, onClose }: { row: HistoryRow; onClose: () => void }) {
+  const history = row.history ?? []
+
+  return <div className="secretary-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <section className="secretary-modal" role="dialog" aria-modal="true" aria-labelledby="protocol-history-title">
+      <header><div><span className="secretary-eyebrow">{row.code}</span><h2 id="protocol-history-title">Histórico do protocolo</h2></div><button type="button" onClick={onClose} aria-label="Fechar"><span className="material-symbols-outlined" aria-hidden="true">close</span></button></header>
+      <dl className="secretary-history-summary-details">
+        <div><dt>Veredito</dt><dd>{meetingVerdict(history)}</dd></div>
+        <div><dt>Data</dt><dd>{formatDateTime(row.occurredAt)}</dd></div>
+        <div><dt>Tempo de reunião</dt><dd>{meetingDuration(history)}</dd></div>
+        <div><dt>Revisores</dt><dd>{row.reviewerNames?.length ? row.reviewerNames.join(' · ') : 'Sem revisores atribuídos'}</dd></div>
+      </dl>
+      <div className="secretary-modal-actions"><button type="button" className="btn btn-primary" onClick={onClose}>Fechar</button></div>
+    </section>
+  </div>
 }

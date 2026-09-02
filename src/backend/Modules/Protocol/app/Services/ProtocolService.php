@@ -964,6 +964,11 @@ class ProtocolService
                         'reviewerOne.user:id,name,email',
                         'reviewerTwo.user:id,name,email',
                     ]),
+                'evaluationForms' => fn ($query) => $query
+                    ->when($formOrgan, fn ($formQuery) => $formQuery->where('organ', $formOrgan))
+                    ->where('form_type', EvaluationForm::FORM_TYPE_EVALUATION)
+                    ->with(['reviewerEvaluations.reviewer.user:id,name,email'])
+                    ->latest('id'),
             ])
             ->latest('submitted_at')
             ->get();
@@ -1768,9 +1773,13 @@ class ProtocolService
             'form_organ' => $formOrgan,
             'is_current' => $isCurrent,
             'is_historical' => ! $isCurrent,
-            'status_label' => $isCurrent
-                ? $protocol->status_label
-                : $this->historicalStatusLabel($organName, $latestHistory?->action, $latestOpinion?->decision),
+            // A assinatura do parecer é uma tarefa administrativa. Quando o
+            // comité já emitiu decisão, a fila deve mostrar esse resultado.
+            'status_label' => $latestOpinion?->decision
+                ? $this->historicalStatusLabel($organName, $latestHistory?->action, $latestOpinion->decision)
+                : ($isCurrent
+                    ? $protocol->status_label
+                    : $this->historicalStatusLabel($organName, $latestHistory?->action, null)),
             'latest_action' => $latestHistory?->action,
             'latest_action_label' => $this->historyActionLabel($latestHistory?->action),
             'latest_action_at' => $latestActionAt,

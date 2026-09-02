@@ -19,6 +19,8 @@ interface AssignmentSummary {
   decisionLabel?: string | null
   evaluatedAt?: string | null
   roleLabel?: string | null
+  evaluationStatus?: string | null
+  evaluationDecision?: string | null
 }
 
 interface QueueItem {
@@ -33,6 +35,8 @@ interface QueueItem {
   history?: HistoryEntry[]
   assignments?: AssignmentSummary[]
   canAssign?: boolean
+  finalDecision?: string | null
+  decidedAt?: string | null
 }
 
 interface Reviewer {
@@ -93,6 +97,21 @@ function assignmentStatusLabel(status?: string | null) {
   return 'Em revisão'
 }
 
+function reviewerEvaluationLabel(status?: string | null, decision?: string | null) {
+  if (status === 'submitted') return decisionLabel(decision) ? `Avaliado · ${decisionLabel(decision)}` : 'Avaliado'
+  if (status === 'in_progress') return 'Em avaliação'
+  return 'Pendente'
+}
+
+function durationLabel(start?: string | null, end?: string | null) {
+  if (!start) return 'Tempo não registado'
+  const startedAt = new Date(start).getTime()
+  const finishedAt = end ? new Date(end).getTime() : Date.now()
+  if (Number.isNaN(startedAt) || Number.isNaN(finishedAt)) return 'Tempo não registado'
+  const days = Math.max(0, Math.ceil((finishedAt - startedAt) / 86_400_000))
+  return `${days} dia${days === 1 ? '' : 's'}`
+}
+
 function mapTopicAssignments(assignments?: Topic['review_assignments']): AssignmentSummary[] {
   return assignments?.map(assignment => ({
     id: String(assignment.id),
@@ -105,12 +124,14 @@ function mapTopicAssignments(assignments?: Topic['review_assignments']): Assignm
   })) ?? []
 }
 
-function mapProtocolAssignments(assignments?: Protocol['review_assignments']): AssignmentSummary[] {
+function mapProtocolAssignments(assignments?: Protocol['review_assignments'], evaluationReviewers?: Protocol['committee_evaluation'] extends infer T ? T extends { reviewers: infer R } ? R : never : never): AssignmentSummary[] {
   return assignments?.flatMap(assignment => {
     const common = {
       assignedAt: assignment.assigned_at ?? null,
       statusLabel: assignmentStatusLabel(assignment.status),
     }
+
+    const reviewerEvaluation = (reviewerId?: number | null) => evaluationReviewers?.find(evaluation => evaluation.reviewer_id === reviewerId)
 
     return [
       assignment.reviewer_one ? {
@@ -118,6 +139,10 @@ function mapProtocolAssignments(assignments?: Protocol['review_assignments']): A
         reviewerName: assignment.reviewer_one.name || assignment.reviewer_one.user?.name || 'Revisor sem nome',
         reviewerEmail: assignment.reviewer_one.email || assignment.reviewer_one.user?.email,
         roleLabel: assignment.is_primary ? 'Principal' : 'Revisor',
+        evaluationStatus: reviewerEvaluation(assignment.reviewer_one.id)?.status,
+        evaluationDecision: reviewerEvaluation(assignment.reviewer_one.id)?.decision,
+        decisionLabel: decisionLabel(reviewerEvaluation(assignment.reviewer_one.id)?.decision),
+        evaluatedAt: reviewerEvaluation(assignment.reviewer_one.id)?.submitted_at,
         ...common,
       } : null,
       assignment.reviewer_two ? {
@@ -125,10 +150,26 @@ function mapProtocolAssignments(assignments?: Protocol['review_assignments']): A
         reviewerName: assignment.reviewer_two.name || assignment.reviewer_two.user?.name || 'Revisor sem nome',
         reviewerEmail: assignment.reviewer_two.email || assignment.reviewer_two.user?.email,
         roleLabel: 'Revisor',
+        evaluationStatus: reviewerEvaluation(assignment.reviewer_two.id)?.status,
+        evaluationDecision: reviewerEvaluation(assignment.reviewer_two.id)?.decision,
+        decisionLabel: decisionLabel(reviewerEvaluation(assignment.reviewer_two.id)?.decision),
+        evaluatedAt: reviewerEvaluation(assignment.reviewer_two.id)?.submitted_at,
         ...common,
       } : null,
     ].filter(Boolean) as AssignmentSummary[]
   }) ?? []
+}
+
+function phaseForSubmission(item: QueueItem, protocol?: Protocol | null) {
+  const evaluation = protocol?.committee_evaluation
+  const finalDecision = evaluation?.final_decision || protocol?.organ_tracking?.latest_opinion?.decision
+  const completedAt = evaluation?.decided_at || protocol?.organ_tracking?.latest_opinion?.issued_at
+
+  if (finalDecision) return { label: 'Concluído', text: `${decisionLabel(finalDecision) || 'Decisão registada'} em ${formatDate(completedAt)}.`, tone: 'complete' }
+  if (evaluation?.status === 'deliberated') return { label: 'Deliberado', text: 'Aguardando a submissão da decisão final pelos revisores.', tone: 'reviewing' }
+  if (item.canAssign) return { label: 'Atribuição de revisores', text: 'Seleciona os revisores elegíveis para iniciar a avaliação.', tone: 'pending' }
+  if (item.assignments?.length) return { label: 'Em avaliação', text: 'Acompanha o estado individual e o tempo de cada revisor.', tone: 'reviewing' }
+  return { label: item.statusLabel, text: 'A submissão aguarda o próximo passo neste órgão.', tone: queueStatus(item.status) }
 }
 
 export default function SecretaryProtocolsPage() {
@@ -148,6 +189,7 @@ export default function SecretaryProtocolsPage() {
   const [assigning, setAssigning] = useState(false)
   const [reviewingRequirementId, setReviewingRequirementId] = useState<number | null>(null)
   const [requirementRejectionReasons, setRequirementRejectionReasons] = useState<Record<number, string>>({})
+  const [historyModalItem, setHistoryModalItem] = useState<QueueItem | null>(null)
 
   const availableTypes = useMemo<TriageType[]>(
     () => organType === 'nucleus' ? ['topics'] : ['protocols'],
@@ -243,16 +285,25 @@ export default function SecretaryProtocolsPage() {
         submittedAt: protocol.submitted_at,
         context: protocol.student?.name ?? protocol.organ_tracking?.organ_name ?? null,
         history: protocol.organ_tracking?.history ?? protocol.histories ?? [],
-        assignments: mapProtocolAssignments(protocol.review_assignments),
+        assignments: mapProtocolAssignments(protocol.review_assignments, protocol.committee_evaluation?.reviewers),
         canAssign: canAssignProtocol,
+        finalDecision: protocol.committee_evaluation?.final_decision ?? protocol.organ_tracking?.latest_opinion?.decision ?? null,
+        decidedAt: protocol.committee_evaluation?.decided_at ?? protocol.organ_tracking?.latest_opinion?.issued_at ?? null,
       }
     })
   }, [activeType, organType, protocols, topics])
 
-  const visibleItems = useMemo(
-    () => activeStatus === 'all' ? items : items.filter(item => queueStatus(item.status) === activeStatus),
-    [activeStatus, items],
-  )
+  const visibleItems = useMemo(() => {
+    if (activeStatus === 'all') return items
+
+    if (activeStatus === 'complete') {
+      return items.filter(item => item.kind === 'protocols'
+        ? item.finalDecision === 'approved'
+        : item.assignments?.some(assignment => assignment.decisionLabel === 'Aprovado'))
+    }
+
+    return items.filter(item => queueStatus(item.status) === activeStatus)
+  }, [activeStatus, items])
   const selectedItem = items.find(item => item.id === selectedId) ?? null
   const isBioethics = organType === 'bioethics_committee'
   const selectedProtocol = selectedItem?.kind === 'protocols'
@@ -261,6 +312,7 @@ export default function SecretaryProtocolsPage() {
   const documentOrgan = isBioethics ? 'comite_bioetica' : 'comite_cientifico'
   const documentValidationStatus = isBioethics ? 'protocol_documents_pending_cibs' : 'protocol_documents_pending_cc'
   const isDocumentValidation = selectedProtocol?.status === documentValidationStatus && !selectedProtocol.read_only_for_organ
+  const selectedPhase = selectedItem ? phaseForSubmission(selectedItem, selectedProtocol) : null
 
   const loadReviewers = useCallback(async (item: QueueItem) => {
     setLoadingReviewers(true)
@@ -435,7 +487,7 @@ export default function SecretaryProtocolsPage() {
       )}
 
       {loading ? <div className="secretary-loading"><span className="secretary-spinner" aria-hidden="true" />A carregar fila…</div> : (
-        <div className={`secretary-workbench${selectedItem ? ' secretary-workbench--detail' : ''}`}>
+        <div className={`secretary-workbench${selectedItem ? ' secretary-workbench--detail' : ' secretary-workbench--list'}`}>
           <section className="secretary-queue" aria-label="Fila de submissões">
             {visibleItems.length === 0 ? <div className="secretary-empty-state"><span className="material-symbols-outlined" aria-hidden="true">inbox</span><strong>{typeConfig[activeType].empty}</strong><span>A fila será atualizada quando houver novas submissões.</span></div> : visibleItems.map(item => {
               const itemStatus = queueStatus(item.status)
@@ -470,6 +522,20 @@ export default function SecretaryProtocolsPage() {
                     <p className="secretary-helper-text" style={{ marginTop: '8px' }}>{selectedItem.context || 'Submissão associada ao teu órgão'} · {formatDate(selectedItem.submittedAt)}</p>
                   </div>
 
+                  {selectedProtocol && selectedPhase && (
+                    <section className="secretary-process-phase" aria-label="Fase actual do protocolo">
+                      <span className={`secretary-status-badge secretary-status-badge--${selectedPhase.tone}`}>{selectedPhase.label}</span>
+                      <p>{selectedPhase.text}</p>
+                    </section>
+                  )}
+
+                  {selectedProtocol && (
+                    <section className="secretary-submission-description" aria-labelledby="protocol-description-title">
+                      <span id="protocol-description-title" className="secretary-field-label">Descrição</span>
+                      <p>{selectedProtocol.justification || selectedProtocol.topic?.justification || 'Sem descrição registada para este protocolo.'}</p>
+                    </section>
+                  )}
+
                   {selectedProtocol && isDocumentValidation && (
                     <div className="secretary-document-review">
                       <RequiredDocumentsReviewPanel
@@ -488,15 +554,11 @@ export default function SecretaryProtocolsPage() {
                   <div className="secretary-history" aria-label="Histórico deste órgão">
                     <span className="secretary-field-label">Histórico deste órgão</span>
                     {selectedItem.history?.length ? (
-                      <ol className="secretary-history__list">
-                        {selectedItem.history.map(entry => (
-                          <li key={entry.id} className="secretary-history__entry">
-                            <strong>{entry.action_label || entry.action}</strong>
-                            <span>{entry.description || entry.new_status_label || 'Estado atualizado.'}</span>
-                            <small>{formatDate(entry.occurred_at)}{entry.actor?.name ? ` · ${entry.actor.name}` : ''}</small>
-                          </li>
-                        ))}
-                      </ol>
+                      <button type="button" className="secretary-history-summary" onClick={() => setHistoryModalItem(selectedItem)}>
+                        <span className="material-symbols-outlined" aria-hidden="true">history</span>
+                        <span><strong>Histórico do protocolo</strong><small>{historySummary(selectedItem.history, selectedItem.finalDecision)}</small></span>
+                        <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+                      </button>
                     ) : (
                       <p className="secretary-helper-text">Ainda não há ações registadas neste órgão.</p>
                     )}
@@ -505,23 +567,23 @@ export default function SecretaryProtocolsPage() {
                   {selectedItem.assignments && selectedItem.assignments.length > 0 && (
                     <div className="secretary-assignment-summary" aria-label="Revisores atribuídos">
                       <div>
-                        <span className="secretary-field-label">Revisores atribuídos</span>
+                        <span className="secretary-field-label">{selectedPhase?.label === 'Em avaliação' ? 'Estado das avaliações' : 'Revisores atribuídos'}</span>
                         <p className="secretary-helper-text">
-                          {queueStatus(selectedItem.status) === 'complete'
-                            ? `Estado de conclusão: ${selectedItem.statusLabel}`
+                          {selectedPhase?.label === 'Concluído'
+                            ? selectedPhase.text
                             : `Data de atribuição: ${selectedAssignmentDate ? formatDate(selectedAssignmentDate) : 'Sem data registada'}`}
                         </p>
                       </div>
                       <ul className="secretary-assignment-list">
                         {selectedItem.assignments.map(assignment => {
-                          const isComplete = queueStatus(selectedItem.status) === 'complete' || Boolean(assignment.decisionLabel)
-                          const visibleStatus = assignment.decisionLabel || (isComplete ? 'Concluído' : assignment.statusLabel)
+                          const isComplete = assignment.evaluationStatus === 'submitted' || Boolean(assignment.decisionLabel)
+                          const visibleStatus = reviewerEvaluationLabel(assignment.evaluationStatus, assignment.evaluationDecision)
 
                           return (
                             <li key={assignment.id} className="secretary-assignment-list__item">
                               <span className="secretary-assignment-list__main">
                                 <strong>{assignment.reviewerName}</strong>
-                                <small>{assignment.roleLabel || assignment.reviewerEmail || 'Revisor'}</small>
+                                <small>{assignment.roleLabel || assignment.reviewerEmail || 'Revisor'} · {durationLabel(assignment.assignedAt, assignment.evaluatedAt)}</small>
                               </span>
                               <span className={`secretary-status-badge secretary-status-badge--${isComplete ? 'complete' : 'reviewing'}`}>
                                 {visibleStatus}
@@ -590,6 +652,57 @@ export default function SecretaryProtocolsPage() {
           </aside>
         </div>
       )}
+      {historyModalItem && <ProtocolHistoryModal item={historyModalItem} onClose={() => setHistoryModalItem(null)} />}
     </main>
   )
+}
+
+function historySummary(history: HistoryEntry[], finalDecision?: string | null) {
+  const latest = [...history].sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime())[0]
+  const result = decisionLabel(finalDecision)
+  if (result) return latest ? `${result} · ${formatDate(latest.occurred_at)}` : result
+  return latest ? `Atualizado em ${formatDate(latest.occurred_at)}` : 'Sem registos'
+}
+
+function meetingVerdict(item: QueueItem) {
+  const finalDecision = decisionLabel(item.finalDecision)
+  if (finalDecision) return finalDecision
+
+  const history = item.history ?? []
+  const result = [...history].reverse().find(entry => entry.action === 'deliberation_meeting_item_closed')
+  const value = result?.metadata?.result
+
+  if (value === 'deliberated') return 'Deliberado'
+  if (value === 'not_deliberated') return 'Não deliberado'
+  return result?.new_status_label || result?.description || 'Sem veredito registado'
+}
+
+function meetingDuration(history: HistoryEntry[]) {
+  const started = history.find(entry => entry.action === 'deliberation_meeting_started')
+  const completed = [...history].reverse().find(entry => entry.action === 'deliberation_meeting_completed')
+  if (!started || !completed) return 'Não registado'
+
+  const elapsedMinutes = Math.max(0, Math.round((new Date(completed.occurred_at).getTime() - new Date(started.occurred_at).getTime()) / 60_000))
+  const hours = Math.floor(elapsedMinutes / 60)
+  const minutes = elapsedMinutes % 60
+
+  return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`
+}
+
+function ProtocolHistoryModal({ item, onClose }: { item: QueueItem; onClose: () => void }) {
+  const history = item.history ?? []
+  const latest = [...history].sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime())[0]
+
+  return <div className="secretary-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <section className="secretary-modal" role="dialog" aria-modal="true" aria-labelledby="protocol-history-modal-title">
+      <header><div><span className="secretary-eyebrow">{item.code}</span><h2 id="protocol-history-modal-title">Histórico do protocolo</h2></div><button type="button" onClick={onClose} aria-label="Fechar"><span className="material-symbols-outlined" aria-hidden="true">close</span></button></header>
+      <dl className="secretary-history-summary-details">
+        <div><dt>Veredito</dt><dd>{meetingVerdict(item)}</dd></div>
+        <div><dt>Data</dt><dd>{item.decidedAt ? formatDate(item.decidedAt) : latest ? formatDate(latest.occurred_at) : 'Não registada'}</dd></div>
+        <div><dt>Tempo de reunião</dt><dd>{meetingDuration(history)}</dd></div>
+        <div><dt>Revisores</dt><dd>{item.assignments?.length ? item.assignments.map(assignment => `${assignment.reviewerName}${assignment.roleLabel ? ` (${assignment.roleLabel})` : ''}`).join(' · ') : 'Sem revisores atribuídos'}</dd></div>
+      </dl>
+      <div className="secretary-modal-actions"><button type="button" className="btn btn-primary" onClick={onClose}>Fechar</button></div>
+    </section>
+  </div>
 }

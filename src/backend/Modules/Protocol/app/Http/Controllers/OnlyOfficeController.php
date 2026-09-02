@@ -127,7 +127,7 @@ class OnlyOfficeController extends Controller
 
     private function canAccess(User $user, Protocol $protocol): bool
     {
-        if ($user->hasPermission('protocol.view.all')) {
+        if ($user->hasPermission('protocol.view.all') || $this->isScientificDirection($user)) {
             return true;
         }
 
@@ -168,7 +168,7 @@ class OnlyOfficeController extends Controller
     {
         $user->loadMissing(['teacherProfile', 'secretaryProfile']);
 
-        if ((int) $topic->student_id === (int) $user->id || $user->hasPermission('topic.view.all')) {
+        if ((int) $topic->student_id === (int) $user->id || $user->hasPermission('topic.view.all') || $this->isScientificDirection($user)) {
             return true;
         }
 
@@ -231,6 +231,15 @@ class OnlyOfficeController extends Controller
         }
 
         return 'view';
+    }
+
+    private function isScientificDirection(User $user): bool
+    {
+        $user->loadMissing('adminProfile.organ');
+
+        return $user->hasPermission('admin.organs')
+            && $user->adminProfile?->access_scope === 'organ'
+            && $user->adminProfile?->organ?->type === 'scientific_direction';
     }
 
     public function downloadDocumentForOnlyOffice(Request $request, Document $document)

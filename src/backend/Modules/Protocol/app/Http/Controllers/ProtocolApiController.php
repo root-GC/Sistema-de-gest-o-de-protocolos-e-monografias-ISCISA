@@ -31,9 +31,9 @@ class ProtocolApiController extends Controller
 
     private function canAccessProtocolDocument(User $user, Protocol $protocol): bool
     {
-        $user->loadMissing(['teacherProfile', 'secretaryProfile']);
+        $user->loadMissing(['teacherProfile', 'secretaryProfile', 'adminProfile.organ']);
 
-        if ($user->hasPermission('protocol.view.all') || (int) $protocol->student === (int) $user->id) {
+        if ($user->hasPermission('protocol.view.all') || $this->isScientificDirection($user) || (int) $protocol->student === (int) $user->id) {
             return true;
         }
 
@@ -477,6 +477,13 @@ class ProtocolApiController extends Controller
                 ->orWhere('reviewer_two', $user->teacherProfile->id))
             ->whereHas('organ', fn ($query) => $query->where('type', $organType))
             ->exists();
+    }
+
+    private function isScientificDirection(User $user): bool
+    {
+        return $user->hasPermission('admin.organs')
+            && $user->adminProfile?->access_scope === 'organ'
+            && $user->adminProfile?->organ?->type === 'scientific_direction';
     }
 
     public function getForSupervisor(Request $request)

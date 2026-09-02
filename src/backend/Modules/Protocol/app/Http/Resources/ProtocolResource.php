@@ -112,6 +112,23 @@ class ProtocolResource extends JsonResource
                     'email' => $assignment->reviewerTwo->user?->email,
                 ] : null,
             ])->values()),
+            'committee_evaluation' => $this->whenLoaded('evaluationForms', function () {
+                $form = $this->evaluationForms->first();
+
+                return $form ? [
+                    'id' => $form->id,
+                    'status' => $form->status,
+                    'final_decision' => $form->final_decision,
+                    'decided_at' => $form->decided_at,
+                    'reviewers' => $form->reviewerEvaluations->map(fn ($evaluation) => [
+                        'reviewer_id' => $evaluation->reviewer_id,
+                        'name' => $evaluation->reviewer?->user?->name,
+                        'status' => $evaluation->status,
+                        'decision' => $evaluation->decision,
+                        'submitted_at' => $evaluation->submitted_at,
+                    ])->values(),
+                ] : null;
+            }),
         ];
     }
 }

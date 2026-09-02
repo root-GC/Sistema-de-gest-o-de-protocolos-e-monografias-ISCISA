@@ -1,0 +1,17 @@
+import { req } from './apiClient'
+
+export type DirectionKind = 'topics' | 'protocols'
+export interface DirectionOrgan { id: number; name: string; type: 'nucleus' | 'scientific_committee' | 'bioethics_committee'; kind: DirectionKind; processes: number; states: Record<string, number>; review_assigned: number; review_submitted: number; review_rate: number | null; average_duration_days: number | null; meetings: { total: number; scheduled: number; in_progress: number; completed: number; cancelled: number } }
+export interface ScientificDirectionDashboard { period: { from: string; to: string; label: string }; summary: { processes: number; meetings: number; review_rate: number | null; average_duration_days: number | null }; organs: DirectionOrgan[] }
+export interface DirectionProcess { id: number; kind: DirectionKind; code?: string; title: string; status: string; status_label: string; submitted_at?: string | null; student?: { name?: string; email?: string } | null; course?: { name?: string; code?: string } | null; reviewers: Array<{ name?: string | null; status?: string; organ?: string; assigned_at?: string }> }
+export interface FileRow { id?: number; name: string; version?: string; status?: string; availability?: string; optional?: boolean; submission_number?: number; download_url?: string | null }
+export interface DirectionDetail extends DirectionProcess { submission_number?: number; document?: { name: string; download_url: string } | null; documents?: FileRow[]; requirements?: FileRow[]; document_versions?: Array<FileRow & { submission_number?: number; revision_number?: number; availability?: string }>; assignments?: Array<{ organ?: string; reviewer?: string; assigned_at?: string; released?: boolean; decision?: string; evaluated_at?: string; comment?: string }>; evaluations?: Array<{ id: number; organ: string; version: string; status: string; decision?: string | null; decided_at?: string | null; summary?: string | null; reviews: Array<{ reviewer?: string; status: string; decision?: string | null; submitted_at?: string | null; comment?: string | null; criteria: Array<{ name?: string | null; comment?: string | null }> }>; opinions: Array<{ decision?: string; issued_at?: string; download_url?: string; signed_download_url?: string | null }>; meetings: Array<{ status: string; scheduled_at?: string; meeting_status?: string; location?: string; organ?: string }> }>; comments?: Array<{ author?: string; content: string; created_at?: string }>; history: Array<{ id: number; action: string; description?: string | null; occurred_at?: string; organ?: string; actor?: string }> }
+export interface DirectionProcessPage { kind: DirectionKind; data: DirectionProcess[]; meta: { current_page: number; last_page: number; total: number } }
+
+const base = '/api/v1/scientific-direction'
+export const scientificDirectionService = {
+  dashboard: () => req('GET', '/api/v1/general-admin/dashboard') as Promise<ScientificDirectionDashboard>,
+  processes: (organId: number, params: { page?: number; status?: string; q?: string } = {}) => req('GET', `${base}/organs/${organId}/processes`, params) as Promise<DirectionProcessPage>,
+  protocol: (organId: number, processId: number) => req('GET', `${base}/organs/${organId}/protocols/${processId}`) as Promise<{ process: DirectionDetail }>,
+  topic: (organId: number, processId: number) => req('GET', `${base}/organs/${organId}/topics/${processId}`) as Promise<{ process: DirectionDetail }>,
+}
