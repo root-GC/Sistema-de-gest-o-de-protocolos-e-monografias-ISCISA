@@ -1,0 +1,42 @@
+.document-requirements-page { display: grid; gap: var(--space-3); color: var(--on-background); font-family: var(--font-family); }
+.document-requirements-header h1, .document-requirements-header p, .document-requirements-card h2, .document-requirements-card h3, .document-requirements-card p { margin: 0; }
+.document-requirements-eyebrow { margin-bottom: 4px !important; color: var(--primary); font-size: var(--label-sm); font-weight: var(--font-semibold); }
+.document-requirements-header h1 { font-size: var(--headline-lg); font-weight: var(--font-semibold); }
+.document-requirements-header > p:last-child { margin-top: var(--space-1); color: var(--on-surface-variant); font-size: var(--body-md); }
+.document-requirements-card { padding: var(--space-2) var(--space-3); border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); background: var(--surface-container-lowest); }
+.document-requirements-card__heading, .document-requirements-list__header, .document-requirement__content, .document-requirement__title, .document-requirement__actions, .document-requirements-form__actions, .document-requirements-choice, .document-requirements-alert { display: flex; align-items: center; }
+.document-requirements-card__heading { align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-3); }
+.document-requirements-card__heading > .material-symbols-outlined { display: grid; width: 40px; height: 40px; place-items: center; border-radius: var(--radius-lg); background: var(--primary-container); color: var(--on-primary-container); }
+.document-requirements-card h2 { font-size: var(--title-md); font-weight: var(--font-semibold); }
+.document-requirements-card__heading p, .document-requirements-list__header p, .document-requirement__content p { margin-top: 4px; color: var(--on-surface-variant); font-size: var(--body-sm); }
+.document-requirements-form__grid, .document-requirements-field, .document-requirement__edit { display: grid; gap: var(--space-2); }
+.document-requirements-field { gap: 6px; color: var(--on-surface); font-size: var(--label-md); font-weight: var(--font-semibold); }
+.document-requirements-field input, .document-requirements-field textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--outline-variant); border-radius: var(--radius-md); background: var(--surface-container-lowest); color: var(--on-surface); font: inherit; font-weight: var(--font-regular); }
+.document-requirements-field input { min-height: 42px; padding: 0 12px; }
+.document-requirements-field textarea { min-height: 88px; padding: 10px 12px; resize: vertical; }
+.document-requirements-field input:focus-visible, .document-requirements-field textarea:focus-visible, .document-requirements-choice input:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 28%, transparent); outline-offset: 2px; border-color: var(--primary); }
+.document-requirements-choice { align-items: flex-start; gap: 10px; margin-top: var(--space-2); padding: var(--space-2); border: 1px solid var(--outline-variant); border-radius: var(--radius-md); background: var(--surface-container-low); cursor: pointer; }
+.document-requirements-choice input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--primary); }
+.document-requirements-choice span { display: grid; gap: 2px; }
+.document-requirements-choice small { color: var(--on-surface-variant); font-size: var(--body-sm); }
+.document-requirements-form__actions { justify-content: flex-end; margin-top: var(--space-3); }
+.document-requirements-form__actions .btn, .document-requirement__actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; }
+.document-requirements-alert { gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--error); border-radius: var(--radius-lg); background: var(--error-container); color: var(--on-error-container); }
+.document-requirements-list__header { justify-content: space-between; gap: var(--space-2); padding-bottom: var(--space-2); }
+.document-requirements-items { border-top: 1px solid var(--outline-variant); }
+.document-requirement { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--outline-variant); }
+.document-requirement:last-child { border-bottom: 0; padding-bottom: 0; }
+.document-requirement.is-inactive { opacity: 0.68; }
+.document-requirement__content { align-items: flex-start; gap: var(--space-2); min-width: 0; }
+.document-requirement__icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border-radius: var(--radius-md); background: var(--surface-container); color: var(--primary); }
+.document-requirement__title { flex-wrap: wrap; gap: var(--space-1); }
+.document-requirement__title h3 { overflow-wrap: anywhere; font-size: var(--body-md); font-weight: var(--font-semibold); }
+.document-requirement__badge { display: inline-flex; padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--label-sm); font-weight: var(--font-semibold); white-space: nowrap; }
+.document-requirement__badge.is-required { background: var(--primary-container); color: var(--on-primary-container); }
+.document-requirement__badge.is-optional { background: var(--tertiary-fixed); color: var(--on-tertiary-fixed); }
+.document-requirement__badge.is-inactive { background: var(--surface-container-high); color: var(--on-surface-variant); }
+.document-requirement__actions { flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); }
+.document-requirement__edit { width: 100%; }
+.document-requirements-empty { display: grid; place-items: center; gap: var(--space-1); min-height: 180px; padding: var(--space-3); color: var(--on-surface-variant); text-align: center; }
+.document-requirements-empty .material-symbols-outlined { color: var(--primary); font-size: 32px; }
+@media (max-width: 720px) { .document-requirements-card { padding: var(--space-2); } .document-requirement { align-items: flex-start; flex-direction: column; } .document-requirement__actions { width: 100%; justify-content: flex-start; } .document-requirements-form__actions { justify-content: stretch; } .document-requirements-form__actions .btn { width: 100%; } }

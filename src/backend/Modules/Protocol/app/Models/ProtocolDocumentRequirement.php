@@ -45,9 +45,11 @@ class ProtocolDocumentRequirement extends Model
 
     protected $fillable = [
         'protocol_id',
+        'organ_document_requirement_id',
         'submission_number',
         'document_key',
         'nome',
+        'description',
         'required_for_organ',
         'file_path',
         'file_name',
@@ -84,6 +86,11 @@ class ProtocolDocumentRequirement extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function catalogRequirement(): BelongsTo
+    {
+        return $this->belongsTo(OrganDocumentRequirement::class, 'organ_document_requirement_id');
     }
 
     public function getFileUrlAttribute(): ?string

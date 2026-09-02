@@ -22,17 +22,14 @@ interface MessageResponse {
 }
 
 interface RegisterPayload {
-  type: 'student' | 'teacher'
+  type: 'student'
   name: string
   email: string
   password: string
   password_confirmation: string
-  course_id?: number
-  supervisor_id?: number
-  student_number?: string
-  scientific_area_id?: number
-  academic_degree?: 'licenciatura' | 'mestrado' | 'doutoramento'
-  department?: string
+  course_id: number
+  supervisor_id: number
+  student_number: string
 }
 
 interface RegisterResponse {

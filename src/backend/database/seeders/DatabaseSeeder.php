@@ -12,6 +12,7 @@ use Modules\User\database\seeders\OrganSecretariesSeeder;
 use Modules\User\database\seeders\ScientificDirectionAdminSeeder;
 use Modules\User\database\seeders\StudentsSeeder;
 use Modules\User\database\seeders\SuperAdminSeeder;
+use Modules\Protocol\database\seeders\ProtocolDatabaseSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -27,6 +28,7 @@ class DatabaseSeeder extends Seeder
             ScientificDirectionAdminSeeder::class,
             OrganAdminsSeeder::class,
             OrganSecretariesSeeder::class,
+            ProtocolDatabaseSeeder::class,
         ]);
     }
 }

@@ -38,7 +38,7 @@ class ReviewerEvaluation extends Model
 
     public function protocolReviewAssignment()
     {
-        return $this->belongsTo(ProtocolReviewAssignment::class, 'protocol_review_assignment_id');
+        return $this->belongsTo(ProtocolReviewAssignment::class, 'protocol_review_assignment_id')->withTrashed();
     }
 
     public function reviewer()

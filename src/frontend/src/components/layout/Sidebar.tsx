@@ -95,8 +95,10 @@ const ICON_MAP: Record<string, string> = {
   
   // Ícones adicionais usados nos módulos operacionais
   'ti-calendar-plus': 'calendar_add_on',
-  'ti-table': 'table',      
+  'ti-table': 'table',
   'ti-gavel': 'gavel',
+  'ti-signature': 'draw',
+  'ti-file-settings': 'description',
   
   // Fallbacks por ID
   'secretary_spreadsheet': 'table',

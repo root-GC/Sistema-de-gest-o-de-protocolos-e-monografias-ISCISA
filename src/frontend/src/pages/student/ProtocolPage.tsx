@@ -1,14 +1,9 @@
 // src/pages/student/ProtocolPage.tsx
 import { useEffect, useState } from 'react'
 import {
-  CC_REQUIRED_DOCUMENTS,
-  CIBS_REQUIRED_DOCUMENTS,
-  OPTIONAL_DOCUMENTS,
   protocolService,
-  type CCRequiredDocumentFiles,
-  type CCRequiredDocumentKey,
-  type CIBSDocumentFiles,
-  type CIBSDocumentKey,
+  type SubmissionDocumentFiles,
+  type SubmissionDocumentRequirement,
   type OtherDocument,
   type Document,
   type Protocol,
@@ -62,12 +57,12 @@ function validateAttachmentPdf(file: File | null): string | null {
   return null
 }
 
-function emptyRequiredDocuments(): CCRequiredDocumentFiles {
-  return Object.fromEntries(CC_REQUIRED_DOCUMENTS.map(doc => [doc.key, null])) as CCRequiredDocumentFiles
+function emptyRequiredDocuments(documents: SubmissionDocumentRequirement[] = []): SubmissionDocumentFiles {
+  return Object.fromEntries(documents.map(doc => [doc.document_key, null]))
 }
 
-function emptyCIBSDocuments(): CIBSDocumentFiles {
-  return Object.fromEntries(CIBS_REQUIRED_DOCUMENTS.map(doc => [doc.key, null])) as CIBSDocumentFiles
+function emptyCIBSDocuments(documents: SubmissionDocumentRequirement[] = []): SubmissionDocumentFiles {
+  return Object.fromEntries(documents.map(doc => [doc.document_key, null]))
 }
 
 function getDocumentVersionLabel(doc: Pick<Document, 'version' | 'version_label' | 'status'>, protocolVersion?: string | null) {
@@ -284,7 +279,7 @@ function RequirementValidationRow(props: {
 }
 
 function DocumentUploadRow(props: {
-  doc: { key: string; name: string }
+  doc: { key: string; name: string; is_optional?: boolean; description?: string | null }
   attachment: File | null
   previousRequirement?: ProtocolDocumentRequirement
   onAttach: (file: File | null) => void
@@ -304,7 +299,11 @@ function DocumentUploadRow(props: {
           {state.icon}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', marginBottom: '2px' }}>{doc.name}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexWrap: 'wrap' }}>
+            <p style={{ fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', marginBottom: '2px' }}>{doc.name}</p>
+            {doc.is_optional && <span style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)' }}>Opcional</span>}
+          </div>
+          {doc.description && <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', marginBottom: '2px' }}>{doc.description}</p>}
           <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {fileLabel}
           </p>
@@ -353,11 +352,13 @@ export default function ProtocolPage() {
   const [protocolType, setProtocolType] = useState('protocol')
   const [file, setFile] = useState<File | null>(null)
   const [formStep, setFormStep] = useState<1 | 2 | 3>(1)
-  const [requiredDocuments, setRequiredDocuments] = useState<CCRequiredDocumentFiles>(() => emptyRequiredDocuments())
-  const [cibsDocuments, setCibsDocuments] = useState<CIBSDocumentFiles>(() => emptyCIBSDocuments())
-  const [otherDocuments, setOtherDocuments] = useState<OtherDocument[]>(() =>
-    OPTIONAL_DOCUMENTS.map(option => ({ name: option.name, file: null }))
-  )
+  const [submissionRequirements, setSubmissionRequirements] = useState<Record<'comite_cientifico' | 'comite_bioetica', SubmissionDocumentRequirement[]>>({
+    comite_cientifico: [],
+    comite_bioetica: [],
+  })
+  const [requiredDocuments, setRequiredDocuments] = useState<SubmissionDocumentFiles>({})
+  const [cibsDocuments, setCibsDocuments] = useState<SubmissionDocumentFiles>({})
+  const [otherDocuments, setOtherDocuments] = useState<OtherDocument[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [uploadingRequirementId, setUploadingRequirementId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -366,6 +367,7 @@ export default function ProtocolPage() {
   useEffect(() => {
     load()
     loadApprovedTopics()
+    loadSubmissionRequirements()
   }, [])
 
   async function load() {
@@ -407,6 +409,18 @@ export default function ProtocolPage() {
     }
   }
 
+  async function loadSubmissionRequirements() {
+    try {
+      const response = await protocolService.submissionRequirements()
+      const requirements = response.requirements
+      setSubmissionRequirements(requirements)
+      setRequiredDocuments(emptyRequiredDocuments(requirements.comite_cientifico))
+      setCibsDocuments(emptyCIBSDocuments(requirements.comite_bioetica))
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar os anexos exigidos.')
+    }
+  }
+
   const current = protocols[0]
   const canSubmitNew = !current || [
     'protocol_rejected_supervisor',
@@ -417,6 +431,8 @@ export default function ProtocolPage() {
   ].includes(current.status)
 
   const selectedTopic = approvedTopics.find(t => t.id === Number(selectedTopicId))
+  const ccDocuments = submissionRequirements.comite_cientifico.map(document => ({ ...document, key: document.document_key }))
+  const cibsRequiredDocuments = submissionRequirements.comite_bioetica.map(document => ({ ...document, key: document.document_key }))
   const selectedProtocol = selectedTopic?.latest_protocol_id
     ? protocols.find(protocol => protocol.id === selectedTopic.latest_protocol_id)
     : undefined
@@ -428,13 +444,13 @@ export default function ProtocolPage() {
   const isResubmission = Boolean(selectedTopic?.can_resubmit_protocol && selectedProtocol)
   const topicHasActiveProtocol = Boolean(selectedTopic?.has_protocol && !selectedTopic?.can_resubmit_protocol)
   const protocolStepComplete = Boolean(selectedTopicId && file && !topicHasActiveProtocol)
-  const requiredDocumentsComplete = CC_REQUIRED_DOCUMENTS.every(doc => Boolean(
+  const requiredDocumentsComplete = ccDocuments.filter(doc => !doc.is_optional).every(doc => Boolean(
     requiredDocuments[doc.key] || (isResubmission && selectedProtocolRequirementsByKey[doc.key]?.file_name)
   ))
-  const reusedRequiredDocuments = CC_REQUIRED_DOCUMENTS.filter(doc => (
+  const reusedRequiredDocuments = ccDocuments.filter(doc => (
     !requiredDocuments[doc.key] && Boolean(selectedProtocolRequirementsByKey[doc.key]?.file_name)
   ))
-  const requiredDocumentUploadRows = CC_REQUIRED_DOCUMENTS.map(doc => {
+  const requiredDocumentUploadRows = ccDocuments.map(doc => {
     const attachment = requiredDocuments[doc.key]
     const previousRequirement = selectedProtocolRequirementsByKey[doc.key]
 
@@ -446,10 +462,10 @@ export default function ProtocolPage() {
     }
   })
   const selectedRequiredDocumentsCount = requiredDocumentUploadRows.filter(row => Boolean(row.attachment)).length
-  const readyRequiredDocumentsCount = requiredDocumentUploadRows.filter(row => Boolean(row.attachment || row.previousRequirement?.file_name)).length
+  const readyRequiredDocumentsCount = requiredDocumentUploadRows.filter(row => !row.doc.is_optional && Boolean(row.attachment || row.previousRequirement?.file_name)).length
   const rejectedPreviousDocumentsCount = requiredDocumentUploadRows.filter(row => !row.attachment && row.previousRequirement?.aprovado === false).length
 
-  const cibsDocumentUploadRows = CIBS_REQUIRED_DOCUMENTS.map(doc => {
+  const cibsDocumentUploadRows = cibsRequiredDocuments.map(doc => {
     const attachment = cibsDocuments[doc.key]
     const previousRequirement = selectedProtocolRequirementsByKey[doc.key]
 
@@ -460,11 +476,11 @@ export default function ProtocolPage() {
       state: getRequirementUploadState(attachment, previousRequirement),
     }
   })
-  const cibsDocumentsComplete = CIBS_REQUIRED_DOCUMENTS.every(doc => Boolean(
+  const cibsDocumentsComplete = cibsRequiredDocuments.filter(doc => !doc.is_optional).every(doc => Boolean(
     cibsDocuments[doc.key] || (isResubmission && selectedProtocolRequirementsByKey[doc.key]?.file_name)
   ))
-  const readyCIBSDocumentsCount = cibsDocumentUploadRows.filter(row => Boolean(row.attachment || row.previousRequirement?.file_name)).length
-  const reusedCIBSDocuments = CIBS_REQUIRED_DOCUMENTS.filter(doc => (
+  const readyCIBSDocumentsCount = cibsDocumentUploadRows.filter(row => !row.doc.is_optional && Boolean(row.attachment || row.previousRequirement?.file_name)).length
+  const reusedCIBSDocuments = cibsRequiredDocuments.filter(doc => (
     !cibsDocuments[doc.key] && Boolean(selectedProtocolRequirementsByKey[doc.key]?.file_name)
   ))
 
@@ -497,11 +513,11 @@ export default function ProtocolPage() {
     setError(null)
     setSuccess(null)
     try {
-      await protocolService.submit(Number(selectedTopicId), protocolType, file, requiredDocuments, cibsDocuments, otherDocuments)
+      await protocolService.submitDynamic(Number(selectedTopicId), protocolType, file, requiredDocuments, cibsDocuments, otherDocuments)
       setFile(null)
       setSelectedTopicId('')
-      setRequiredDocuments(emptyRequiredDocuments())
-      setCibsDocuments(emptyCIBSDocuments())
+      setRequiredDocuments(emptyRequiredDocuments(submissionRequirements.comite_cientifico))
+      setCibsDocuments(emptyCIBSDocuments(submissionRequirements.comite_bioetica))
       setOtherDocuments([])
       setFormStep(1)
       setSuccess(isResubmission
@@ -522,7 +538,7 @@ export default function ProtocolPage() {
     }
   }
 
-  function setRequiredDocument(key: CCRequiredDocumentKey, attachment: File | null) {
+  function setRequiredDocument(key: string, attachment: File | null) {
     const validationError = validateAttachmentPdf(attachment)
     if (validationError) {
       setError(validationError)
@@ -532,7 +548,7 @@ export default function ProtocolPage() {
     setRequiredDocuments(prev => ({ ...prev, [key]: attachment }))
   }
 
-  function setCIBSDocument(key: CIBSDocumentKey, attachment: File | null) {
+  function setCIBSDocument(key: string, attachment: File | null) {
     const validationError = validateAttachmentPdf(attachment)
     if (validationError) {
       setError(validationError)
@@ -1060,7 +1076,7 @@ export default function ProtocolPage() {
                       )}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
-                      {CC_REQUIRED_DOCUMENTS.map(doc => {
+                      {ccDocuments.map(doc => {
                         const attachment = requiredDocuments[doc.key]
                         const previousRequirement = selectedProtocolRequirementsByKey[doc.key]
                         const reused = !attachment && Boolean(previousRequirement?.file_name)
@@ -1078,7 +1094,7 @@ export default function ProtocolPage() {
                         {reusedRequiredDocuments.length} anexo{reusedRequiredDocuments.length !== 1 ? 's' : ''} do Comité Científico ser{reusedRequiredDocuments.length !== 1 ? 'ão' : 'á'} reutilizado{reusedRequiredDocuments.length !== 1 ? 's' : ''} automaticamente se não forem substituídos.
                       </p>
                     )}
-                    {CIBS_REQUIRED_DOCUMENTS.map(doc => {
+                    {cibsRequiredDocuments.map(doc => {
                       const attachment = cibsDocuments[doc.key]
                       const previousRequirement = selectedProtocolRequirementsByKey[doc.key]
                       const reused = !attachment && Boolean(previousRequirement?.file_name)
@@ -1141,7 +1157,7 @@ export default function ProtocolPage() {
                   </div>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: 'var(--radius-full)', background: requiredDocumentsComplete && cibsDocumentsComplete ? 'var(--primary-container)' : 'var(--surface-container-lowest)', color: requiredDocumentsComplete && cibsDocumentsComplete ? 'var(--on-primary-container)' : 'var(--on-surface-variant)', fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', border: '1px solid var(--outline-variant)' }}>
                     <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>{requiredDocumentsComplete && cibsDocumentsComplete ? 'check_circle' : 'pending_actions'}</span>
-                    {readyRequiredDocumentsCount + readyCIBSDocumentsCount}/{CC_REQUIRED_DOCUMENTS.length + CIBS_REQUIRED_DOCUMENTS.length} obrigatórios prontos
+                    {readyRequiredDocumentsCount + readyCIBSDocumentsCount}/{ccDocuments.filter(doc => !doc.is_optional).length + cibsRequiredDocuments.filter(doc => !doc.is_optional).length} obrigatórios prontos
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
@@ -1170,7 +1186,7 @@ export default function ProtocolPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
                 <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 'var(--space-1)' }}>
-                  Obrigatórios — Comité Científico
+                  Anexos — Comité Científico
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--surface-container-lowest)' }}>
                   {requiredDocumentUploadRows.map(({ doc, attachment, previousRequirement }, index) => (
@@ -1189,11 +1205,11 @@ export default function ProtocolPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                   <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 'var(--space-1)' }}>
-                    Obrigatórios — Comité de Bioética (CIBS)
+                    Anexos — Comité de Bioética (CIBS)
                   </p>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: cibsDocumentsComplete ? 'var(--primary-container)' : 'var(--surface-container-lowest)', color: cibsDocumentsComplete ? 'var(--on-primary-container)' : 'var(--on-surface-variant)', fontSize: 'var(--label-sm)', fontWeight: 'var(--font-semibold)' }}>
                     <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>{cibsDocumentsComplete ? 'check_circle' : 'pending_actions'}</span>
-                    {readyCIBSDocumentsCount}/{CIBS_REQUIRED_DOCUMENTS.length} prontos
+                    {readyCIBSDocumentsCount}/{cibsRequiredDocuments.filter(doc => !doc.is_optional).length} prontos
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--surface-container-lowest)' }}>
@@ -1307,7 +1323,7 @@ export default function ProtocolPage() {
               <div style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)' }}>
                 <p style={{ fontSize: 'var(--label-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 'var(--space-2)' }}>Anexos selecionados</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-                  <SummaryGroupLabel>Obrigatórios — Comité Científico</SummaryGroupLabel>
+                  <SummaryGroupLabel>Anexos — Comité Científico</SummaryGroupLabel>
                   {requiredDocumentUploadRows.map(({ doc, attachment, previousRequirement, state }) => {
                     const hasFile = Boolean(attachment || previousRequirement?.file_name)
                     const fileLabel = attachment
@@ -1318,7 +1334,7 @@ export default function ProtocolPage() {
                       <SummaryRow key={doc.key} name={doc.name} fileLabel={fileLabel} hasFile={hasFile} icon={state.icon} color={state.color} label={state.label} />
                     )
                   })}
-                  <SummaryGroupLabel>Obrigatórios — Comité de Bioética (CIBS)</SummaryGroupLabel>
+                  <SummaryGroupLabel>Anexos — Comité de Bioética (CIBS)</SummaryGroupLabel>
                   {cibsDocumentUploadRows.map(({ doc, attachment, previousRequirement, state }) => {
                     const hasFile = Boolean(attachment || previousRequirement?.file_name)
                     const fileLabel = attachment

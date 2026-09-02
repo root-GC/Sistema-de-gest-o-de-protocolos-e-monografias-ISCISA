@@ -8,6 +8,9 @@ class ProtocolDatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $this->call(EvaluationCriteriaSeeder::class);
+        $this->call([
+            EvaluationCriteriaSeeder::class,
+            OrganDocumentRequirementSeeder::class,
+        ]);
     }
 }

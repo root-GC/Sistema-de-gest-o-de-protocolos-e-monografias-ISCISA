@@ -48,7 +48,7 @@ const ORGAN_TYPE_LABELS: Record<OrganType, string> = {
 const ROLE_LABELS: Record<string, string> = {
   president: 'Presidente',
   coordinator: 'Coordenador',
-  reviewer: 'Revisor',
+  reviewer: 'Membro',
   member: 'Membro',
   secretary: 'Secretário/a',
 }
@@ -62,7 +62,7 @@ const ROLE_COLORS: Record<string, string> = {
 }
 
 const ROLE_OPTIONS = [
-  { value: 'reviewer', label: 'Revisor' },
+  { value: 'reviewer', label: 'Membro' },
   { value: 'coordinator', label: 'Coordenador' },
   { value: 'member', label: 'Membro' },
 ]
@@ -173,7 +173,7 @@ export default function InviteReviewersPage() {
     setSuccessMessage(null)
     try {
       const response = await organPresidentService.inviteReviewer(teacherId)
-      const message = (response as any)?.message || 'Docente adicionado como revisor!'
+      const message = ((response as any)?.message as string | undefined)?.replace(/revisor/gi, 'membro') || 'Docente adicionado como membro!'
       setSuccessMessage(message)
       await loadData()
       setTimeout(() => setSuccessMessage(null), 3000)
@@ -247,12 +247,12 @@ export default function InviteReviewersPage() {
     <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <h1 style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-1)' }}>
-          {isNucleus ? 'Membros do Núcleo' : 'Gestão de Revisores'}
+          {isNucleus ? 'Membros do Núcleo' : 'Gestão de Membros'}
         </h1>
         <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)' }}>
           {isNucleus 
             ? 'Os revisores são geridos automaticamente pelo sistema'
-            : `Adicione docentes de todos os Núcleos como revisores no ${ORGAN_TYPE_LABELS[organType]}`
+            : `Adicione docentes de todos os Núcleos como membros do ${ORGAN_TYPE_LABELS[organType]}`
           }
         </p>
       </div>
@@ -638,7 +638,7 @@ export default function InviteReviewersPage() {
                       ) : (
                         <>
                           <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person_add</span>
-                          Adicionar como Revisor
+                          Adicionar como Membro
                         </>
                       )}
                     </button>

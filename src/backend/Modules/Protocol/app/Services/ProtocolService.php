@@ -15,6 +15,7 @@ use Modules\Protocol\app\Events\ProtocolApproved;
 use Modules\Protocol\app\Events\ProtocolReviewersAssigned;
 use Modules\Protocol\app\Events\ProtocolStatusChanged;
 use Modules\Protocol\app\Models\ProtocolDocumentRequirement;
+use Modules\Protocol\app\Models\OrganDocumentRequirement;
 use Modules\Protocol\app\Models\ProtocolReviewAssignment;
 use Modules\Protocol\app\Models\ProtocolReviewComment;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
@@ -96,7 +97,6 @@ class ProtocolService
                 $previousRequiredDocuments = $protocol->protocolDocumentRequirements()
                     ->whereNull('archived_at')
                     ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
-                    ->where('is_optional', false)
                     ->get()
                     ->keyBy('document_key');
                 $previousCIBSDocuments = $protocol->protocolDocumentRequirements()
@@ -108,6 +108,7 @@ class ProtocolService
                     ->whereNull('archived_at')
                     ->where('required_for_organ', Protocol::ORGAN_COMITE_CIENTIFICO)
                     ->where('is_optional', true)
+                    ->whereNull('organ_document_requirement_id')
                     ->get()
                     ->keyBy(fn(ProtocolDocumentRequirement $requirement) => mb_strtolower(trim($requirement->nome)));
                 $nextSubmission = ((int) ($protocol->submission_number ?: 1)) + 1;
@@ -290,142 +291,88 @@ class ProtocolService
 
     private function storeCCRequiredDocuments(Protocol $protocol, array $files, ?Collection $previousRequiredDocuments = null): array
     {
-        $submissionNumber = (int) ($protocol->submission_number ?: 1);
-        $previousRequiredDocuments = $previousRequiredDocuments ?? collect();
-        $preparedDocuments = [];
-
-        foreach (ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS as $key => $name) {
-            $file = $files[$key] ?? null;
-            $safeKey = preg_replace('/[^a-z0-9_\\-]/i', '_', $key);
-            $source = 'uploaded';
-            $fileName = null;
-
-            if ($file instanceof UploadedFile) {
-                $extension = $file->getClientOriginalExtension() ?: 'pdf';
-                $path = $file->storeAs(
-                    "protocols/{$protocol->id}/required-documents/S{$submissionNumber}",
-                    "{$safeKey}-" . Str::uuid() . ".{$extension}",
-                    'public'
-                );
-                $fileName = $file->getClientOriginalName();
-            } else {
-                $previousRequirement = $previousRequiredDocuments->get($key);
-
-                if (! $previousRequirement || ! $previousRequirement->file_path) {
-                    throw new HttpResponseException(response()->json([
-                        'message' => "O anexo obrigatorio '{$name}' nao foi enviado nem encontrado na versao anterior.",
-                    ], 422));
-                }
-
-                $extension = pathinfo($previousRequirement->file_path, PATHINFO_EXTENSION) ?: 'pdf';
-                $path = "protocols/{$protocol->id}/required-documents/S{$submissionNumber}/{$safeKey}.{$extension}";
-                Storage::disk('public')->copy($previousRequirement->file_path, $path);
-                $fileName = $previousRequirement->file_name ?: basename($previousRequirement->file_path);
-                $source = 'reused';
-            }
-
-            $preparedDocuments[] = [
-                'document_key' => $key,
-                'nome' => $name,
-                'file_path' => $path,
-                'file_name' => $fileName,
-                'source' => $source,
-            ];
-        }
-
-        $storedDocuments = [];
-
-        foreach ($preparedDocuments as $preparedDocument) {
-            $requirement = ProtocolDocumentRequirement::create([
-                'protocol_id' => $protocol->id,
-                'submission_number' => $submissionNumber,
-                'document_key' => $preparedDocument['document_key'],
-                'nome' => $preparedDocument['nome'],
-                'required_for_organ' => Protocol::ORGAN_COMITE_CIENTIFICO,
-                'file_path' => $preparedDocument['file_path'],
-                'file_name' => $preparedDocument['file_name'],
-                'enviado' => true,
-                'aprovado' => null,
-                'rejection_reason' => null,
-            ]);
-
-            $storedDocuments[] = [
-                'requirement_id' => $requirement->id,
-                'document_key' => $preparedDocument['document_key'],
-                'document_name' => $preparedDocument['nome'],
-                'file_name' => $preparedDocument['file_name'],
-                'source' => $preparedDocument['source'],
-            ];
-        }
-
-        return $storedDocuments;
+        return $this->storeCatalogDocuments(
+            $protocol,
+            Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE,
+            Protocol::ORGAN_COMITE_CIENTIFICO,
+            $files,
+            $previousRequiredDocuments
+        );
     }
 
     private function storeCIBSDocuments(Protocol $protocol, array $files, ?Collection $previousCIBSDocuments = null): array
     {
-        $submissionNumber = (int) ($protocol->submission_number ?: 1);
-        $previousCIBSDocuments = $previousCIBSDocuments ?? collect();
-        $preparedDocuments = [];
+        return $this->storeCatalogDocuments(
+            $protocol,
+            Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE,
+            Protocol::ORGAN_COMITE_BIOETICA,
+            $files,
+            $previousCIBSDocuments
+        );
+    }
 
-        foreach (ProtocolDocumentRequirement::CIBS_REQUIRED_DOCUMENTS as $key => $name) {
-            $file = $files[$key] ?? null;
-            $safeKey = preg_replace('/[^a-z0-9_\\-]/i', '_', $key);
+    private function storeCatalogDocuments(
+        Protocol $protocol,
+        string $organType,
+        string $formOrgan,
+        array $files,
+        ?Collection $previousDocuments = null
+    ): array {
+        $submissionNumber = (int) ($protocol->submission_number ?: 1);
+        $previousDocuments = $previousDocuments ?? collect();
+        $storedDocuments = [];
+        $catalogue = OrganDocumentRequirement::query()->activeForOrgan($organType)->get();
+
+        foreach ($catalogue as $template) {
+            $file = $files[$template->document_key] ?? null;
+            $previousRequirement = $previousDocuments->get($template->document_key);
+            $source = null;
+            $path = null;
             $fileName = null;
 
             if ($file instanceof UploadedFile) {
                 $extension = $file->getClientOriginalExtension() ?: 'pdf';
                 $path = $file->storeAs(
                     "protocols/{$protocol->id}/required-documents/S{$submissionNumber}",
-                    "{$safeKey}-" . Str::uuid() . ".{$extension}",
+                    "{$template->document_key}-" . Str::uuid() . ".{$extension}",
                     'public'
                 );
                 $fileName = $file->getClientOriginalName();
-            } else {
-                $previousRequirement = $previousCIBSDocuments->get($key);
-
-                if (! $previousRequirement || ! $previousRequirement->file_path) {
-                    throw new HttpResponseException(response()->json([
-                        'message' => "O anexo '{$name}' nao foi enviado nem encontrado na versao anterior.",
-                    ], 422));
-                }
-
+                $source = 'uploaded';
+            } elseif ($previousRequirement?->file_path) {
                 $extension = pathinfo($previousRequirement->file_path, PATHINFO_EXTENSION) ?: 'pdf';
-                $path = "protocols/{$protocol->id}/required-documents/S{$submissionNumber}/{$safeKey}.{$extension}";
+                $path = "protocols/{$protocol->id}/required-documents/S{$submissionNumber}/{$template->document_key}.{$extension}";
                 Storage::disk('public')->copy($previousRequirement->file_path, $path);
                 $fileName = $previousRequirement->file_name ?: basename($previousRequirement->file_path);
+                $source = 'reused';
+            } elseif (! $template->is_optional) {
+                throw new HttpResponseException(response()->json([
+                    'message' => "O anexo obrigatório '{$template->name}' não foi enviado.",
+                ], 422));
             }
 
-            $preparedDocuments[] = [
-                'document_key' => $key,
-                'nome' => $name,
-                'file_path' => $path,
-                'file_name' => $fileName,
-            ];
-        }
-
-        $storedDocuments = [];
-
-        foreach ($preparedDocuments as $preparedDocument) {
             $requirement = ProtocolDocumentRequirement::create([
                 'protocol_id' => $protocol->id,
+                'organ_document_requirement_id' => $template->id,
                 'submission_number' => $submissionNumber,
-                'document_key' => $preparedDocument['document_key'],
-                'nome' => $preparedDocument['nome'],
-                'required_for_organ' => Protocol::ORGAN_COMITE_BIOETICA,
-                'file_path' => $preparedDocument['file_path'],
-                'file_name' => $preparedDocument['file_name'],
-                'enviado' => true,
+                'document_key' => $template->document_key,
+                'nome' => $template->name,
+                'description' => $template->description,
+                'required_for_organ' => $formOrgan,
+                'file_path' => $path,
+                'file_name' => $fileName,
+                'enviado' => $path !== null,
                 'aprovado' => null,
                 'rejection_reason' => null,
-                'is_optional' => false,
+                'is_optional' => $template->is_optional,
             ]);
 
             $storedDocuments[] = [
                 'requirement_id' => $requirement->id,
-                'document_key' => $preparedDocument['document_key'],
-                'document_name' => $preparedDocument['nome'],
-                'file_name' => $preparedDocument['file_name'],
-                'source' => isset($preparedDocument['source']) ? $preparedDocument['source'] : 'uploaded',
+                'document_key' => $template->document_key,
+                'document_name' => $template->name,
+                'file_name' => $fileName,
+                'source' => $source ?? 'not_sent',
             ];
         }
 
@@ -726,26 +673,12 @@ class ProtocolService
 
     public function areRequiredDocumentsApproved(Protocol $protocol, string $organ): bool
     {
-        $baseCount = $organ === Protocol::ORGAN_COMITE_BIOETICA
-            ? count(ProtocolDocumentRequirement::CIBS_REQUIRED_DOCUMENTS)
-            : count(ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS);
-
         $requirements = $protocol->protocolDocumentRequirements()
             ->whereNull('archived_at')
             ->where('submission_number', (int) ($protocol->submission_number ?: 1))
             ->where('required_for_organ', $organ)
             ->where('is_optional', false)
             ->get();
-
-        $hasAutoParecer = $requirements->contains(
-            fn(ProtocolDocumentRequirement $requirement) => $requirement->document_key === ProtocolDocumentRequirement::CIBS_AUTO_DOCUMENT_KEY
-        );
-
-        $expectedCount = $baseCount + ($hasAutoParecer ? 1 : 0);
-
-        if ($requirements->count() < $expectedCount) {
-            return false;
-        }
 
         return $requirements->every(fn(ProtocolDocumentRequirement $requirement) => $requirement->aprovado === true);
     }
@@ -844,8 +777,10 @@ class ProtocolService
                 $ccVersion = max(0, (int) $protocol->cc_version) + 1;
                 $versionLabel = Protocol::organVersionLabel(Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE, $ccVersion);
 
+                $nextStatus = Protocol::STATUS_DOCUMENTS_PENDING_CC;
+
                 $protocol->update([
-                    'status' => Protocol::STATUS_DOCUMENTS_PENDING_CC,
+                    'status' => $nextStatus,
                     'approved_by_supervisor' => true,
                     'supervisor_id' => $assignedSupervisorId,
                     'supervisor_decision_at' => now(),
@@ -854,6 +789,11 @@ class ProtocolService
                     'cc_version' => $ccVersion,
                     'version' => $versionLabel,
                 ]);
+
+                if ($this->areRequiredDocumentsApproved($protocol, Protocol::ORGAN_COMITE_CIENTIFICO)) {
+                    $nextStatus = Protocol::STATUS_PENDING_COMITE_CIENTIFICO;
+                    $protocol->update(['status' => $nextStatus]);
+                }
             } else {
                 $protocol->update([
                     'status' => Protocol::STATUS_REJECTED_SUPERVISOR,
@@ -887,7 +827,7 @@ class ProtocolService
             }
 
             $newStatus = $decision === 'approved'
-                ? Protocol::STATUS_DOCUMENTS_PENDING_CC
+                ? $protocol->status
                 : Protocol::STATUS_REJECTED_SUPERVISOR;
 
             app(ProtocolHistoryService::class)->record(

@@ -1,231 +1,76 @@
-// src/pages/organ-president/OrganPresidentDashboard.tsx
 import { useEffect, useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
-import { adminService } from '../../services/adminService'
-import type { OrganInfo } from '../../services/organPresidentService'
-import { getOrganConfig } from './organPresidentConfig'
-import '../../styles/global.css'
+import { Link } from 'react-router-dom'
+import { organWorkspaceService, type OrganDashboard, type OrganWorkspaceOrgan } from '../../services/organWorkspaceService'
 
-interface OrganStats {
-  total_members: number
-  active_protocols: number
-  completed_reviews: number
-  pending_reviews: number
-  members_by_role: Record<string, number>
+const labels: Record<string, string> = {
+  total: 'Total no órgão',
+  pending_assignment: 'Aguardam atribuição',
+  in_review: 'Em revisão',
+  approved: 'Aprovados',
+  in_current_queue: 'Na fila atual',
+  document_validation: 'Validação documental',
 }
 
 export default function OrganPresidentDashboard() {
-  const { user, profiles } = useAuth()
-  const [organ, setOrgan] = useState<OrganInfo | null>(null)
-  const [stats, setStats] = useState<OrganStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [organ, setOrgan] = useState<OrganWorkspaceOrgan | null>(null)
+  const [dashboard, setDashboard] = useState<OrganDashboard | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadOrganData()
+    void organWorkspaceService.dashboard()
+      .then(response => { setOrgan(response.organ); setDashboard(response.dashboard) })
+      .catch(requestError => setError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar o órgão.'))
   }, [])
 
-  async function loadOrganData() {
-    setLoading(true)
-    setError(null)
-    try {
-      // Obter órgão do perfil admin do utilizador
-      const adminProfile = profiles?.admin
-      const organId = (adminProfile as any)?.organ_id || adminProfile?.organ?.id
-      
-      if (!organId) {
-        setError('Órgão não encontrado no perfil.')
-        setLoading(false)
-        return
-      }
+  if (error) return <main className="card" style={{ padding: 'var(--space-4)', color: 'var(--error)' }}>{error}</main>
+  if (!organ || !dashboard) return <main style={{ padding: 'var(--space-4)' }}>A carregar atividade do órgão...</main>
 
-      // Buscar dados do órgão
-      const organResponse = await adminService.getOrgan(organId)
-      const organData = (organResponse as any)?.data || organResponse
-
-      // Buscar membros do órgão (todos os users com adminProfile neste órgão)
-      const usersResponse = await adminService.listUsers({ role: 'admin' })
-      const usersData = Array.isArray(usersResponse?.data) ? usersResponse.data : 
-                        Array.isArray(usersResponse) ? usersResponse : []
-      
-      // Filtrar membros deste órgão
-      const organMembers = usersData.filter((u: any) => {
-        const adminProf = u.profiles?.admin || u.adminProfile || u.admin_profile
-        return adminProf?.organ_id === organId
-      })
-
-      // Contar por role
-      const membersByRole: Record<string, number> = {
-        president: 1,
-        vice_president: 0,
-        reviewer: 0,
-        member: 0,
-        secretary: 0,
-      }
-
-      setOrgan({
-        id: organData.id,
-        name: organData.name,
-        type: organData.type,
-        description: organData.description,
-        members_count: organMembers.length,
-        president: { id: user ? Number(user.id) : 0, name: user ? user.name : '', email: user ? user.email : '' },
-      })
-
-      setStats({
-        total_members: organMembers.length,
-        active_protocols: 0,
-        completed_reviews: 0,
-        pending_reviews: 0,
-        members_by_role: membersByRole,
-      })
-
-    } catch (e) {
-      console.error('Erro ao carregar dados do órgão:', e)
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading) return <Loader />
-
-  const config = getOrganConfig(organ?.type || '')
-
-  const ROLE_LABELS: Record<string, string> = {
-    president: 'Presidente',
-    vice_president: 'Vice-Presidente',
-    reviewer: 'Revisor',
-    member: 'Membro',
-    secretary: 'Secretário',
-  }
-
+  const isNucleus = organ.type === 'nucleus'
   return (
-    <div style={{ width: '100%', fontFamily: 'var(--font-family)', color: 'var(--on-background)' }}>
-      
-      {/* Cabeçalho do Órgão */}
-      <div style={{
-        background: 'var(--surface-container-low)',
-        borderRadius: 'var(--radius-xl)',
-        padding: 'var(--space-4)',
-        marginBottom: 'var(--space-4)',
-        border: '1px solid var(--outline-variant)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-          <div style={{
-            width: '64px', height: '64px', borderRadius: 'var(--radius-xl)',
-            background: 'var(--primary-container)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', flexShrink: 0
-          }}>
-            <span className="material-symbols-outlined" style={{ color: 'var(--on-primary-container)', fontSize: '32px' }}>account_balance</span>
-          </div>
-          
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
-              <span style={{ 
-                fontSize: 'var(--label-sm)', 
-                background: 'var(--tertiary-container)', 
-                color: 'var(--on-tertiary-container)', 
-                padding: '2px 10px', 
-                borderRadius: 'var(--radius-full)',
-                fontWeight: 'var(--font-medium)'
-              }}>
-                {config.label}
-              </span>
-            </div>
-            <h1 style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-semibold)', margin: 0, color: 'var(--on-surface)' }}>
-              {organ?.name}
-            </h1>
-            {organ?.description && (
-              <p style={{ fontSize: 'var(--body-md)', color: 'var(--on-surface-variant)', margin: 'var(--space-1) 0 0 0' }}>
-                {organ.description}
-              </p>
-            )}
-          </div>
-          
-          {user && (
-            <div style={{ 
-              textAlign: 'right', 
-              flexShrink: 0,
-              padding: 'var(--space-2) var(--space-3)',
-              background: 'var(--surface-container)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--outline-variant)'
-            }}>
-              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 0 }}>Presidente</p>
-              <p style={{ fontSize: 'var(--body-md)', fontWeight: 'var(--font-semibold)', color: 'var(--on-surface)', margin: '2px 0 0' }}>{user.name}</p>
-              <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 0 }}>{user.email}</p>
-            </div>
-          )}
+    <main style={{ display: 'grid', gap: 'var(--space-4)' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ color: 'var(--primary)', fontWeight: 'var(--font-semibold)', marginBottom: '4px' }}>O meu órgão</p>
+          <h1 style={{ margin: 0, fontSize: 'var(--headline-lg)' }}>{organ.name}</h1>
+          {organ.description && <p style={{ color: 'var(--on-surface-variant)', marginTop: 'var(--space-1)' }}>{organ.description}</p>}
         </div>
-      </div>
+        <Link className="btn btn-primary" to="/organ-president/processes">Ver {isNucleus ? 'temas' : 'protocolos'}</Link>
+      </header>
 
-      {error && <Alert type="error">{error}</Alert>}
-
-      {/* Estatísticas */}
-      <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', color: 'var(--on-surface)' }}>
-        Visão Geral do Órgão
-      </h2>
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
-        gap: 'var(--space-3)', 
-        marginBottom: 'var(--space-4)' 
-      }}>
-        <StatCard icon="group" label="Total de Membros" value={stats?.total_members || 0} color="var(--primary)" />
-        <StatCard icon="description" label="Protocolos Ativos" value={stats?.active_protocols || 0} color="var(--tertiary)" />
-        <StatCard icon="check_circle" label="Revisões Concluídas" value={stats?.completed_reviews || 0} color="var(--primary)" />
-        <StatCard icon="pending" label="Revisões Pendentes" value={stats?.pending_reviews || 0} color="var(--tertiary)" />
-      </div>
-
-      {/* Distribuição de Membros */}
-      <h2 style={{ fontSize: 'var(--title-md)', fontWeight: 'var(--font-semibold)', marginBottom: 'var(--space-3)', color: 'var(--on-surface)' }}>
-        Membros por Função
-      </h2>
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
-        gap: 'var(--space-2)', 
-        marginBottom: 'var(--space-4)' 
-      }}>
-        {Object.entries(stats?.members_by_role || {}).map(([role, count]) => (
-          <div key={role} className="card" style={{ padding: 'var(--space-3)', textAlign: 'center' }}>
-            <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color: 'var(--primary)', margin: 0 }}>
-              {count}
-            </p>
-            <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 'var(--space-1) 0 0' }}>
-              {ROLE_LABELS[role] || role}
-            </p>
-          </div>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-3)' }}>
+        {Object.entries(dashboard.summary).map(([key, value]) => (
+          <article className="card" key={key} style={{ padding: 'var(--space-2) var(--space-3)' }}>
+            <p style={{ color: 'var(--on-surface-variant)', fontSize: 'var(--label-md)' }}>{labels[key] ?? key}</p>
+            <strong style={{ display: 'block', fontSize: 'var(--headline-lg)', marginTop: 'var(--space-1)' }}>{value}</strong>
+          </article>
         ))}
-      </div>
-    </div>
-  )
-}
+      </section>
 
-function Loader() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <span style={{ width: '24px', height: '24px', border: '3px solid var(--outline-variant)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  )
-}
+      <section className="card" style={{ padding: 'var(--space-3)' }}>
+        <h2 style={{ margin: 0, fontSize: 'var(--title-md)' }}>Estados atuais</h2>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+          {Object.entries(dashboard.statuses).map(([status, total]) => <span key={status} style={{ border: '1px solid var(--outline-variant)', borderRadius: 'var(--radius-md)', padding: '6px 10px' }}>{status}: <strong>{total}</strong></span>)}
+          {Object.keys(dashboard.statuses).length === 0 && <p style={{ color: 'var(--on-surface-variant)' }}>Sem processos registados neste órgão.</p>}
+        </div>
+      </section>
 
-function Alert({ type, children }: { type: 'error' | 'success'; children: React.ReactNode }) {
-  return (
-    <div style={{ padding: 'var(--space-2) var(--space-3)', marginBottom: 'var(--space-4)', borderRadius: 'var(--radius-lg)', background: type === 'error' ? 'var(--error-container)' : 'var(--primary-container)', color: type === 'error' ? 'var(--on-error-container)' : 'var(--on-primary-container)', fontSize: 'var(--body-md)' }}>
-      {children}
-    </div>
-  )
-}
+      <section className="card" style={{ padding: 'var(--space-3)', overflowX: 'auto' }}>
+        <h2 style={{ margin: 0, fontSize: 'var(--title-md)' }}>Desempenho dos revisores</h2>
+        {dashboard.reviewer_performance.length === 0 ? <p style={{ color: 'var(--on-surface-variant)' }}>Ainda não existem atribuições neste órgão.</p> : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 'var(--space-2)' }}>
+            <thead><tr><th style={{ textAlign: 'left' }}>Revisor</th><th>Atribuídas</th><th>Pendentes</th><th>Concluídas</th><th>Atrasadas</th><th>Média</th></tr></thead>
+            <tbody>{dashboard.reviewer_performance.map(item => <tr key={item.reviewer_id}><td>{item.name ?? 'Sem nome'}</td><td style={{ textAlign: 'center' }}>{item.assigned}</td><td style={{ textAlign: 'center' }}>{item.pending}</td><td style={{ textAlign: 'center' }}>{item.completed}</td><td style={{ textAlign: 'center' }}>{item.overdue ?? 0}</td><td style={{ textAlign: 'center' }}>{item.average_completion_days === null ? '-' : item.average_completion_days + ' dias'}</td></tr>)}</tbody>
+          </table>
+        )}
+      </section>
 
-function StatCard({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
-  return (
-    <div className="card" style={{ padding: 'var(--space-3)', textAlign: 'center', border: `1px solid ${color}` }}>
-      <span className="material-symbols-outlined" style={{ fontSize: '28px', color, marginBottom: 'var(--space-1)' }}>{icon}</span>
-      <p style={{ fontSize: 'var(--headline-lg)', fontWeight: 'var(--font-bold)', color, margin: 0 }}>{value}</p>
-      <p style={{ fontSize: 'var(--label-sm)', color: 'var(--on-surface-variant)', margin: 'var(--space-1) 0 0' }}>{label}</p>
-    </div>
+      <section className="card" style={{ padding: 'var(--space-3)' }}>
+        <h2 style={{ margin: 0, fontSize: 'var(--title-md)' }}>Atividade recente</h2>
+        <div style={{ display: 'grid', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+          {dashboard.recent_activity.map(event => <div key={event.id} style={{ borderLeft: '3px solid var(--primary)', paddingLeft: 'var(--space-2)' }}><strong>{event.description || event.action}</strong><p style={{ color: 'var(--on-surface-variant)', fontSize: 'var(--label-sm)' }}>{event.actor?.name ?? 'Sistema'} · {new Date(event.occurred_at).toLocaleString('pt-PT')}</p></div>)}
+          {dashboard.recent_activity.length === 0 && <p style={{ color: 'var(--on-surface-variant)' }}>Sem atividade registada.</p>}
+        </div>
+      </section>
+    </main>
   )
 }

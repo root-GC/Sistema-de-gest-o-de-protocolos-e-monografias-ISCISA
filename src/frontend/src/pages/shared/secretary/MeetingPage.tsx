@@ -5,14 +5,13 @@ import {
   deliberationService,
   type DeliberationMeeting,
   type DeliberationQueueEntry,
-  type DeliberationReviewer,
 } from '../../../services/deliberationService'
 import './secretaryWorkspace.css'
 
 type Tab = 'queue' | 'scheduled' | 'in_progress' | 'completed'
 
 const TABS: Array<{ id: Tab; label: string; icon: string }> = [
-  { id: 'queue', label: 'Fila FIFO', icon: 'format_list_numbered' },
+  { id: 'queue', label: 'Lista de protocolos', icon: 'format_list_numbered' },
   { id: 'scheduled', label: 'Agendadas', icon: 'event' },
   { id: 'in_progress', label: 'Em andamento', icon: 'play_circle' },
   { id: 'completed', label: 'Concluídas', icon: 'task_alt' },
@@ -35,13 +34,6 @@ function toMaputoInput(value: string) {
 
 function maputoInputToUtc(value: string) {
   return new Date(`${value}:00+02:00`).toISOString()
-}
-
-function reviewerDeadline(reviewer: DeliberationReviewer) {
-  if (reviewer.review_status === 'reviewed') return 'Revisão submetida'
-  if (reviewer.overdue) return `Atrasado há ${Math.abs(reviewer.days_remaining)} dia(s)`
-  if (reviewer.days_remaining === 0) return 'Prazo termina hoje'
-  return `${reviewer.days_remaining} dia(s) restante(s)`
 }
 
 export default function MeetingPage() {
@@ -243,9 +235,9 @@ export default function MeetingPage() {
 
       {loading ? <Loader /> : tab === 'queue' ? (
         <div className="deliberation-layout">
-          <section aria-labelledby="fifo-title">
+          <section aria-labelledby="protocol-list-title">
             <div className="secretary-section-heading">
-              <div><h2 id="fifo-title">Protocolos por ordem de chegada</h2><p>Os 7 dias são informativos e não bloqueiam a deliberação.</p></div>
+              <div><h2 id="protocol-list-title">Lista de protocolos</h2><p>Os protocolos são apresentados pela data em que entraram na lista.</p></div>
               {queue.length > 0 && <button type="button" className="btn btn-sm btn-outline" onClick={() => setSelected(selected.length === queue.length ? [] : queue.map(item => item.evaluation_form_id))}>{selected.length === queue.length ? 'Desmarcar todos' : 'Selecionar todos'}</button>}
             </div>
             <div className="deliberation-queue">
@@ -253,10 +245,14 @@ export default function MeetingPage() {
                 <QueueRow key={item.evaluation_form_id} item={item} position={index + 1} checked={selected.includes(item.evaluation_form_id)} onToggle={() => toggleItem(item.evaluation_form_id)} />
               ))}
             </div>
+            <aside className="secretary-alert" style={{ marginTop: 'var(--space-3)' }}>
+              <strong>Prazo de acompanhamento</strong>
+              <p style={{ margin: '4px 0 0' }}>A contagem começa no dia em que o protocolo entra nesta lista. Após sete dias completos sem deliberação, o protocolo é assinalado como atrasado. Este aviso orienta a priorização da pauta e não bloqueia o agendamento ou a decisão.</p>
+            </aside>
           </section>
 
           <form className="deliberation-schedule-panel" onSubmit={createMeeting}>
-            <div><span className="secretary-eyebrow">Nova reunião</span><h2>Preparar pauta</h2><p>{selected.length} protocolo(s) selecionado(s) na ordem FIFO.</p></div>
+            <div><span className="secretary-eyebrow">Nova reunião</span><h2>Preparar pauta</h2><p>{selected.length} protocolo(s) selecionado(s) pela ordem da lista.</p></div>
             <Field label="Data e hora" id="meeting-at"><input id="meeting-at" type="datetime-local" min={toMaputoInput(new Date().toISOString())} value={scheduledAt} onChange={event => setScheduledAt(event.target.value)} required /></Field>
             <Field label="Local" id="meeting-location"><input id="meeting-location" value={location} onChange={event => setLocation(event.target.value)} maxLength={500} required /></Field>
             <Field label="Notas" id="meeting-notes"><textarea id="meeting-notes" value={notes} onChange={event => setNotes(event.target.value)} rows={3} maxLength={5000} /></Field>
@@ -279,7 +275,10 @@ export default function MeetingPage() {
 }
 
 function QueueRow({ item, position, checked, onToggle }: { item: DeliberationQueueEntry; position: number; checked: boolean; onToggle: () => void }) {
-  return <article className={`deliberation-queue-row${checked ? ' is-selected' : ''}`}><label className="deliberation-select"><input type="checkbox" checked={checked} onChange={onToggle} /><span className="deliberation-position" aria-label={`Posição ${position}`}>{position}</span></label><div className="deliberation-protocol"><strong>{item.protocol.code}</strong><span>{item.protocol.title || 'Sem tema registado'}</span><small>Na fila desde {formatDateTime(item.queue_entered_at)} · {item.waiting_days} dia(s)</small></div><div className="deliberation-reviewers">{item.reviewers.map(reviewer => <div key={reviewer.id} className="deliberation-reviewer"><span><strong>{reviewer.name}</strong>{reviewer.is_primary && <small>Principal</small>}</span><span className={reviewer.review_status === 'reviewed' ? 'is-reviewed' : 'is-pending'}>{reviewer.review_status === 'reviewed' ? 'Revisto' : 'Não revisto'}</span><small className={reviewer.overdue ? 'is-overdue' : ''}>{reviewerDeadline(reviewer)}</small></div>)}</div></article>
+  const overdueDays = Math.max(0, item.waiting_days - 7)
+  const isOverdue = overdueDays > 0
+
+  return <article className={`deliberation-queue-row${checked ? ' is-selected' : ''}`}><label className="deliberation-select"><input type="checkbox" checked={checked} onChange={onToggle} /><span className="deliberation-position" aria-label={`Posição ${position}`}>{position}</span></label><div className="deliberation-protocol"><strong>{item.protocol.code}</strong><span>{item.protocol.title || 'Sem tema registado'}</span><small>Na lista desde {formatDateTime(item.queue_entered_at)} · {item.waiting_days} dia(s) em espera</small>{isOverdue && <small className="is-overdue">Atrasado há {overdueDays} dia(s)</small>}</div><div className="deliberation-reviewers">{item.reviewers.map(reviewer => <div key={reviewer.id} className="deliberation-reviewer"><span><strong>{reviewer.name}</strong>{reviewer.is_primary && <small>Principal</small>}</span><span className={reviewer.review_status === 'reviewed' ? 'is-reviewed' : 'is-pending'}>{reviewer.review_status === 'reviewed' ? 'Revisto' : 'Não revisto'}</span></div>)}</div></article>
 }
 
 function MeetingCard({ meeting, currentTime, starting, onStart, onEdit, onCancel }: { meeting: DeliberationMeeting; currentTime: number; starting: boolean; onStart: () => void; onEdit: () => void; onCancel: () => void }) {

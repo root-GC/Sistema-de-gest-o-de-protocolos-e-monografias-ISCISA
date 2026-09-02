@@ -555,7 +555,7 @@ class EvaluationFormController extends Controller
     $form = $meeting->items->firstWhere('evaluation_form_id', $form->id)?->evaluationForm ?? $form->fresh();
 
     $message = $form->status === EvaluationForm::STATUS_DELIBERATED
-        ? 'Reunião encerrada com deliberação. Aguardando decisão final.'
+        ? 'Reunião encerrada com deliberação. Abra a ficha de avaliação para registar a decisão final.'
         : 'Reunião encerrada sem consenso. Aguardando agendamento de nova reunião pela secretaria.';
 
     return response()->json([

@@ -1,6 +1,6 @@
 // src/pages/reviewer/ReviewerMeetingsPage.tsx
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams, Link, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, Link, useSearchParams } from 'react-router-dom'
 import { protocolService, type Protocol } from '../../services/protocolService'
 import { evaluationService, type EvaluationForm, type EvaluationOrgan, type FormCriterion } from '../../services/evaluationService'
 import { deliberationService, type DeliberationMeeting, type DeliberationMeetingItem } from '../../services/deliberationService'
@@ -36,7 +36,7 @@ function getMeetingState(evaluationForm: EvaluationForm | null): {
       return {
         label: 'Reunião Encerrada',
         className: 'is-deliberated',
-        description: 'Houve deliberação. Aguardando decisão final na aba de Decisões Pendentes.',
+        description: 'Houve deliberação. A decisão final é registada na ficha de avaliação.',
       }
     
     case 'not_deliberated':
@@ -99,6 +99,7 @@ const DEFAULT_SPLIT = 50
 
 // ── Componente Principal ──────────────────────────────
 export default function ReviewerMeetingsPage() {
+  const navigate = useNavigate()
   const { protocolId } = useParams<{ protocolId: string }>()
   const [searchParams] = useSearchParams()
   const id = Number(protocolId)
@@ -322,6 +323,10 @@ export default function ReviewerMeetingsPage() {
     try {
       const { message } = await deliberationService.closeItem(meeting.id, meetingItem.id, result)
       setSuccess(message)
+      if (result === 'deliberated') {
+        navigate(`/reviews/protocols/${evaluationForm.protocol_id}`)
+        return
+      }
       await loadMeetingData()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível encerrar a reunião.')
@@ -380,7 +385,7 @@ export default function ReviewerMeetingsPage() {
       : meetingItem?.status === 'in_progress'
         ? { label: 'Em Deliberação', className: 'is-deliberation-active', description: 'Reunião em andamento. Registe o resultado da deliberação.' }
         : meetingItem?.status === 'deliberated'
-          ? { label: 'Reunião Encerrada', className: 'is-deliberated', description: 'Houve deliberação. Aguardando decisão final.' }
+          ? { label: 'Reunião Encerrada', className: 'is-deliberated', description: 'Houve deliberação. Registe a decisão final na ficha de avaliação.' }
           : meetingItem?.status === 'not_deliberated'
             ? { label: 'Sem Consenso', className: 'is-not-deliberated', description: 'O protocolo regressou ao fim da fila.' }
             : getMeetingState(evaluationForm)
@@ -586,7 +591,7 @@ export default function ReviewerMeetingsPage() {
                   <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>task_alt</span>
                   <div>
                     <strong>Reunião Encerrada com Deliberação</strong>
-                    <p>A ficha segue para a aba de Decisões Pendentes para decisão final.</p>
+                    <p>Abra a ficha de avaliação para registar a decisão final.</p>
                   </div>
                 </div>
               )}

@@ -5,7 +5,7 @@ namespace Modules\Protocol\app\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Modules\Protocol\app\Models\Protocol;
-use Modules\Protocol\app\Models\ProtocolDocumentRequirement;
+use Modules\Protocol\app\Models\OrganDocumentRequirement;
 use Modules\Protocol\app\Models\Topic;
 
 class SubmitProtocolRequest extends FormRequest
@@ -37,14 +37,8 @@ class SubmitProtocolRequest extends FormRequest
                 'mimetypes:application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 'max:10240',
             ],
-            'required_documents' => [
-                $allowsOptionalRequiredDocuments ? 'sometimes' : 'required',
-                'array',
-            ],
-            'cibs_documents' => [
-                $allowsOptionalRequiredDocuments ? 'sometimes' : 'required',
-                'array',
-            ],
+            'required_documents' => ['sometimes', 'array'],
+            'cibs_documents' => ['sometimes', 'array'],
             'other_documents' => [
                 'sometimes',
                 'array',
@@ -67,9 +61,11 @@ class SubmitProtocolRequest extends FormRequest
             ],
         ];
 
-        foreach (ProtocolDocumentRequirement::CC_REQUIRED_DOCUMENTS as $key => $name) {
-            $rules["required_documents.{$key}"] = [
-                $allowsOptionalRequiredDocuments ? 'sometimes' : 'required',
+        foreach (OrganDocumentRequirement::query()->activeForOrgan(Protocol::ORGAN_TYPE_SCIENTIFIC_COMMITTEE)->get() as $requirement) {
+            $presenceRule = $allowsOptionalRequiredDocuments || $requirement->is_optional ? 'sometimes' : 'required';
+            $rules["required_documents.{$requirement->document_key}"] = [
+                $presenceRule,
+                'nullable',
                 'file',
                 'mimes:pdf',
                 'mimetypes:application/pdf',
@@ -77,9 +73,11 @@ class SubmitProtocolRequest extends FormRequest
             ];
         }
 
-        foreach (ProtocolDocumentRequirement::CIBS_REQUIRED_DOCUMENTS as $key => $name) {
-            $rules["cibs_documents.{$key}"] = [
-                $allowsOptionalRequiredDocuments ? 'sometimes' : 'required',
+        foreach (OrganDocumentRequirement::query()->activeForOrgan(Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE)->get() as $requirement) {
+            $presenceRule = $allowsOptionalRequiredDocuments || $requirement->is_optional ? 'sometimes' : 'required';
+            $rules["cibs_documents.{$requirement->document_key}"] = [
+                $presenceRule,
+                'nullable',
                 'file',
                 'mimes:pdf',
                 'mimetypes:application/pdf',
@@ -100,13 +98,13 @@ class SubmitProtocolRequest extends FormRequest
             'document.mimes' => 'O protocolo deve ser enviado no formato .docx.',
             'document.mimetypes' => 'O protocolo deve ser um documento Word valido (.docx).',
             'document.max' => 'O documento do protocolo nao pode exceder 10MB.',
-            'required_documents.required' => 'Os anexos obrigatorios do Comite Cientifico devem ser enviados.',
+            'required_documents.required' => 'Os anexos obrigatórios do Comité Científico devem ser enviados.',
             'required_documents.array' => 'Os anexos obrigatorios devem ser enviados como lista de ficheiros.',
             'required_documents.*.required' => 'Todos os anexos obrigatorios do Comite Cientifico devem ser enviados.',
             'required_documents.*.mimes' => 'Os anexos devem estar em formato PDF.',
             'required_documents.*.mimetypes' => 'Os anexos devem ser ficheiros PDF validos.',
             'required_documents.*.max' => 'Cada anexo nao pode exceder 10MB.',
-            'cibs_documents.required' => 'Os anexos do Comite de Bioetica (CIBS) devem ser enviados.',
+            'cibs_documents.required' => 'Os anexos do Comité de Bioética (CIBS) devem ser enviados.',
             'cibs_documents.array' => 'Os anexos do CIBS devem ser enviados como lista de ficheiros.',
             'cibs_documents.*.required' => 'Todos os anexos do Comite de Bioetica (CIBS) devem ser enviados.',
             'cibs_documents.*.mimes' => 'Os anexos do CIBS devem estar em formato PDF.',

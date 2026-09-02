@@ -12,6 +12,7 @@ use Modules\Protocol\app\Http\Controllers\AgendaController;
 use Modules\Protocol\app\Http\Controllers\DeliberationMeetingController;
 use Modules\Protocol\app\Http\Controllers\LegacyNucleusProtocolController;
 use Modules\Protocol\app\Http\Controllers\SystemStatusController;
+use Modules\Protocol\app\Http\Controllers\OrganWorkspaceController;
 
 Route::prefix('api')->middleware(['api'])->group(function () {
     Route::get('/onlyoffice/documents/{document}', [OnlyOfficeController::class, 'downloadDocumentForOnlyOffice']);
@@ -36,6 +37,15 @@ Route::prefix('api')->middleware(['api'])->group(function () {
 
 
 Route::prefix('api/v1')->middleware(['api', 'auth:sanctum'])->group(function () {
+
+    Route::get('protocol-submission-requirements', [OrganWorkspaceController::class, 'submissionRequirements']);
+    Route::get('organ-workspace/dashboard', [OrganWorkspaceController::class, 'dashboard']);
+    Route::get('organ-workspace/processes', [OrganWorkspaceController::class, 'processes']);
+    Route::get('organ-workspace/protocols/{protocol}', [OrganWorkspaceController::class, 'protocol']);
+    Route::get('organ-workspace/courses', [OrganWorkspaceController::class, 'courses']);
+    Route::get('organ-workspace/document-requirements', [OrganWorkspaceController::class, 'documentRequirements']);
+    Route::post('organ-workspace/document-requirements', [OrganWorkspaceController::class, 'storeDocumentRequirement']);
+    Route::patch('organ-workspace/document-requirements/{requirement}', [OrganWorkspaceController::class, 'updateDocumentRequirement']);
 
     Route::get('admin/system-status', [SystemStatusController::class, 'index']);
 

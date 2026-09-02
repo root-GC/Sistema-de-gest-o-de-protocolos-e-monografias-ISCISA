@@ -143,7 +143,7 @@ interface ImportedDocument {
 // ── Componente Principal ──────────────────────────────
 export default function EvaluationPage() {
   const { topicId, protocolId } = useParams<{ topicId: string; protocolId: string }>()
-  const { user, hasPermission } = useAuth()
+  const { user } = useAuth()
   const isProtocol = !!protocolId
   const id = Number(protocolId || topicId)
 
@@ -162,16 +162,11 @@ export default function EvaluationPage() {
   const [overallComment, setOverallComment] = useState('')
   const [formConcluded, setFormConcluded] = useState(false)
   const [myEvaluationSubmitted, setMyEvaluationSubmitted] = useState(false)
-  const [isSecretary, setIsSecretary] = useState(false)
 
   // ── Deliberation state ──
   const [deliberationDecision, setDeliberationDecision] = useState<'approved' | 'not_approved' | ''>('')
   const [deliberationSummary, setDeliberationSummary] = useState('')
   const [isSubmittingDeliberation, setIsSubmittingDeliberation] = useState(false)
-  const [showScheduleForm, setShowScheduleForm] = useState(false)
-  const [deliberationDate, setDeliberationDate] = useState('')
-  const [deliberationLocation, setDeliberationLocation] = useState('')
-  const [isScheduling, setIsScheduling] = useState(false)
 
   // ── Shared state ──
   const [error, setError] = useState<string | null>(null)
@@ -359,7 +354,6 @@ export default function EvaluationPage() {
 
       setFormConcluded(concluded)
       setMyEvaluationSubmitted(mySubmitted || isDeliberation) // Em deliberação, considera como submetido
-      setIsSecretary(hasPermission('protocol.assign'))
 
       // 5. Resetar campos
       setRecommendation('')
@@ -367,7 +361,6 @@ export default function EvaluationPage() {
       setCriterionReviews({})
       setDeliberationDecision('')
       setDeliberationSummary(formData.conclusion_summary || '')
-      setShowScheduleForm(false)
 
       // 6. Carregar comentários do revisor atual
       if (isSharedCommitteeEvaluation(formData)) {
@@ -442,26 +435,11 @@ export default function EvaluationPage() {
     } catch (e: any) { setError(e.message) } finally { setSubmitting(false) }
   }
 
-  // ── Deliberation actions ──
-  async function handleScheduleDeliberation(e: React.FormEvent) {
-    e.preventDefault()
-    if (!evaluationForm || !deliberationDate || !deliberationLocation) return
-    setIsScheduling(true)
-    try {
-      await evaluationService.scheduleDeliberation(evaluationForm.id, deliberationDate, deliberationLocation, organForEvaluation(evaluationForm))
-      setSuccess('Deliberação agendada com sucesso.')
-      setShowScheduleForm(false)
-      setDeliberationDate('')
-      setDeliberationLocation('')
-      await loadProtocolEvaluation()
-    } catch (e: any) { setError(e.message) } finally { setIsScheduling(false) }
-  }
-
   async function handleSubmitDeliberation() {
     if (!evaluationForm || !deliberationDecision) return
     setIsSubmittingDeliberation(true)
     try {
-      const result = await evaluationService.submitDeliberation(evaluationForm.id, deliberationDecision, deliberationSummary || null, organForEvaluation(evaluationForm))
+      const result = await evaluationService.decide(evaluationForm.id, deliberationDecision, deliberationSummary || null, organForEvaluation(evaluationForm))
       setSuccess(result.message)
       await loadProtocolEvaluation()
     } catch (e: any) { setError(e.message) } finally { setIsSubmittingDeliberation(false) }
@@ -513,8 +491,7 @@ export default function EvaluationPage() {
     const canAccessForm = !isBioeticaForm || Boolean(evaluationForm?.can_access_form)
     const state = getEvaluationState(evaluationForm, myEvaluationSubmitted, isSharedCommitteeForm)
     const isInDeliberation = evaluationForm?.status === 'in_deliberation'
-    const isDeliberationScheduled = evaluationForm?.status === 'deliberation_scheduled'
-    const isDeliberationPending = evaluationForm?.status === 'deliberation_pending'
+    const isReadyForFinalDecision = evaluationForm?.status === 'deliberated'
     const canEdit = !formConcluded && canAccessForm && (!myEvaluationSubmitted || isInDeliberation)
     const canShowCriteria = !!evaluationForm && canAccessForm && (!isSharedCommitteeForm || isInDeliberation || evaluationForm.status === 'deliberated' || formConcluded)
     const shouldShowInitialSubmission = !!evaluationForm && !formConcluded && !myEvaluationSubmitted && !isInDeliberation
@@ -661,52 +638,14 @@ export default function EvaluationPage() {
               {success && <div className="eval-notice eval-notice--success"><span className="material-symbols-outlined">check_circle</span>{success}</div>}
               {error && <div className="eval-notice eval-notice--error"><span className="material-symbols-outlined">error</span>{error}</div>}
 
-              {/* ── Deliberação Pendente ── */}
-              {isDeliberationPending && (
+              {evaluationForm?.status === 'deliberation_pending' && (
                 <div className="deliberation-pending-banner">
                   <span className="material-symbols-outlined">hourglass_top</span>
                   <div>
                     <strong>Aguardando Deliberação</strong>
-                    <p>{isSecretary ? 'Agende uma reunião de deliberação para os revisores.' : 'Os revisores divergiram. A secretaria irá agendar uma reunião.'}</p>
                   </div>
-                  {isSecretary && !showScheduleForm && (
-                    <button className="btn btn-primary btn-sm" onClick={() => setShowScheduleForm(true)}>Agendar</button>
-                  )}
                 </div>
               )}
-
-              {/* ── Formulário de Agendamento (Secretaria) ── */}
-              {showScheduleForm && (
-                <div className="schedule-deliberation-form">
-                  <h4>Agendar Deliberação</h4>
-                  <form onSubmit={handleScheduleDeliberation}>
-                    <div className="eval-field">
-                      <label>Data e Hora</label>
-                      <input type="datetime-local" value={deliberationDate} onChange={e => setDeliberationDate(e.target.value)} required className="form-input" />
-                    </div>
-                    <div className="eval-field">
-                      <label>Local</label>
-                      <input type="text" value={deliberationLocation} onChange={e => setDeliberationLocation(e.target.value)} placeholder="Ex: Sala de Reuniões 2" required className="form-input" />
-                    </div>
-                    <div className="form-actions">
-                      <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowScheduleForm(false)}>Cancelar</button>
-                      <button type="submit" className="btn btn-primary btn-sm" disabled={isScheduling}>{isScheduling ? 'A agendar...' : 'Confirmar'}</button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              {/* ── Deliberação Agendada ── */}
-              {isDeliberationScheduled && evaluationForm && (
-                <div className="deliberation-info-banner">
-                  <span className="material-symbols-outlined">event</span>
-                  <div>
-                    <strong>Deliberação Agendada</strong>
-                    <p>{formatDate(evaluationForm.deliberation_date)} — {evaluationForm.deliberation_location || 'Local não definido'}</p>
-                  </div>
-	                  <span className="badge badge-warning">A Secretaria inicia a reunião no horário marcado</span>
-	                </div>
-	              )}
 
               {/* ── Em Deliberação ── */}
               {isInDeliberation && (
@@ -839,17 +778,17 @@ export default function EvaluationPage() {
                     </div>
                   )}
 
-                  {/* ── Submeter Deliberação ── */}
-	                  {isInDeliberation && canStartOrSubmitDeliberation && (
+                  {/* ── Decisão final após a deliberação ── */}
+	                  {isReadyForFinalDecision && canStartOrSubmitDeliberation && (
 	                    <div className="eval-recommendation-section">
-	                      <h3><span className="material-symbols-outlined">gavel</span>{isSharedCommitteeForm ? 'Submissão da ficha de deliberação' : 'Decisão Final da Deliberação'}</h3>
+	                      <h3><span className="material-symbols-outlined">gavel</span>Decisão Final da Deliberação</h3>
                       <div className="eval-field"><label>Resumo da deliberação</label><textarea value={deliberationSummary} onChange={e => setDeliberationSummary(e.target.value)} placeholder="Resumo da discussão..." rows={3} className="criterion-textarea" /></div>
                       <div className="recommendation-choices">
                         <label className={`recommendation-choice ${deliberationDecision === 'approved' ? 'is-approved' : ''}`}><input type="radio" name="delib-rec" checked={deliberationDecision === 'approved'} onChange={() => setDeliberationDecision('approved')} /><span className="material-symbols-outlined">check_circle</span>Aprovar</label>
                         <label className={`recommendation-choice ${deliberationDecision === 'not_approved' ? 'is-rejected' : ''}`}><input type="radio" name="delib-rec" checked={deliberationDecision === 'not_approved'} onChange={() => setDeliberationDecision('not_approved')} /><span className="material-symbols-outlined">cancel</span>Não Aprovar</label>
                       </div>
-                      <button className="btn btn-primary btn-block btn-lg" onClick={handleSubmitDeliberation} disabled={!deliberationDecision || isSubmittingDeliberation}>
-	                        {isSubmittingDeliberation ? 'A submeter...' : (isSharedCommitteeForm ? 'Submeter ficha' : 'Submeter Decisão Final')}
+	                      <button className="btn btn-primary btn-block btn-lg" onClick={handleSubmitDeliberation} disabled={!deliberationDecision || isSubmittingDeliberation}>
+	                        {isSubmittingDeliberation ? 'A submeter...' : 'Registar decisão final'}
 	                      </button>
 	                    </div>
 	                  )}

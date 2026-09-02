@@ -20,11 +20,10 @@ class RegisterService
                 'status'   => 'pending', // só passa a 'active' após verificar o OTP
             ]);
 
-            $roleName = $data['type'] === 'student' ? 'student' : 'teacher';
-            $roleId   = DB::table('roles')->where('name', $roleName)->value('id');
+            $roleId = DB::table('roles')->where('name', 'student')->value('id');
 
             if (! $roleId) {
-                throw new \RuntimeException("Role '{$roleName}' não encontrada — corre o RoleSeeder primeiro.");
+                throw new \RuntimeException("Role 'student' não encontrada — corre o RoleSeeder primeiro.");
             }
 
             DB::table('user_roles')->insert([
@@ -34,20 +33,11 @@ class RegisterService
                 'updated_at' => now(),
             ]);
 
-                if ($data['type'] === 'student') {
-                    $user->studentProfile()->create([
-                        'course_id'      => $data['course_id'],
-                        'supervisor_id'  => $data['supervisor_id'],
-                        'student_number' => $data['student_number'],
-                    ]);
-                } else {
-                $user->teacherProfile()->create([
-                    'scientific_area_id' => $data['scientific_area_id'],
-                    'academic_degree'    => $data['academic_degree'],
-                    'department'         => $data['department'] ?? null,
-                    'is_internal'        => true,
-                ]);
-            }
+            $user->studentProfile()->create([
+                'course_id'      => $data['course_id'],
+                'supervisor_id'  => $data['supervisor_id'],
+                'student_number' => $data['student_number'],
+            ]);
 
             return $user;
         });

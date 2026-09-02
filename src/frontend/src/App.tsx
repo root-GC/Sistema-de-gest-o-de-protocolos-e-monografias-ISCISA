@@ -55,6 +55,7 @@ const SpreadsheetPage = lazy(() => import('./pages/shared/secretary/SpreadsheetP
 const HistoryPage = lazy(() => import('./pages/shared/secretary/HistoryPage'))
 const MeetingPage = lazy(() => import('./pages/shared/secretary/MeetingPage'))
 const SignaturePage = lazy(() => import('./pages/shared/secretary/SignaturePage'))
+const DocumentRequirementsPage = lazy(() => import('./pages/shared/DocumentRequirementsPage'))
 
 // Admin
 const AdminUsersPage = lazy(() => import('./pages/system-admin/AdminUsersPage'))
@@ -71,6 +72,9 @@ const OrganPresidentDashboard = lazy(() => import('./pages/organ-president/Organ
 const ManageOrganMembersPage = lazy(() => import('./pages/organ-president/ManageOrganMembersPage'))
 const InviteReviewersPage = lazy(() => import('./pages/organ-president/InviteReviewersPage'))
 const RegisterTeachersPage = lazy(() => import('./pages/organ-president/RegisterTeachersPage'))
+const OrganProcessesPage = lazy(() => import('./pages/organ-president/OrganProcessesPage'))
+const OrganProtocolDetailPage = lazy(() => import('./pages/organ-president/OrganProtocolDetailPage'))
+const OrganCoursesPage = lazy(() => import('./pages/organ-president/OrganCoursesPage'))
 
 // Páginas públicas
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
@@ -186,6 +190,10 @@ export default function App() {
               <Route element={<ProtectedRoute permission="protocol.assign" roles={['secretary']} organTypes={['scientific_committee', 'bioethics_committee']} />}>
                 <Route path="/secretary/meeting" element={<MeetingPage />} />
                 <Route path="/secretary/signatures" element={<SignaturePage />} />
+                <Route path="/secretary/document-requirements" element={<DocumentRequirementsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission="protocol.triage" roles={['secretary']} organTypes={['nucleus']} />}>
+                <Route path="/secretary/courses" element={<OrganCoursesPage />} />
               </Route>
 
               {/* ── Admin ───────────────────────────────────── */}
@@ -212,6 +220,10 @@ export default function App() {
                 <Route path="/organ-president/members" element={<ManageOrganMembersPage />} />
                 <Route path="/organ-president/reviewers" element={<InviteReviewersPage />} />
                 <Route path="/organ-president/teachers" element={<RegisterTeachersPage />} />
+                <Route path="/organ-president/processes" element={<OrganProcessesPage />} />
+                <Route path="/organ-president/protocols/:protocolId" element={<OrganProtocolDetailPage />} />
+                <Route path="/organ-president/courses" element={<OrganCoursesPage />} />
+                <Route path="/organ-president/document-requirements" element={<DocumentRequirementsPage />} />
               </Route>
 
             </Route>

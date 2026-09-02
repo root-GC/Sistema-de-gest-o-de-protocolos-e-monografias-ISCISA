@@ -94,16 +94,6 @@ export const menuRegistry = [
   permission: 'protocol.evaluate',
   roles: ['teacher', 'supervisor', 'reviewer'],
 },
-// No menu do revisor
-{
-  id: 'reviewer_final_decisions',
-  label: 'Decisões Pendentes',
-  icon: 'ti-gavel',
-  route: '/reviewer/final-decisions',
-  permission: 'protocol.evaluate',
-  roles: ['teacher', 'supervisor', 'reviewer'],
-},
-
   // ── Coordinator ───────────────────────────────────────────────────
   {
     id: 'protocols_assign',
@@ -202,6 +192,24 @@ export const menuRegistry = [
     roles: ['secretary'],
     organTypes: ['nucleus', 'scientific_committee', 'bioethics_committee'],
   },
+  {
+    id: 'secretary_courses',
+    label: 'Cursos',
+    icon: 'ti-school',
+    route: '/secretary/courses',
+    permission: 'protocol.triage',
+    roles: ['secretary'],
+    organTypes: ['nucleus'],
+  },
+  {
+    id: 'secretary_document_requirements',
+    label: 'Documentos necessários',
+    icon: 'ti-file-settings',
+    route: '/secretary/document-requirements',
+    permission: 'protocol.assign',
+    roles: ['secretary'],
+    organTypes: ['scientific_committee', 'bioethics_committee'],
+  },
 
   // ── Organ President ───────────────────────────────────────────────
   
@@ -217,8 +225,11 @@ export const menuRegistry = [
     organTypes: ['nucleus', 'scientific_committee', 'bioethics_committee'],
     children: [
       { id: 'organ_president_dashboard', label: 'Painel', route: '/organ-president', permission: null },
+      { id: 'organ_president_processes', label: 'Processos', route: '/organ-president/processes', permission: null },
+      { id: 'organ_president_courses', label: 'Cursos', route: '/organ-president/courses', permission: null, organTypes: ['nucleus'] },
+      { id: 'organ_president_documents', label: 'Documentos necessários', route: '/organ-president/document-requirements', permission: null, organTypes: ['scientific_committee', 'bioethics_committee'] },
       { id: 'organ_president_members',   label: 'Membros', route: '/organ-president/members', permission: null },
-      { id: 'organ_president_reviewers', label: 'Adicionar Revisores', route: '/organ-president/reviewers', permission: null },
+      { id: 'organ_president_reviewers', label: 'Adicionar Membro', route: '/organ-president/reviewers', permission: null },
       { id: 'organ_president_teachers',  label: 'Registar Docentes', route: '/organ-president/teachers', permission: null }, // 🆕 NOVA ROTA
     ],
   },

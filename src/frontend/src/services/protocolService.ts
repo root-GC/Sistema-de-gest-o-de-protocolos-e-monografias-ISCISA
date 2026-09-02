@@ -203,6 +203,18 @@ export type CIBSDocumentKey = typeof CIBS_REQUIRED_DOCUMENTS[number]['key'];
 
 export type CIBSDocumentFiles = Record<CIBSDocumentKey, File | null>;
 
+export interface SubmissionDocumentRequirement {
+  id: number;
+  organ_id: number;
+  document_key: string;
+  name: string;
+  description?: string | null;
+  is_optional: boolean;
+  is_active: boolean;
+}
+
+export type SubmissionDocumentFiles = Record<string, File | null>;
+
 export const OPTIONAL_DOCUMENTS = [
   { key: 'consentimento_tutor', name: 'Termo de consentimento livre e informado do pai/mãe ou tutor legal da criança menor de dezoito anos de idade (caso aplicável)' },
   { key: 'assentimento_menor', name: 'Termo de assentimento do participante menor, de doze a dezassete anos de idade (caso aplicável)' },
@@ -333,6 +345,38 @@ export interface ReviewedDocument {
 }
 
 export const protocolService = {
+  submissionRequirements: () =>
+    req('GET', '/api/v1/protocol-submission-requirements') as Promise<{
+      requirements: Record<'comite_cientifico' | 'comite_bioetica', SubmissionDocumentRequirement[]>;
+    }>,
+
+  submitDynamic: (
+    topicId: number,
+    protocolType: string,
+    file: File,
+    requiredDocuments: SubmissionDocumentFiles,
+    cibsDocuments: SubmissionDocumentFiles,
+    otherDocuments?: OtherDocument[],
+  ) => {
+    const formData = new FormData();
+    formData.append('topic_id', String(topicId));
+    formData.append('protocol_type', protocolType);
+    formData.append('document', file);
+    Object.entries(requiredDocuments).forEach(([key, attachment]) => {
+      if (attachment) formData.append('required_documents[' + key + ']', attachment);
+    });
+    Object.entries(cibsDocuments).forEach(([key, attachment]) => {
+      if (attachment) formData.append('cibs_documents[' + key + ']', attachment);
+    });
+    (otherDocuments ?? []).forEach((other, index) => {
+      if (other.file) {
+        formData.append('other_documents[' + index + ']', other.file);
+        formData.append('other_document_names[' + index + ']', other.name);
+      }
+    });
+    return reqFormData('POST', '/api/v1/protocols', formData) as Promise<{ message: string; protocol: Protocol }>;
+  },
+
   // ── Submissão de protocolo ──────────────────────────
   submit: (
     topicId: number,

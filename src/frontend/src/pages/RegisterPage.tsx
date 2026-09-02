@@ -7,20 +7,9 @@ import { registrationDataService } from '../services/registrationDataService'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import '../styles/global.css'
 
-type UserType = 'student' | 'teacher'
-
 interface Option { 
   id: number
   name: string 
-}
-
-interface ScientificAreaOption extends Option {
-  organ_id?: number
-  organ?: {
-    id: number
-    name: string
-    type: string
-  }
 }
 
 interface SupervisorOption extends Option {
@@ -30,7 +19,6 @@ interface SupervisorOption extends Option {
 export default function RegisterPage() {
   const navigate = useNavigate()
 
-  const [type, setType] = useState<UserType>('student')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -42,12 +30,7 @@ export default function RegisterPage() {
   const [supervisorId, setSupervisorId] = useState('')
   const [studentNumber, setStudentNumber] = useState('')
 
-  // Docente
-  const [scientificAreaId, setScientificAreaId] = useState('')
-  const [academicDegree, setAcademicDegree] = useState('')
-
   const [courses, setCourses] = useState<Option[]>([])
-  const [scientificAreas, setScientificAreas] = useState<ScientificAreaOption[]>([])
   const [supervisors, setSupervisors] = useState<SupervisorOption[]>([])
 
   const [error, setError] = useState<string | null>(null)
@@ -57,12 +40,10 @@ export default function RegisterPage() {
   useEffect(() => {
     Promise.all([
       registrationDataService.courses(),
-      registrationDataService.scientificAreas(),
       registrationDataService.supervisors(),
     ])
-      .then(([c, sa, s]) => {
+      .then(([c, s]) => {
         setCourses(c)
-        setScientificAreas(sa)
         setSupervisors(s)
       })
       .catch(err => setError(err.message))
@@ -85,30 +66,18 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      const payload: Record<string, unknown> = {
-        type,
+      const payload = {
+        type: 'student' as const,
         name,
         email,
         password,
         password_confirmation: passwordConfirmation,
+        course_id: Number(courseId),
+        supervisor_id: Number(supervisorId),
+        student_number: studentNumber,
       }
 
-      if (type === 'student') {
-        payload.course_id = Number(courseId)
-        payload.supervisor_id = Number(supervisorId)
-        payload.student_number = studentNumber
-        
-        // O órgão será determinado automaticamente pelo backend
-        // baseado na área científica do curso
-      } else {
-        payload.scientific_area_id = Number(scientificAreaId)
-        payload.academic_degree = academicDegree
-        
-        // O órgão será determinado automaticamente pelo backend
-        // baseado na área científica selecionada
-      }
-
-      const res = await authService.register(payload as any)
+      const res = await authService.register(payload)
       navigate('/verify-otp', { state: { email: res.email } })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -228,48 +197,6 @@ export default function RegisterPage() {
             border: '1px solid var(--surface-container-high)',
             padding: 'var(--space-4)',
           }}>
-            {/* Tipo de conta */}
-            <div style={{
-              display: 'flex',
-              gap: 'var(--space-2)',
-              marginBottom: 'var(--space-3)',
-              background: 'var(--surface-container-low)',
-              padding: '4px',
-              borderRadius: 'var(--radius-lg)',
-            }}>
-              {(['student', 'teacher'] as UserType[]).map(t => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setType(t)}
-                  disabled={loading}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    background: type === t ? 'var(--primary)' : 'transparent',
-                    color: type === t ? 'var(--on-primary)' : 'var(--on-surface-variant)',
-                    fontFamily: 'var(--font-family)',
-                    fontSize: 'var(--body-md)',
-                    fontWeight: type === t ? 'var(--font-semibold)' : 'var(--font-medium)',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    opacity: loading ? 0.7 : 1
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                    {t === 'student' ? 'school' : 'cast_for_education'}
-                  </span>
-                  {t === 'student' ? 'Estudante' : 'Docente'}
-                </button>
-              ))}
-            </div>
-
             {error && (
               <div className="badge badge-error" role="alert" style={{
                 display: 'flex', alignItems: 'center', gap: 8,
@@ -325,7 +252,7 @@ export default function RegisterPage() {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label style={labelStyle}>Email institucional *</label>
+                    <label style={labelStyle}>Email *</label>
                     <input
                       type="email"
                       style={inputStyle}
@@ -456,19 +383,16 @@ export default function RegisterPage() {
                   alignItems: 'center',
                   gap: '8px'
                 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                    {type === 'student' ? 'school' : 'badge'}
-                  </span>
-                  {type === 'student' ? 'Dados Académicos' : 'Dados Profissionais'}
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>school</span>
+                  Dados Académicos
                 </h3>
 
-                {type === 'student' ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <label style={labelStyle}>Número de estudante *</label>
                       <input
                         style={inputStyle}
-                        placeholder="Ex: 01.4038.2023"
+                        placeholder="Introduza o seu código"
                         value={studentNumber}
                         onChange={e => setStudentNumber(e.target.value)}
                         required
@@ -515,52 +439,7 @@ export default function RegisterPage() {
                         ))}
                       </select>
                     </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <label style={labelStyle}>Área científica *</label>
-                      <select
-                        style={inputStyle}
-                        value={scientificAreaId}
-                        onChange={e => setScientificAreaId(e.target.value)}
-                        required
-                        disabled={loading}
-                      >
-                        <option value="">Seleccione a área</option>
-                        {scientificAreas.map(a => (
-                          <option key={a.id} value={a.id}>
-                            {a.name}
-                            {a.organ?.name && ` (${a.organ.name})`}
-                          </option>
-                        ))}
-                      </select>
-                      <span style={{ 
-                        fontSize: 'var(--label-sm)', 
-                        color: 'var(--on-surface-variant)',
-                        marginTop: '2px'
-                      }}>
-                        A área científica determina automaticamente o teu órgão (Núcleo Científico)
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <label style={labelStyle}>Grau académico *</label>
-                      <select
-                        style={inputStyle}
-                        value={academicDegree}
-                        onChange={e => setAcademicDegree(e.target.value)}
-                        required
-                        disabled={loading}
-                      >
-                        <option value="">Seleccione o grau</option>
-                        <option value="licenciatura">Licenciatura</option>
-                        <option value="mestrado">Mestrado</option>
-                        <option value="doutoramento">Doutoramento</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
               {/* Info sobre o órgão */}

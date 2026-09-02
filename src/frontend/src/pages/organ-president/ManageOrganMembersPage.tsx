@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { adminService } from '../../services/adminService'
 import { generalAdminService } from '../../services/generalAdminService'
+import { organPresidentService } from '../../services/organPresidentService'
 import { getOrganConfig } from './organPresidentConfig'
 import '../../styles/global.css'
 
 const ROLE_LABELS: Record<string, string> = {
   president: 'Presidente',
   vice_president: 'Vice-Presidente',
-  reviewer: 'Revisor',
+  reviewer: 'Membro',
   member: 'Membro',
   secretary: 'Secretário/a',
 }
@@ -24,11 +25,13 @@ const ROLE_COLORS: Record<string, string> = {
 
 interface OrganMember {
   id: number
+  user_id?: number
   name: string
   email: string
   status: string
   role: string
   organ_id: number
+  source?: 'profile' | 'membership'
 }
 
 interface ScientificArea {
@@ -104,7 +107,13 @@ export default function ManageOrganMembersPage() {
       // Buscar secretários do órgão
       const secResponse = await generalAdminService.listSecretaries()
       const secretariesData = Array.isArray(secResponse?.data) ? secResponse.data : 
-                              Array.isArray(secResponse) ? secResponse : []
+                        Array.isArray(secResponse) ? secResponse : []
+      const memberResponse = await organPresidentService.listOrganMembers()
+      const memberData = Array.isArray(memberResponse?.data)
+        ? memberResponse.data
+        : Array.isArray(memberResponse)
+          ? memberResponse
+          : []
 
       const organMembers: OrganMember[] = []
 
@@ -118,7 +127,8 @@ export default function ManageOrganMembersPage() {
             email: u.email,
             status: u.status,
             role: 'president',
-            organ_id: organId
+            organ_id: organId,
+            source: 'profile',
           })
         }
       })
@@ -134,9 +144,23 @@ export default function ManageOrganMembersPage() {
             email: s.user?.email || s.email,
             status: s.user?.status || s.status,
             role: 'secretary',
-            organ_id: organId
+            organ_id: organId,
+            source: 'profile',
           })
         }
+      })
+
+      memberData.forEach((member: any) => {
+        organMembers.push({
+          id: member.id,
+          user_id: member.user_id,
+          name: member.user?.name || 'Membro',
+          email: member.user?.email || '',
+          status: member.user?.status || 'active',
+          role: member.role,
+          organ_id: member.organ_id,
+          source: 'membership',
+        })
       })
 
       setMembers(organMembers)
@@ -275,6 +299,8 @@ export default function ManageOrganMembersPage() {
           <option value="all">Todas as funções</option>
           <option value="president">Presidente</option>
           <option value="secretary">Secretário/a</option>
+          <option value="reviewer">Membro</option>
+          <option value="member">Membro</option>
         </select>
         
         <button onClick={openInviteSecretary} style={{
@@ -409,9 +435,9 @@ export default function ManageOrganMembersPage() {
                     Editar
                   </button>
                 )}
-                <button onClick={() => handleRemoveMember(member.id, member.role)} style={{ padding: '6px 12px', background: 'var(--error-container)', color: 'var(--on-error-container)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--label-sm)', fontFamily: 'var(--font-family)' }}>
+                {member.source !== 'membership' && <button onClick={() => handleRemoveMember(member.id, member.role)} style={{ padding: '6px 12px', background: 'var(--error-container)', color: 'var(--on-error-container)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer', fontSize: 'var(--label-sm)', fontFamily: 'var(--font-family)' }}>
                   Remover
-                </button>
+                </button>}
               </div>
             </div>
           ))

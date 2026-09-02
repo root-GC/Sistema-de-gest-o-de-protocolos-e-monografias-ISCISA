@@ -19,6 +19,7 @@ use Modules\Protocol\app\Models\Opinion;
 use Modules\Protocol\app\Models\Protocol;
 use Modules\Protocol\app\Models\ProtocolDocumentRequirement;
 use Modules\Protocol\app\Models\ProtocolHistory;
+use Modules\Protocol\app\Models\ProtocolReviewAssignment;
 use Modules\Protocol\app\Models\ReviewerEvaluation;
 use Modules\Protocol\app\Models\Topic;
 use Modules\Protocol\app\Models\TopicHistory;
@@ -28,6 +29,7 @@ use Modules\Protocol\app\Services\DeliberationMeetingService;
 use Modules\Protocol\app\Services\EvaluationService;
 use Modules\Protocol\app\Services\ProtocolService;
 use Modules\Protocol\app\Services\TopicService;
+use Modules\Protocol\database\seeders\OrganDocumentRequirementSeeder;
 use Modules\User\app\Models\Course;
 use Modules\User\app\Models\Organ;
 use Modules\User\app\Models\Permission;
@@ -100,6 +102,10 @@ class AcademicSubmissionToCibsApprovalFlowTest extends TestCase
             ReviewerEvaluation::DECISION_NOT_APPROVED
         );
         $this->assertSame(Protocol::STATUS_REJECTED_CC, $protocol->fresh()->status);
+        $this->assertSame(1, ProtocolReviewAssignment::onlyTrashed()
+            ->where('protocol_id', $protocol->id)
+            ->where('organ_id', $context['ccSecretary']->secretaryProfile->organ_id)
+            ->count());
 
         $protocol = $this->submitProtocol($context, $approvedTopic);
         $this->assertSame(3, $protocol->submission_number);
@@ -187,6 +193,9 @@ class AcademicSubmissionToCibsApprovalFlowTest extends TestCase
             'type' => Protocol::ORGAN_TYPE_BIOETHICS_COMMITTEE,
             'description' => 'Comité para teste de fluxo.',
         ]);
+
+        $this->seed(OrganDocumentRequirementSeeder::class);
+
         $area = ScientificArea::create(['organ_id' => $nucleus->id, 'name' => 'Saúde Pública']);
         $course = Course::create(['scientific_area_id' => $area->id, 'name' => 'Medicina', 'code' => 'MED-FLOW']);
 

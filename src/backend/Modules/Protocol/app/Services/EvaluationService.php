@@ -939,6 +939,10 @@ class EvaluationService
                 app(ProtocolService::class)->markLatestDocumentRejected($protocol, $decider?->id);
             }
 
+            $releasedAssignmentIds = $decision === ReviewerEvaluation::DECISION_NOT_APPROVED
+                ? $this->releaseReviewAssignments($form)
+                : [];
+
             $this->recordProtocolHistory(
                 $form,
                 $decision === ReviewerEvaluation::DECISION_APPROVED ? 'approved' : 'rejected',
@@ -959,6 +963,20 @@ class EvaluationService
                 $oldStatus,
                 $protocol->status
             );
+
+            if ($releasedAssignmentIds !== []) {
+                $this->recordProtocolHistory(
+                    $form,
+                    'reviewers_released',
+                    $decider,
+                    'Revisores libertados após a não aprovação do protocolo.',
+                    ['assignment_ids' => $releasedAssignmentIds],
+                    $protocol,
+                    $oldOrganId,
+                    $protocol->status,
+                    $protocol->status
+                );
+            }
 
             event(new ProtocolStatusChanged($protocol, $oldStatus, $protocol->status, $decider));
 
@@ -1029,6 +1047,30 @@ class EvaluationService
                 'opinion' => $opinion,
             ];
         });
+    }
+
+    /** @return array<int, int> */
+    private function releaseReviewAssignments(EvaluationForm $form): array
+    {
+        $assignmentIds = $form->reviewerEvaluations()
+            ->whereNotNull('protocol_review_assignment_id')
+            ->pluck('protocol_review_assignment_id')
+            ->unique()
+            ->values();
+
+        if ($assignmentIds->isEmpty()) {
+            return [];
+        }
+
+        ProtocolReviewAssignment::query()
+            ->whereIn('id', $assignmentIds)
+            ->get()
+            ->each(function (ProtocolReviewAssignment $assignment): void {
+                $assignment->update(['status' => 'released']);
+                $assignment->delete();
+            });
+
+        return $assignmentIds->map(fn ($id) => (int) $id)->all();
     }
 
     public function listForReviewer(User $reviewer): Collection
