@@ -12,7 +12,7 @@ Route::middleware(['auth:sanctum'])->prefix('api/v1')->group(function () {
     // Organs Routes
     Route::apiResource('organs', OrganController::class)->names('organ');
 
-    Route::apiResource('organizations', OrganizationController::class)->names('organization');
+    Route::apiResource('organizations', OrganizationController::class);
 
     // Scientific Areas Routes
     Route::apiResource('scientific-areas', ScientificAreaController::class);
